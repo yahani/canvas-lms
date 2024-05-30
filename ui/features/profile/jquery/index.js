@@ -1,3 +1,4 @@
+/* eslint-disable eqeqeq, no-alert */
 /*
  * Copyright (C) 2011 - present Instructure, Inc.
  *
@@ -16,17 +17,16 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import INST from 'browser-sniffer'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import Pseudonym from '@canvas/pseudonyms/backbone/models/Pseudonym.coffee'
+import Pseudonym from '@canvas/pseudonyms/backbone/models/Pseudonym'
 import AvatarWidget from '@canvas/avatar-dialog-view'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/datetime'/* datetimeString, time_field, datetime_field */
-import '@canvas/forms/jquery/jquery.instructure_forms'/* formSubmit, formErrors, errorBox */
+import '@canvas/datetime/jquery' /* datetimeString, time_field, datetime_field */
+import '@canvas/jquery/jquery.instructure_forms' /* formSubmit, formErrors, errorBox */
 import 'jqueryui/dialog'
 import '@canvas/util/jquery/fixDialogButtons'
-import '@canvas/jquery/jquery.instructure_misc_plugins'/* confirmDelete, fragmentChange, showIf */
+import '@canvas/jquery/jquery.instructure_misc_plugins' /* confirmDelete, fragmentChange, showIf */
 import '@canvas/loading-image'
 import '@canvas/util/templateData'
 import 'jqueryui/sortable'
@@ -38,10 +38,11 @@ const $edit_settings_link = $('.edit_settings_link')
 
 const $profile_table = $('.profile_table'),
   $update_profile_form = $('#update_profile_form'),
-  $default_email_id = $('#default_email_id'),
-  profile_pics_url = '/api/v1/users/self/avatars'
+  $default_email_id = $('#default_email_id')
 
-$edit_settings_link.click(function (event) {
+const maximumStringLength = 255
+
+$edit_settings_link.click(function () {
   $(this).hide()
   $profile_table
     .addClass('editing')
@@ -54,7 +55,7 @@ $edit_settings_link.click(function (event) {
   return false
 })
 
-$profile_table.find('.cancel_button').click(event => {
+$profile_table.find('.cancel_button').click(() => {
   $edit_settings_link.show()
   $profile_table
     .removeClass('editing')
@@ -62,21 +63,21 @@ $profile_table.find('.cancel_button').click(event => {
     .hide()
     .end()
     .find('#change_password_checkbox')
-    .attr('checked', false)
+    .prop('checked', false)
   return false
 })
 
 $profile_table
   .find('#change_password_checkbox')
-  .change(function (event) {
-    if (!$(this).attr('checked')) {
+  .change(function () {
+    if (!$(this).prop('checked')) {
       $profile_table.find('.change_password_row').hide().find(':password').val('')
     } else {
       $(this).addClass('showing')
       $profile_table.find('.change_password_row').show().find('#old_password').focus().select()
     }
   })
-  .attr('checked', false)
+  .prop('checked', false)
   .change()
 
 $update_profile_form
@@ -86,13 +87,13 @@ $update_profile_form
     required: $update_profile_form.find('#user_name').length ? ['name'] : [],
     object_name: 'user',
     property_validations: {
-      '=default_email_id': function (val, data) {
-        if ($('#default_email_id').length && (!val || val == 'new')) {
+      '=default_email_id': function (val, _data) {
+        if ($('#default_email_id').length && (!val || val === 'new')) {
           return I18n.t('please_select_an_option', 'Please select an option')
         }
-      }
+      },
     },
-    beforeSubmit(data) {},
+    beforeSubmit() {},
     success(data) {
       const user = data.user
       const templateData = {
@@ -100,10 +101,10 @@ $update_profile_form
         full_name: user.name,
         sortable_name: user.sortable_name,
         time_zone: user.time_zone,
-        locale: $("#user_locale option[value='" + user.locale + "']").text()
+        locale: $("#user_locale option[value='" + user.locale + "']").text(),
       }
       if (templateData.locale != $update_profile_form.find('.locale').text()) {
-        location.reload()
+        window.location.reload()
         return
       }
       if ($default_email_id.length > 0) {
@@ -114,7 +115,7 @@ $update_profile_form
       $('#channel_' + user.communication_channel.id).addClass('default')
       $update_profile_form
         .fillTemplateData({
-          data: templateData
+          data: templateData,
         })
         .find('.cancel_button')
         .click()
@@ -129,7 +130,7 @@ $update_profile_form
       }
       $update_profile_form.loadingImage('remove').formErrors(errors)
       $edit_settings_link.click()
-    }
+    },
   })
   .find('.more_options_link')
   .click(() => {
@@ -139,7 +140,7 @@ $update_profile_form
   })
 
 $('#default_email_id').change(function () {
-  if ($(this).val() == 'new') {
+  if ($(this).val() === 'new') {
     $('.add_email_link:first').click()
   }
 })
@@ -150,19 +151,28 @@ $('#unregistered_services li.service').click(function (event) {
     width: 350,
     open() {
       $(this).dialog('widget').find('a').focus()
-    }
+    },
   })
 })
 $('.create_user_service_form').formSubmit({
   object_name: 'user_service',
-  beforeSubmit(data) {
+  property_validations: {
+    user_name(value) {
+      if (value && value.length > maximumStringLength) {
+        return I18n.t('Exceeded the maximum length (%{number} characters)', {
+          number: maximumStringLength,
+        })
+      }
+    },
+  },
+  beforeSubmit() {
     $(this).loadingImage()
   },
-  success(data) {
+  success() {
     $(this).loadingImage('remove').parents('.content').dialog('close')
     document.location.reload()
   },
-  error(data) {
+  error() {
     $(this)
       .loadingImage('remove')
       .errorBox(
@@ -171,9 +181,9 @@ $('.create_user_service_form').formSubmit({
           'Registration failed. Check the user name and password, and try again.'
         )
       )
-  }
+  },
 })
-$('#unregistered_services li.service .content form .cancel_button').click(function (event) {
+$('#unregistered_services li.service .content form .cancel_button').click(function () {
   $(this).parents('.content').dialog('close')
 })
 $('#registered_services li.service .delete_service_link').click(function (event) {
@@ -186,13 +196,13 @@ $('#registered_services li.service .delete_service_link').click(function (event)
         'Are you sure you want to unregister this service?'
       ),
       url: $(this).attr('href'),
-      success(data) {
+      success() {
         $(this).slideUp(function () {
           $('#unregistered_services')
             .find('#unregistered_' + $(this).attr('id'))
             .slideDown()
         })
-      }
+      },
     })
 })
 $('.service').hover(
@@ -208,8 +218,8 @@ $('#show_user_services').change(function () {
     $('#update_profile_form').attr('action'),
     'PUT',
     {'user[show_user_services]': $(this).prop('checked')},
-    data => {},
-    data => {}
+    _data => {},
+    _data => {}
   )
 })
 $('#disable_inbox').change(function () {
@@ -217,8 +227,8 @@ $('#disable_inbox').change(function () {
     '/profile/toggle_disable_inbox',
     'POST',
     {'user[disable_inbox]': $(this).prop('checked')},
-    data => {},
-    data => {}
+    _data => {},
+    _data => {}
   )
 })
 $('.delete_pseudonym_link').click(function (event) {
@@ -227,7 +237,7 @@ $('.delete_pseudonym_link').click(function (event) {
     .parents('.pseudonym')
     .confirmDelete({
       url: $(this).attr('href'),
-      message: I18n.t('confirms.delete_login', 'Are you sure you want to delete this login?')
+      message: I18n.t('confirms.delete_login', 'Are you sure you want to delete this login?'),
     })
 })
 $('.datetime_field').datetime_field()
@@ -238,7 +248,7 @@ $('.delete_key_link').click(function (event) {
   event.preventDefault()
   const $key_row = $(this).closest('.access_token')
   let $focus_row = $key_row.prevAll(':not(.blank)').first()
-  if ($focus_row.length == 0) {
+  if ($focus_row.length === 0) {
     $focus_row = $key_row.nextAll(':not(.blank)').first()
   }
   const $to_focus =
@@ -255,7 +265,7 @@ $('.delete_key_link').click(function (event) {
         $('#no_approved_integrations,#access_tokens_holder').toggle()
       }
       $to_focus.focus()
-    }
+    },
   })
 })
 $('#add_access_token_dialog .cancel_button').click(() => {
@@ -265,22 +275,27 @@ $('#access_token_form').formSubmit({
   object_name: 'access_token',
   property_validations: {
     purpose(value) {
-      if (!value || value == '') {
+      if (!value || value === '') {
         return I18n.t('purpose_required', 'Purpose is required')
       }
-    }
+      if (value.length > maximumStringLength) {
+        return I18n.t('Exceeded the maximum length (%{number} characters)', {
+          number: maximumStringLength,
+        })
+      }
+    },
   },
   beforeSubmit() {
     $(this)
       .find('button')
-      .attr('disabled', true)
+      .prop('disabled', true)
       .filter('.submit_button')
       .text(I18n.t('buttons.generating_token', 'Generating Token...'))
   },
   success(data) {
     $(this)
       .find('button')
-      .attr('disabled', false)
+      .prop('disabled', false)
       .filter('.submit_button')
       .text(I18n.t('buttons.generate_token', 'Generate Token'))
     $('#add_access_token_dialog').dialog('close')
@@ -293,7 +308,7 @@ $('#access_token_form').formSubmit({
     data.used = '--'
     $token.fillTemplateData({
       data,
-      hrefValues: ['id']
+      hrefValues: ['id'],
     })
     $token.data('token', data)
     $('#access_tokens > tbody').append($token.show())
@@ -302,13 +317,13 @@ $('#access_token_form').formSubmit({
   error() {
     $(this)
       .find('button')
-      .attr('disabled', false)
+      .prop('disabled', false)
       .filter('.submit_button')
       .text(I18n.t('errors.generating_token_failed', 'Generating Token Failed'))
-  }
+  },
 })
 $('#token_details_dialog .regenerate_token').click(function () {
-  const result = confirm(
+  const result = window.confirm(
     I18n.t(
       'confirms.regenerate_token',
       'Are you sure you want to regenerate this token?  Anything using this token will have to be updated.'
@@ -322,7 +337,7 @@ $('#token_details_dialog .regenerate_token').click(function () {
   const $token = $dialog.data('token')
   const url = $dialog.data('token_url')
   const $button = $(this)
-  $button.text(I18n.t('buttons.regenerating_token', 'Regenerating token...')).attr('disabled', true)
+  $button.text(I18n.t('buttons.regenerating_token', 'Regenerating token...')).prop('disabled', true)
   $.ajaxJSON(
     url,
     'PUT',
@@ -338,12 +353,12 @@ $('#token_details_dialog .regenerate_token').click(function () {
         .find('.full_token_warning')
         .showIf(data.visible_token.length > 10)
       $token.data('token', data)
-      $button.text(I18n.t('buttons.regenerate_token', 'Regenerate Token')).attr('disabled', false)
+      $button.text(I18n.t('buttons.regenerate_token', 'Regenerate Token')).prop('disabled', false)
     },
     () => {
       $button
         .text(I18n.t('errors.regenerating_token_failed', 'Regenerating Token Failed'))
-        .attr('disabled', false)
+        .prop('disabled', false)
     }
   )
 })
@@ -352,7 +367,9 @@ $('.show_token_link').click(function (event) {
   const $dialog = $('#token_details_dialog')
   const url = $(this).attr('rel')
   $dialog.dialog({
-    width: 700
+    width: 700,
+    modal: true,
+    zIndex: 1000,
   })
   const $token = $(this).parents('.access_token')
   $dialog.data('token', $token)
@@ -365,7 +382,7 @@ $('.show_token_link').click(function (event) {
       .showIf(token.visible_token && token.visible_token !== 'protected')
       .find('.regenerate_token')
       .text(I18n.t('buttons.regenerate_token', 'Regenerate Token'))
-      .attr('disabled', false)
+      .prop('disabled', false)
     $dialog
       .find('.loading_message,.error_loading_message')
       .hide()
@@ -404,7 +421,7 @@ $('.add_access_token_link').click(function (event) {
   event.preventDefault()
   $('#access_token_form')
     .find('button')
-    .attr('disabled', false)
+    .prop('disabled', false)
     .filter('.submit_button')
     .text(I18n.t('buttons.generate_token', 'Generate Token'))
   $('#add_access_token_dialog')
@@ -415,7 +432,9 @@ $('.add_access_token_link').click(function (event) {
       width: 500,
       open() {
         $(this).closest('.ui-dialog').focus()
-      }
+      },
+      modal: true,
+      zIndex: 1000,
     })
     .fixDialogButtons()
 })

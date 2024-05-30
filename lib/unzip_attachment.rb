@@ -21,7 +21,7 @@
 # This is used to take a zipped file, unzip it, add directories to a
 # context, and attach the files in the correct directories.
 class UnzipAttachment
-  THINGS_TO_IGNORE_REGEX = /^(__MACOSX|thumbs\.db|\.DS_Store)$/.freeze
+  THINGS_TO_IGNORE_REGEX = /^(__MACOSX|thumbs\.db|\.DS_Store)$/
 
   def self.process(opts = {})
     @ua = new(opts)
@@ -96,6 +96,7 @@ class UnzipAttachment
 
       id_positions = {}
       path_positions = zip_stats.paths_with_positions(last_position)
+      not_created_folders = []
       CanvasUnzip.extract_archive(filename) do |entry, index|
         next if should_skip?(entry)
 
@@ -105,7 +106,18 @@ class UnzipAttachment
 
         folder_path_array += entry_path_array
         folder_name = folder_path_array.join("/")
-        folder = Folder.assert_path(folder_name, @context)
+        display_name = display_name(entry.name)
+        if not_created_folders.include?(folder_name)
+          @logger&.warn "Couldn't create file #{display_name}: #{folder_name} not created"
+          next
+        end
+        begin
+          folder = Folder.assert_path(folder_name, @context)
+        rescue ActiveRecord::StatementInvalid => e
+          @logger&.warn "Couldn't create sub-folder #{folder_name}: #{e.message}"
+          not_created_folders << folder_name
+          next
+        end
 
         update_progress(zip_stats.percent_complete(index))
 
@@ -120,13 +132,15 @@ class UnzipAttachment
           zip_stats.charge_quota(file_size)
           # This is where the attachment actually happens.  See file_in_context.rb
           migration_id = @migration_id_map[entry.name]
-          attachment = attach(f.path, entry, folder, sha512, migration_id: migration_id)
+          attachment = attach(f.path, entry, folder, sha512, migration_id:)
           id_positions[attachment.id] = path_positions[entry.name]
         rescue Attachment::OverQuotaError
           f.unlink
           raise
+        rescue ActiveRecord::StatementInvalid => e
+          @logger&.warn "Couldn't create file #{display_name}: #{e.message}"
         rescue => e
-          @logger&.warn "Couldn't unzip archived file #{f.path}: #{e.message}"
+          @logger&.warn "Couldn't unzip archived file #{display_name}: #{e.message}"
         end
       end
       update_attachment_positions(id_positions)
@@ -151,11 +165,23 @@ class UnzipAttachment
   end
 
   def attach(path, entry, folder, md5, migration_id: nil)
-    FileInContext.attach(context, path, display_name: display_name(entry.name), folder: folder,
-                                        explicit_filename: File.split(entry.name).last, allow_rename: @rename_files, md5: md5, migration_id: migration_id)
+    FileInContext.attach(context,
+                         path,
+                         display_name: display_name(entry.name),
+                         folder:,
+                         explicit_filename: File.split(entry.name).last,
+                         allow_rename: @rename_files,
+                         md5:,
+                         migration_id:)
   rescue
-    FileInContext.attach(context, path, display_name: display_name(entry.name), folder: folder,
-                                        explicit_filename: File.split(entry.name).last, allow_rename: @rename_files, md5: md5, migration_id: migration_id)
+    FileInContext.attach(context,
+                         path,
+                         display_name: display_name(entry.name),
+                         folder:,
+                         explicit_filename: File.split(entry.name).last,
+                         allow_rename: @rename_files,
+                         md5:,
+                         migration_id:)
   end
 
   def with_unzip_configuration
@@ -173,7 +199,7 @@ class UnzipAttachment
   end
 
   def last_position
-    @last_position ||= (@context.attachments.active.filter_map(&:position).last || 0)
+    @last_position ||= @context.attachments.active.filter_map(&:position).last || 0
   end
 
   def should_skip?(entry)
@@ -236,6 +262,7 @@ end
 # since it's such an integral part of the unzipping
 # process
 class ZipFileStats
+  MAX_FILE_COUNT = 250_000
   attr_reader :file_count, :total_size, :paths, :filename, :quota_remaining
 
   def initialize(filename)
@@ -248,9 +275,8 @@ class ZipFileStats
   end
 
   def validate_against(context)
-    max = Setting.get("max_zip_file_count", "100000").to_i
-    if file_count > max
-      raise ArgumentError, "Zip File cannot have more than #{max} entries"
+    if file_count > MAX_FILE_COUNT
+      raise ArgumentError, "Zip File cannot have more than #{MAX_FILE_COUNT} entries"
     end
 
     # check whether the nominal size of the zip's contents would exceed
@@ -291,7 +317,7 @@ class ZipFileStats
   def process!
     CanvasUnzip.extract_archive(filename) do |entry|
       @file_count += 1
-      @total_size += [entry.size, Attachment.minimum_size_for_quota].max
+      @total_size += [entry.size, Attachment::MINIMUM_SIZE_FOR_QUOTA].max
       @paths << entry.name
     end
     @file_count = 1 if @file_count == 0

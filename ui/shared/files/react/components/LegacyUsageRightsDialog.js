@@ -24,7 +24,7 @@ import filesEnv from '../modules/filesEnv'
 import setUsageRights from '../../util/setUsageRights'
 import updateModelsUsageRights from '../../util/updateModelsUsageRights'
 import '@canvas/rails-flash-notifications'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import '@canvas/jquery/jquery.instructure_forms'
 
 const I18n = useI18nScope('usage_rights_modal')
 
@@ -34,10 +34,10 @@ export default {
   propTypes: {
     isOpen: PropTypes.bool,
     closeModal: PropTypes.func,
-    itemsToManage: PropTypes.arrayOf(customPropTypes.filesystemObject).isRequired
+    itemsToManage: PropTypes.arrayOf(customPropTypes.filesystemObject).isRequired,
   },
 
-  componentWillMount() {
+  UNSAFE_componentWillMount() {
     this.copyright = this.defaultCopyright()
     this.use_justification = this.defaultSelectedRight()
     return (this.cc_value = this.defaultCCValue())
@@ -64,7 +64,7 @@ export default {
     const usageRightValue = {
       use_justification: values.use_justification,
       legal_copyright: values.copyright,
-      license: values.cc_license
+      license: values.cc_license,
     }
 
     if (deferSaveCallback) {
@@ -136,5 +136,5 @@ export default {
     } else {
       return null
     }
-  }
+  },
 }

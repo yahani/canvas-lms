@@ -15,10 +15,11 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
+import $ from 'jquery'
+import {some} from 'lodash'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import _ from 'underscore'
-import DialogFormView from '@canvas/forms/backbone/views/DialogFormView.coffee'
-import GroupCategoryCloneView from './GroupCategoryCloneView.coffee'
+import DialogFormView from '@canvas/forms/backbone/views/DialogFormView'
+import GroupCategoryCloneView from './GroupCategoryCloneView'
 import template from '../../jst/randomlyAssignMembers.handlebars'
 import wrapper from '@canvas/forms/jst/EmptyDialogFormWrapper.handlebars'
 import groupHasSubmissions from '../../groupHasSubmissions'
@@ -30,7 +31,7 @@ export default class RandomlyAssignMembersView extends DialogFormView {
     this.prototype.defaults = {
       title: I18n.t('randomly_assigning_members', 'Randomly Assigning Students'),
       width: 450,
-      height: 250
+      height: 250,
     }
 
     this.prototype.template = template
@@ -41,7 +42,7 @@ export default class RandomlyAssignMembersView extends DialogFormView {
 
     this.prototype.events = {
       'click .dialog_closer': 'close',
-      'click .randomly-assign-members-confirm': 'randomlyAssignMembers'
+      'click .randomly-assign-members-confirm': 'randomlyAssignMembers',
     }
 
     this.prototype.els = {'input[name=group_by_section]': '$group_by_section'}
@@ -50,7 +51,7 @@ export default class RandomlyAssignMembersView extends DialogFormView {
   openAgain() {
     super.openAgain(...arguments)
     const groups = this.model.groups().models
-    if (_.some(groups, group => group.usersCount() > 0 || !!group.get('max_membership'))) {
+    if (some(groups, group => group.usersCount() > 0 || !!group.get('max_membership'))) {
       return this.disableCheckbox(
         this.$group_by_section,
         I18n.t('Cannot restrict by section unless groups are empty and not limited in size')
@@ -80,7 +81,7 @@ export default class RandomlyAssignMembersView extends DialogFormView {
     if (groupHasSubmission) {
       this.cloneCategoryView = new GroupCategoryCloneView({
         model: this.model,
-        openedFromCaution: true
+        openedFromCaution: true,
       })
       this.cloneCategoryView.open()
       return this.cloneCategoryView.on('close', () => {
@@ -104,7 +105,6 @@ export default class RandomlyAssignMembersView extends DialogFormView {
       .attr('data-tooltip', 'top')
       .data('tooltip', {disabled: false})
       .attr('title', message)
-    const label = box.parent()
     return this.checkboxAccessibleAdvisory(box).text(message)
   }
 

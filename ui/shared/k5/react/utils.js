@@ -20,10 +20,12 @@ import {useScope as useI18nScope} from '@canvas/i18n'
 import moment from 'moment-timezone'
 import PropTypes from 'prop-types'
 
-import {asJson, defaultFetchOptions} from '@instructure/js-utils'
+import {asJson, defaultFetchOptions} from '@canvas/util/xhr'
 
 import doFetchApi from '@canvas/do-fetch-api-effect'
 import AssignmentGroupGradeCalculator from '@canvas/grading/AssignmentGroupGradeCalculator'
+import {scoreToGrade} from '@instructure/grading-utils'
+import GradeFormatHelper from '@canvas/grading/GradeFormatHelper'
 
 const I18n = useI18nScope('k5_utils')
 
@@ -48,7 +50,9 @@ export const transformGrades = courses =>
       gradingPeriods: hasGradingPeriods ? course.grading_periods : [],
       hasGradingPeriods,
       isHomeroom: course.homeroom_course,
-      enrollments: course.enrollments
+      enrollments: course.enrollments,
+      gradingScheme: course.grading_scheme,
+      restrictQuantitativeData: course.restrict_quantitative_data,
     }
     return getCourseGrades(basicCourseInfo)
   })
@@ -82,7 +86,7 @@ export const getCourseGrades = (course, observedUserId) => {
       : null,
     totalGradeForAllGradingPeriods: showTotalsForAllGradingPeriods
       ? enrollment?.computed_current_grade
-      : null
+      : null,
   }
 }
 
@@ -90,13 +94,13 @@ export const fetchGradesForGradingPeriod = (gradingPeriodId, userId = 'self') =>
   asJson(
     window.fetch(
       `/api/v1/users/${userId}/enrollments?state[]=active&&type[]=StudentEnrollment&grading_period_id=${gradingPeriodId}`,
-      defaultFetchOptions
+      defaultFetchOptions()
     )
   ).then(enrollments =>
     enrollments.map(({course_id, grades}) => ({
       courseId: course_id,
       score: grades && grades.current_score,
-      grade: grades && grades.current_grade
+      grade: grades && grades.current_grade,
     }))
   )
 
@@ -104,7 +108,7 @@ export const fetchLatestAnnouncement = courseId =>
   asJson(
     window.fetch(
       `/api/v1/announcements?context_codes=course_${courseId}&active_only=true&per_page=1`,
-      defaultFetchOptions
+      defaultFetchOptions()
     )
   ).then(data => {
     if (data?.length > 0) {
@@ -119,7 +123,7 @@ export const fetchCourseInstructors = courseId =>
   asJson(
     window.fetch(
       `/api/v1/courses/${courseId}/users?enrollment_type[]=teacher&enrollment_type[]=ta&include[]=avatar_url&include[]=bio&include[]=enrollments`,
-      defaultFetchOptions
+      defaultFetchOptions()
     )
   )
 
@@ -129,12 +133,12 @@ export const fetchCourseApps = courseIds =>
       `/api/v1/external_tools/visible_course_nav_tools?${courseIds
         .map(id => `context_codes[]=course_${id}`)
         .join('&')}`,
-      defaultFetchOptions
+      defaultFetchOptions()
     )
   )
 
 export const fetchCourseTabs = courseId =>
-  asJson(window.fetch(`/api/v1/courses/${courseId}/tabs`, defaultFetchOptions))
+  asJson(window.fetch(`/api/v1/courses/${courseId}/tabs`, defaultFetchOptions()))
 
 export const readableRoleName = role => {
   const ROLES = {
@@ -143,7 +147,7 @@ export const readableRoleName = role => {
     DesignerEnrollment: I18n.t('Designer'),
     StudentEnrollment: I18n.t('Student'),
     StudentViewEnrollment: I18n.t('Student'),
-    ObserverEnrollment: I18n.t('Observer')
+    ObserverEnrollment: I18n.t('Observer'),
   }
   // Custom roles return as named
   return ROLES[role] || role
@@ -153,7 +157,7 @@ export const sendMessage = (recipientId, message, subject) =>
   doFetchApi({
     path: '/api/v1/conversations',
     method: 'POST',
-    body: {recipients: [recipientId], body: message, group_conversation: false, subject}
+    body: {recipients: [recipientId], body: message, group_conversation: false, subject},
   })
 
 const getSubmission = (assignment, observedUserId) =>
@@ -164,7 +168,13 @@ const getSubmission = (assignment, observedUserId) =>
 /* Takes raw response from assignment_groups API and returns an array of objects with each
    assignment group's id, name, and total score. If gradingPeriodId is passed, only return
    totals for assignment groups which have assignments in the provided grading period. */
-export const getAssignmentGroupTotals = (data, gradingPeriodId, observedUserId) => {
+export const getAssignmentGroupTotals = (
+  data,
+  gradingPeriodId,
+  observedUserId,
+  restrictQuantitativeData = false,
+  gradingScheme = []
+) => {
   if (gradingPeriodId) {
     data = data.filter(group =>
       group.assignments?.some(a => {
@@ -176,7 +186,7 @@ export const getAssignmentGroupTotals = (data, gradingPeriodId, observedUserId) 
   return data.map(group => {
     const assignments = group.assignments.map(a => ({
       ...a,
-      submission: getSubmission(a, observedUserId)
+      submission: getSubmission(a, observedUserId),
     }))
     const groupScores = AssignmentGroupGradeCalculator.calculate(
       assignments.map(a => {
@@ -184,24 +194,48 @@ export const getAssignmentGroupTotals = (data, gradingPeriodId, observedUserId) 
           points_possible: a.points_possible,
           assignment_id: a.id,
           assignment_group_id: a.assignment_group_id,
-          ...a.submission
+          ...a.submission,
         }
       }),
       {...group, assignments},
       false
     )
+
+    let score
+    if (groupScores.current.possible === 0) {
+      score = I18n.t('n/a')
+    } else {
+      const tempScore = (groupScores.current.score / groupScores.current.possible) * 100
+      score = restrictQuantitativeData
+        ? scoreToGrade(tempScore, gradingScheme)
+        : I18n.n(tempScore, {percentage: true, precision: 2})
+    }
+
     return {
       id: group.id,
       name: group.name,
-      score:
-        groupScores.current.possible === 0
-          ? I18n.t('n/a')
-          : I18n.n((groupScores.current.score / groupScores.current.possible) * 100, {
-              percentage: true,
-              precision: 2
-            })
+      score,
     }
   })
+}
+// Take an assignment and submission and output the expected value when Restrict_quantitative_data is enabled
+const formatGradeToRQD = (assignment, submission) => {
+  if (!ENV.RESTRICT_QUANTITATIVE_DATA) return
+  let rqdFormattedGrade = ''
+  // When RQD is on and score and points possible === 0, we have a special case where we want the grade to be displayed as "complete"
+  if (submission?.score === 0 && assignment?.points_possible === 0) {
+    rqdFormattedGrade = 'complete'
+  } else {
+    rqdFormattedGrade = GradeFormatHelper.formatGrade(submission?.grade, {
+      gradingType: assignment.grading_type,
+      pointsPossible: assignment.points_possible,
+      score: submission?.score,
+      restrict_quantitative_data: ENV.RESTRICT_QUANTITATIVE_DATA,
+      grading_scheme: ENV.GRADING_SCHEME,
+    })
+  }
+
+  return rqdFormattedGrade
 }
 
 /* Takes raw response from assignment_groups API and returns an array of assignments with
@@ -211,6 +245,10 @@ export const getAssignmentGrades = (data, observedUserId) => {
     .map(group =>
       group.assignments.map(a => {
         const submission = getSubmission(a, observedUserId)
+        const rqd_grading_type = !['not_graded', 'pass_fail', 'gpa_scale'].includes(a.grading_type)
+          ? 'letter_grade'
+          : a.grading_type
+        const rqdFormattedGrade = formatGradeToRQD(a, submission)
         return {
           id: a.id,
           assignmentName: a.name,
@@ -219,15 +257,16 @@ export const getAssignmentGrades = (data, observedUserId) => {
           assignmentGroupName: group.name,
           assignmentGroupId: group.id,
           pointsPossible: a.points_possible,
-          gradingType: a.grading_type,
+          gradingType: ENV.RESTRICT_QUANTITATIVE_DATA ? rqd_grading_type : a.grading_type,
+          restrictQuantitativeData: ENV.RESTRICT_QUANTITATIVE_DATA,
           score: submission?.score,
-          grade: submission?.grade,
+          grade: ENV.RESTRICT_QUANTITATIVE_DATA ? rqdFormattedGrade : submission?.grade,
           submissionDate: submission?.submitted_at,
           unread: submission?.read_state === 'unread',
           late: submission?.late,
           excused: submission?.excused,
           missing: submission?.missing,
-          hasComments: !!submission?.submission_comments?.length
+          hasComments: !!submission?.submission_comments?.length,
         }
       })
     )
@@ -241,7 +280,13 @@ export const getAssignmentGrades = (data, observedUserId) => {
 
 /* Formats course total score and grade (if applicable) into string from enrollments API
    response */
-export const getTotalGradeStringFromEnrollments = (enrollments, userId, observedUserId) => {
+export const getTotalGradeStringFromEnrollments = (
+  enrollments,
+  userId,
+  observedUserId,
+  restrictQuantitativeData = false,
+  gradingScheme = []
+) => {
   let grades
   if (observedUserId) {
     const enrollment = enrollments.find(
@@ -253,6 +298,9 @@ export const getTotalGradeStringFromEnrollments = (enrollments, userId, observed
   }
   if (grades?.current_score == null) {
     return I18n.t('n/a')
+  }
+  if (restrictQuantitativeData) {
+    return scoreToGrade(grades.current_score, gradingScheme)
   }
   const score = I18n.n(grades.current_score, {percentage: true, precision: 2})
   return grades.current_grade == null
@@ -267,13 +315,13 @@ export const fetchImportantInfos = courses =>
       doFetchApi({
         path: `/api/v1/courses/${c.id}`,
         params: {
-          include: ['syllabus_body']
-        }
+          include: ['syllabus_body'],
+        },
       }).then(data => ({
         courseId: c.id,
         courseName: c.shortName,
         canEdit: c.canManage,
-        content: data.json.syllabus_body
+        content: data.json.syllabus_body,
       }))
     )
   ).then(infos => infos.filter(info => info.content))
@@ -286,7 +334,7 @@ export const parseAnnouncementDetails = (announcement, course) => {
     courseUrl: course.href,
     canEdit: course.canManage,
     canReadAnnouncements: course.canReadAnnouncements,
-    published: course.published
+    published: course.published,
   }
   if (announcement) {
     retval.announcement = transformAnnouncement(announcement)
@@ -303,7 +351,7 @@ export const transformAnnouncement = announcement => {
     attachment = {
       display_name: announcement.attachments[0].display_name,
       url: announcement.attachments[0].url,
-      filename: announcement.attachments[0].filename
+      filename: announcement.attachments[0].filename,
     }
   }
 
@@ -313,7 +361,7 @@ export const transformAnnouncement = announcement => {
     message: announcement.message,
     url: announcement.html_url,
     postedDate: announcement.posted_at ? new Date(announcement.posted_at) : undefined,
-    attachment
+    attachment,
   }
 }
 
@@ -337,13 +385,13 @@ export const saveElementaryDashboardPreference = disabled =>
   doFetchApi({
     path: '/api/v1/users/self/settings',
     method: 'PUT',
-    body: {elementary_dashboard_disabled: disabled}
+    body: {elementary_dashboard_disabled: disabled},
   })
 
 export const ignoreTodo = ignoreUrl =>
   doFetchApi({
     path: ignoreUrl,
-    method: 'DELETE'
+    method: 'DELETE',
   })
 
 export const groupImportantDates = (assignments, events, timeZone) => {
@@ -355,7 +403,7 @@ export const groupImportantDates = (assignments, events, timeZone) => {
       context: item.context_name,
       color: item.context_color || DEFAULT_COURSE_COLOR,
       type: item.type === 'event' ? 'event' : item.assignment.submission_types[0],
-      url: item.html_url
+      url: item.html_url,
     }
     const date = item.type === 'event' ? item.start_at : item.assignment.due_at
     const dateBucket = moment(date).tz(timeZone).startOf('day').toISOString()
@@ -367,7 +415,7 @@ export const groupImportantDates = (assignments, events, timeZone) => {
   groups.forEach((items, date) => {
     dates.push({
       date,
-      items: items.sort((a, b) => moment(a.start).diff(moment(b.start)))
+      items: items.sort((a, b) => moment(a.start).diff(moment(b.start))),
     })
   })
   return dates.sort((a, b) => moment(a.date).diff(moment(b.date)))
@@ -377,13 +425,13 @@ export const saveSelectedContexts = selected_contexts =>
   doFetchApi({
     path: `/api/v1/calendar_events/save_selected_contexts`,
     method: 'POST',
-    params: {selected_contexts}
+    params: {selected_contexts},
   }).then(data => data.json)
 
 export const dropCourse = url =>
   doFetchApi({
     path: url,
-    method: 'POST'
+    method: 'POST',
   })
 
 export const TAB_IDS = {
@@ -394,12 +442,12 @@ export const TAB_IDS = {
   RESOURCES: 'tab-resources',
   GROUPS: 'tab-groups',
   MODULES: 'tab-modules',
-  TODO: 'tab-todo'
+  TODO: 'tab-todo',
 }
 
 export const FOCUS_TARGETS = {
   TODAY: 'today',
-  MISSING_ITEMS: 'missing-items'
+  MISSING_ITEMS: 'missing-items',
 }
 
 export const DEFAULT_COURSE_COLOR = '#394B58'
@@ -409,7 +457,7 @@ export const GradingPeriodShape = {
   title: PropTypes.string.isRequired,
   end_date: PropTypes.string,
   start_date: PropTypes.string,
-  workflow_state: PropTypes.string
+  workflow_state: PropTypes.string,
 }
 
 export const MOBILE_NAV_BREAKPOINT_PX = 768

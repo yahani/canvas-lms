@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "csv"
-
 module Api::V1::OutcomeResults
   include Api::V1::Outcome
   include Outcomes::OutcomeFriendlyDescriptionResolver
@@ -82,7 +80,7 @@ module Api::V1::OutcomeResults
       course = @context.is_a?(Course) ? @context : nil
 
       friendly_descriptions_array = outcomes.map(&:id).each_slice(100).flat_map do |outcome_ids|
-        resolve_friendly_descriptions(account, course, outcome_ids).map { |description| [description.learning_outcome_id, description.description] }
+        resolve_friendly_descriptions(account, course, outcome_ids).map { |description| [description.learning_outcome_id.to_s, description.description] }
       end
 
       friendly_descriptions = friendly_descriptions_array.to_h
@@ -91,12 +89,14 @@ module Api::V1::OutcomeResults
     outcomes.map do |o|
       hash = outcome_json(
         o,
-        @current_user, session,
-        assessed_outcomes: assessed_outcomes,
+        @current_user,
+        session,
+        assessed_outcomes:,
         rating_percents: percents[o.id],
-        context: context,
-        friendly_descriptions: friendly_descriptions
+        context:,
+        friendly_descriptions:
       )
+
       hash[:alignments] = alignment_asset_string_map[o.id]
       hash
     end
@@ -113,7 +113,7 @@ module Api::V1::OutcomeResults
   #
   # Returns a Hash containing serialized outcome links.
   def outcome_results_include_outcome_links_json(outcome_links, context)
-    outcome_links_json(outcome_links, @current_user, session, { context: context })
+    outcome_links_json(outcome_links, @current_user, session, { context: })
   end
 
   # Public: Returns an Array of serialized Course objects for linked hash.
@@ -184,7 +184,6 @@ module Api::V1::OutcomeResults
     serialized_rollup_pairs = rollups.map do |rollup|
       [rollup, serialize_rollup(rollup, :user)]
     end
-
     duplicate_rollup_rows_for_sections(serialized_rollup_pairs)
   end
 
@@ -200,16 +199,16 @@ module Api::V1::OutcomeResults
     # we're mostly assuming that there is one section enrollment per user. if a user
     # is in multiple sections, they will have multiple rollup results. pagination is
     # still by user, so the counts won't match up. again, this is a very rare thing
-    section_ids_func = if @section
-                         ->(_user) { [@section.id] }
-                       else
-                         enrollments = @context.all_accepted_student_enrollments.where(user_id: serialized_rollup_pairs.map { |pair| pair[0].context.id }).to_a
-                         ->(user) { enrollments.select { |e| e.user_id == user.id }.map(&:course_section_id) }
-                       end
+    section_func = if @section
+                     ->(user) { [[@section.id, @context.all_student_enrollments.where(user_id: user.id, course_section_id: @section.id).first.workflow_state]] }
+                   else
+                     enrollments = @context.all_student_enrollments.where(user_id: serialized_rollup_pairs.map { |pair| pair.first.context.id }).to_a
+                     ->(user) { enrollments.select { |e| e.user_id == user.id }.map { |e| [e&.course_section_id, e.workflow_state] } }
+                   end
 
     serialized_rollup_pairs.flat_map do |rollup, serialized_rollup|
-      section_ids_func.call(rollup.context).map do |section_id|
-        serialized_rollup.deep_merge(links: { section: section_id.to_s })
+      section_func.call(rollup.context).map do |section_id, workflow_state|
+        serialized_rollup.deep_merge(links: { section: section_id.to_s, status: workflow_state })
       end
     end
   end
@@ -227,7 +226,31 @@ module Api::V1::OutcomeResults
       submitted_at: score.submitted_at,
       count: score.count,
       hide_points: score.hide_points,
-      links: { outcome: score.outcome.id.to_s },
+      links: serialize_rollup_score_links(score)
+    }
+  end
+
+  # Internal: returns hash for rollup score links
+  def serialize_rollup_score_links(score)
+    links = { outcome: score.outcome.id.to_s }
+    if defined?(params) && params[:contributing_scores] == "true"
+      links[:contributing_scores] = serialize_contributing_scores(score.outcome_results)
+    end
+    links
+  end
+
+  # Internal: returns an Array of serialized contributing scores
+  def serialize_contributing_scores(contributing_scores)
+    contributing_scores.map { |score| serialize_contributing_score(score) }
+  end
+
+  # Internal: returns hash for contributing score
+  def serialize_contributing_score(score)
+    {
+      association_id: score.association_id,
+      association_type: score.association_type,
+      title: score.title,
+      score: score.score
     }
   end
 
@@ -237,16 +260,19 @@ module Api::V1::OutcomeResults
       row = []
       row << I18n.t(:student_name, "Student name")
       row << I18n.t(:student_id, "Student ID")
+      row << I18n.t(:student_sis_id, "Student SIS ID")
       outcomes.each do |outcome|
         pathParts = outcome_paths.find { |x| x[:id] == outcome.id }[:parts]
         path = pathParts.pluck(:name).join(" > ")
-        row << I18n.t(:outcome_path_result, "%{path} result", path: path)
-        row << I18n.t(:outcome_path_mastery_points, "%{path} mastery points", path: path)
+        row << I18n.t(:outcome_path_result, "%{path} result", path:)
+        row << I18n.t(:outcome_path_mastery_points, "%{path} mastery points", path:)
       end
       csv << row
       mastery_points = @context.root_account.feature_enabled?(:account_level_mastery_scales) && @context.resolved_outcome_proficiency&.mastery_points
       rollups.each do |rollup|
         row = [rollup.context.name, rollup.context.id]
+        sis_user_id = @context.root_account.pseudonyms.active.where("sis_user_id IS NOT NULL AND user_id = ?", rollup.context.id).pick(:sis_user_id) || "N/A"
+        row << sis_user_id
         outcomes.each do |outcome|
           score = rollup.scores.find { |x| x.outcome == outcome }
           row << (score ? score.score : nil)

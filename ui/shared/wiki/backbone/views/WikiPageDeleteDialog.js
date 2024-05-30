@@ -17,7 +17,7 @@
 
 import $ from 'jquery'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import DialogFormView, {getResponsiveWidth} from '@canvas/forms/backbone/views/DialogFormView.coffee'
+import DialogFormView, {getResponsiveWidth} from '@canvas/forms/backbone/views/DialogFormView'
 
 const I18n = useI18nScope('pages')
 
@@ -25,7 +25,7 @@ const dialogDefaults = {
   fixDialogButtons: false,
   title: I18n.t('delete_dialog_title', 'Delete Page'),
   width: getResponsiveWidth(240, 400),
-  height: 'auto'
+  height: 'auto',
 }
 
 export default class WikiPageDeleteDialog extends DialogFormView {
@@ -70,7 +70,7 @@ export default class WikiPageDeleteDialog extends DialogFormView {
       } else {
         $.flashMessage(
           I18n.t('notices.page_deleted', 'The page "%{title}" has been deleted.', {
-            title: page_title
+            title: page_title,
           })
         )
         dfd.resolve()
@@ -81,7 +81,7 @@ export default class WikiPageDeleteDialog extends DialogFormView {
     destroyDfd.fail(() => {
       $.flashError(
         I18n.t('notices.delete_failed', 'The page "%{title}" could not be deleted.', {
-          title: page_title
+          title: page_title,
         })
       )
       return dfd.reject()
@@ -113,7 +113,7 @@ export default class WikiPageDeleteDialog extends DialogFormView {
         click: () => {
           this.buttonClicked = 'cancel'
           return form.$el.dialog('close')
-        }
+        },
       },
       {
         class: 'btn btn-danger',
@@ -122,8 +122,8 @@ export default class WikiPageDeleteDialog extends DialogFormView {
         click: () => {
           this.buttonClicked = 'delete'
           return form.submit()
-        }
-      }
+        },
+      },
     ]
     return this.$el.dialog('option', 'buttons', buttons)
   }

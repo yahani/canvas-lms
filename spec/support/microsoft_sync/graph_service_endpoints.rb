@@ -22,13 +22,13 @@ RSpec.shared_context "microsoft_sync_graph_service_endpoints" do
 
   def json_response(status, body, extra_headers = {})
     {
-      status: status,
+      status:,
       body: body.to_json,
       headers: extra_headers.merge("Content-type" => "application/json")
     }
   end
 
-  before :once do
+  before do
     @url_logger = MicrosoftSync::GraphService::SpecHelper::UrlLogger.new
 
     WebMock.after_request do |request, response|
@@ -36,7 +36,7 @@ RSpec.shared_context "microsoft_sync_graph_service_endpoints" do
     end
   end
 
-  after :all do
+  after do
     @url_logger.verify_responses
     # Uncomment below when mock responses are actually valid. I plan to do those
     # in a later commit.
@@ -186,7 +186,8 @@ RSpec.shared_context "microsoft_sync_graph_service_endpoints" do
       expect(InstStatsd::Statsd).to have_received(:increment).with(
         "microsoft_sync.graph_service.success", tags: {
           msft_endpoint: "#{http_method}_#{url_path_prefix_for_statsd}",
-          extra_tag: "abc", status_code: /^20.$/,
+          extra_tag: "abc",
+          status_code: /^20.$/,
         }
       )
     end
@@ -228,7 +229,8 @@ RSpec.shared_context "microsoft_sync_graph_service_endpoints" do
       context "when a filter and select are used" do
         subject do
           endpoints.send(
-            method_name, *method_args,
+            method_name,
+            *method_args,
             filter: { userPrincipalName: %w[user1@domain.com user2@domain.com] },
             select: %w[id userPrincipalName]
           )

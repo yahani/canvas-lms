@@ -64,6 +64,16 @@
 #           "example": 1,
 #           "type": "integer"
 #         },
+#         "bounce_count": {
+#           "description": "The number of bounces the channel has experienced. This is reset if the channel sends successfully.",
+#           "example": 0,
+#           "type": "integer"
+#         },
+#         "last_bounce_at": {
+#           "description": "The time the last bounce occurred.",
+#           "example": "2012-05-30T17:00:00Z",
+#           "type": "datetime"
+#         },
 #         "workflow_state": {
 #           "description": "The current state of the communication channel. Possible values are: 'unconfirmed' or 'active'.",
 #           "example": "active",
@@ -98,7 +108,8 @@ class CommunicationChannelsController < ApplicationController
     @user = api_find(User, params[:user_id])
     return unless authorized_action(@user, @current_user, :read)
 
-    channels = Api.paginate(@user.communication_channels.unretired, self,
+    channels = Api.paginate(@user.communication_channels.unretired,
+                            self,
                             api_v1_communication_channels_url).map do |cc|
       communication_channel_json(cc, @current_user, session)
     end
@@ -117,7 +128,7 @@ class CommunicationChannelsController < ApplicationController
   #   The type of communication channel.
   #
   #   In order to enable push notification support, the server must be
-  #   properly configured (via sns.yml) to communicate with Amazon
+  #   properly configured (via `sns_creds` in Vault) to communicate with Amazon
   #   Simple Notification Services, and the developer key used to create
   #   the access token from this request must have an SNS ARN configured on
   #   it.
@@ -157,6 +168,8 @@ class CommunicationChannelsController < ApplicationController
 
     skip_confirmation = value_to_boolean(params[:skip_confirmation]) &&
                         (Account.site_admin.grants_right?(@current_user, :manage_students) || @domain_root_account.grants_right?(@current_user, :manage_students))
+
+    InstStatsd::Statsd.increment("communication_channels.create.skip_confirmation") if skip_confirmation
 
     if params[:communication_channel][:type] == CommunicationChannel::TYPE_PUSH
       unless @access_token
@@ -211,6 +224,10 @@ class CommunicationChannelsController < ApplicationController
     if @cc.save
       @cc.send_confirmation!(@domain_root_account) unless skip_confirmation
 
+      # need to change them from pre-registered to registered them as well
+      # so that they can get notifications
+      @user.register if skip_confirmation
+
       flash[:notice] = t("profile.notices.contact_registered", "Contact method registered!")
       render json: communication_channel_json(@cc, @current_user, session)
     else
@@ -226,7 +243,10 @@ class CommunicationChannelsController < ApplicationController
     cc ||= @current_user && @current_user.communication_channels.unretired.where.not(path_type: CommunicationChannel::TYPE_PUSH).find_by_confirmation_code(@nonce)
 
     @headers = false
-    if !cc || (cc.path_type == "email" && !EmailAddressValidator.valid?(cc.path))
+    if (!cc || (cc.path_type == "email" && !EmailAddressValidator.valid?(cc.path))) ||
+       (@domain_root_account.allow_additional_email_at_registration? &&
+        params.dig(:pseudonym, :personal_email).present? &&
+        !EmailAddressValidator.valid?(params[:pseudonym][:personal_email]))
       failed = true
     else
       @communication_channel = cc
@@ -255,6 +275,7 @@ class CommunicationChannelsController < ApplicationController
       end
 
       if @user.registered? && cc.unconfirmed?
+        add_additional_email_if_allowed
         unless @current_user == @user
           session[:return_to] = request.url
           flash[:notice] = t "notices.login_to_confirm", "Please log in to confirm your e-mail address"
@@ -290,13 +311,14 @@ class CommunicationChannelsController < ApplicationController
               p.user = user
               (account_to_pseudonyms_hash[p.account] ||= []) << p
             end
-            @merge_opportunities << [user, account_to_pseudonyms_hash.each_value.map do |pseudonyms|
-              pseudonyms.detect(&:sis_user_id) || pseudonyms.min_by(&:position)
-            end]
+            @merge_opportunities << [user,
+                                     account_to_pseudonyms_hash.each_value.map do |pseudonyms|
+                                       pseudonyms.detect(&:sis_user_id) || pseudonyms.min_by(&:position)
+                                     end]
             @merge_opportunities.last.last.sort! { |a, b| Canvas::ICU.compare(a.account.name, b.account.name) }
           end
         end
-        @merge_opportunities.sort_by! { |a| [a.first == @current_user ? CanvasSort::First : CanvasSort::Last, Canvas::ICU.collation_key(a.first.name)] }
+        @merge_opportunities.sort_by! { |a| [(a.first == @current_user) ? CanvasSort::First : CanvasSort::Last, Canvas::ICU.collation_key(a.first.name)] }
       else
         @merge_opportunities = []
       end
@@ -341,6 +363,7 @@ class CommunicationChannelsController < ApplicationController
         pseudonym = @root_account.pseudonyms.active_only.where(user_id: @user).exists?
         if @user.pre_registered? && pseudonym
           @user.register
+          add_additional_email_if_allowed
           return redirect_with_success_flash
         else
           failed = true
@@ -383,11 +406,12 @@ class CommunicationChannelsController < ApplicationController
             ps_errors = @pseudonym.errors.as_json[:errors]
             ps_errors.delete(:password_confirmation) unless params[:pseudonym][:password_confirmation]
             return render json: {
-              errors: {
-                user: @user.errors.as_json[:errors],
-                pseudonym: ps_errors
-              }
-            }, status: :bad_request
+                            errors: {
+                              user: @user.errors.as_json[:errors],
+                              pseudonym: ps_errors
+                            }
+                          },
+                          status: :bad_request
           end
 
           # They may have switched e-mail address when they logged in; create a CC if so
@@ -417,7 +441,6 @@ class CommunicationChannelsController < ApplicationController
             failed = true
           end
         else
-          @request = request
           return # render
         end
       end
@@ -429,6 +452,7 @@ class CommunicationChannelsController < ApplicationController
         format.json { render json: {}, status: :bad_request }
       end
     else
+      add_additional_email_if_allowed
       # make sure additions take the above use of
       # redirect_with_success_flash into account
       redirect_with_success_flash
@@ -444,7 +468,7 @@ class CommunicationChannelsController < ApplicationController
     if @enrollment
       return render_unauthorized_action unless @current_user.can_create_enrollment_for?(@enrollment.course, session, @enrollment.type)
     else
-      return render_unauthorized_action unless @user.grants_any_right?(@current_user, session, :manage, :manage_user_details)
+      return unless authorized_action(@user, @current_user, [:manage, :manage_user_details])
     end
 
     if @enrollment && (@enrollment.invited? || @enrollment.active?)
@@ -460,7 +484,7 @@ class CommunicationChannelsController < ApplicationController
 
   def confirmation_limit_reached
     @user = User.find(params[:user_id])
-    return render_unauthorized_action unless @user.grants_any_right?(@current_user, session, :manage, :manage_user_details)
+    return unless authorized_action(@user, @current_user, [:manage, :manage_user_details])
     return render json: {}, status: :bad_request unless params[:id].present?
 
     @cc = @user.communication_channels.find(params[:id])
@@ -587,12 +611,12 @@ class CommunicationChannelsController < ApplicationController
   protected
 
   def account
-    @account ||= params[:account_id] == "self" ? @domain_root_account : Account.find(params[:account_id])
+    @account ||= (params[:account_id] == "self") ? @domain_root_account : Account.find(params[:account_id])
   end
 
   def bulk_action_args
     args = params.permit(:after, :before, :pattern, :with_invalid_paths, :path_type, :order).to_unsafe_h.symbolize_keys
-    args.merge!({ account: account })
+    args.merge!({ account: })
   end
 
   def generate_bulk_report
@@ -615,8 +639,23 @@ class CommunicationChannelsController < ApplicationController
   end
 
   def has_api_permissions?
-    @user == @current_user ||
+    (@user == @current_user && @current_user&.user_can_edit_comm_channels?) ||
       @user.grants_right?(@current_user, session, :manage_user_details)
+  end
+
+  def add_additional_email_if_allowed
+    if @domain_root_account.allow_additional_email_at_registration? && params.dig(:pseudonym, :personal_email).present?
+      personal_email = params[:pseudonym][:personal_email]
+      new_cc = @user.communication_channels.email.by_path(personal_email).first
+      # Don't do anything if for whatever reason the user has already registered the email as a cc.
+      unless new_cc
+        new_cc = @user.communication_channels.build(path: personal_email, path_type: "personal_email")
+        new_cc.user = @user
+        new_cc.workflow_state = "unconfirmed"
+        new_cc.send_confirmation!(@root_account)
+        new_cc.save!
+      end
+    end
   end
 
   def require_terms?

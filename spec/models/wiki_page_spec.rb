@@ -33,7 +33,7 @@ describe WikiPage do
     expect(p.messages_sent).not_to be_empty
     expect(p.messages_sent["Updated Wiki Page"]).not_to be_nil
     expect(p.messages_sent["Updated Wiki Page"]).not_to be_empty
-    expect(p.messages_sent["Updated Wiki Page"].map(&:user)).to be_include(@user)
+    expect(p.messages_sent["Updated Wiki Page"].map(&:user)).to include(@user)
   end
 
   it "sends page updated notifications to students if active" do
@@ -45,7 +45,7 @@ describe WikiPage do
     p.notify_of_update = true
     p.save!
     p.update(body: "Awgawg")
-    expect(p.messages_sent["Updated Wiki Page"].map(&:user)).to be_include(@student)
+    expect(p.messages_sent["Updated Wiki Page"].map(&:user)).to include(@student)
   end
 
   it "does not send page updated notifications to students if not active" do
@@ -58,7 +58,7 @@ describe WikiPage do
     p.notify_of_update = true
     p.save!
     p.update(body: "Awgawg")
-    expect(p.messages_sent["Updated Wiki Page"].map(&:user)).to_not be_include(@student)
+    expect(p.messages_sent["Updated Wiki Page"].map(&:user)).to_not include(@student)
   end
 
   describe "duplicate manages titles properly" do
@@ -112,7 +112,7 @@ describe WikiPage do
     course_with_teacher(active_all: true)
 
     new_front_page = @course.wiki_pages.create!(title: "asdf")
-    expect(new_front_page.set_as_front_page!).to eq true
+    expect(new_front_page.set_as_front_page!).to be true
 
     @course.wiki.reload
     expect(@course.wiki.front_page).to eq new_front_page
@@ -155,29 +155,54 @@ describe WikiPage do
     expect(page.url).to eq "ae-very-sspecial-namae-1-slash-4"
   end
 
-  it "makes the title/url unique" do
+  it "makes the url unique" do
     course_with_teacher(active_all: true)
     @course.wiki_pages.create(title: "Asdf")
     p2 = @course.wiki_pages.create(title: "Asdf")
-    expect(p2.title).to eql("Asdf-2")
+    expect(p2.title).to eql("Asdf")
     expect(p2.url).to eql("asdf-2")
   end
 
-  it "makes the title unique and truncate to proper length" do
+  it "makes the title unique and truncate to proper length when permanent_page_links is disabled" do
+    Account.site_admin.disable_feature! :permanent_page_links
     course_with_teacher(active_all: true)
     p1 = @course.wiki_pages.create!(title: "a" * WikiPage::TITLE_LENGTH)
     p2 = @course.wiki_pages.create!(title: p1.title)
     p3 = @course.wiki_pages.create!(title: p1.title)
-    p4 = @course.wiki_pages.create!(title: ("a" * (WikiPage::TITLE_LENGTH - 2)) + "-2")
     expect(p2.title.length).to eq WikiPage::TITLE_LENGTH
     expect(p2.title.end_with?("-2")).to be_truthy
     expect(p3.title.length).to eq WikiPage::TITLE_LENGTH
     expect(p3.title.end_with?("-3")).to be_truthy
-    expect(p4.title.length).to eq WikiPage::TITLE_LENGTH
-    expect(p4.title.end_with?("-4")).to be_truthy
   end
 
-  it "lets you reuse the title/url of a deleted page" do
+  it "won't allow you to create a duplicate title that ends in -<number> when permanent_page_links is disabled" do
+    Account.site_admin.disable_feature! :permanent_page_links
+    course_with_teacher(active_all: true)
+    @course.wiki_pages.create!(title: "MAT-1104")
+    expect { @course.wiki_pages.create!(title: "MAT-1104") }.to raise_error(ActiveRecord::RecordInvalid)
+  end
+
+  it "allows users to reuse titles if permanent_page_links is enabled" do
+    Account.site_admin.enable_feature! :permanent_page_links
+    course_factory(active_all: true)
+    title = "Doppelgänger"
+    p1 = @course.wiki_pages.create!(title:)
+    p2 = @course.wiki_pages.create!(title:)
+    expect(p1.title).to eq(title)
+    expect(p2.title).to eq(title)
+  end
+
+  it "creates a unique url if title is taken by an existing lookup" do
+    course_factory(active_all: true)
+    p1 = @course.wiki_pages.create!(title: "bananas")
+    p1.wiki_page_lookups.create!(slug: "apples")
+    p2 = @course.wiki_pages.create!(title: "apples")
+    expect(p2.title).to eq("apples")
+    expect(p2.url).to eq("apples-2")
+  end
+
+  it "lets you reuse the title/url of a deleted page when permanent_page_links is disabled" do
+    Account.site_admin.disable_feature! :permanent_page_links
     course_with_teacher(active_all: true)
     p1 = @course.wiki_pages.create(title: "Asdf")
     p1.workflow_state = "deleted"
@@ -199,6 +224,30 @@ describe WikiPage do
     expect(p1.url).to eql("asdf-2")
   end
 
+  it "lets you reuse the title but not the url of a deleted page when PPL is on" do
+    Account.site_admin.enable_feature!(:permanent_page_links)
+
+    course_with_teacher(active_all: true)
+    p1 = @course.wiki_pages.create(title: "Asdf")
+    p1.workflow_state = "deleted"
+    p1.save
+
+    # doesn't delete the lookups
+    expect(p1.current_lookup).to_not be_nil
+
+    # therefore we can't reuse the url
+    p2 = @course.wiki_pages.create(title: "Asdf")
+    p2.reload
+    expect(p2.title).to eql("Asdf")
+    expect(p2.url).to eql("asdf-2")
+
+    # p1's url does not mutate upon reinstating
+    p1.workflow_state = "active"
+    expect(p1.save).to be_truthy
+    expect(p1.title).to eql("Asdf")
+    expect(p1.url).to eql("asdf")
+  end
+
   it "sets root_account_id on create" do
     course_with_teacher(active_all: true)
     wp = @course.wiki_pages.create!(title: "Asdf")
@@ -215,22 +264,132 @@ describe WikiPage do
 
     it "does not allow students to read" do
       student_in_course(course: @course, active_all: true)
-      expect(@page.can_read_page?(@student)).to eq false
+      expect(@page.can_read_page?(@student)).to be false
     end
 
     it "allows teachers to read" do
-      expect(@page.can_read_page?(@teacher)).to eq true
+      expect(@page.can_read_page?(@teacher)).to be true
     end
 
     context "allows account admins to read" do
       %i[manage_wiki_create manage_wiki_update manage_wiki_delete].each do |perm|
         it "with #{perm} rights" do
           account = @course.root_account
-          role = custom_account_role("CustomAccountUser", account: account)
+          role = custom_account_role("CustomAccountUser", account:)
           RoleOverride.manage_role_override(account, role, perm, override: true)
-          admin = account_admin_user(account: account, role: role, active_all: true)
-          expect(@page.can_read_page?(admin)).to eq true
+          admin = account_admin_user(account:, role:, active_all: true)
+          expect(@page.can_read_page?(admin)).to be true
         end
+      end
+    end
+  end
+
+  context "publish_at" do
+    before :once do
+      course_with_teacher
+      @page = @course.wiki_pages.create(title: "unpublished page", workflow_state: "unpublished")
+      @course.root_account.enable_feature! :scheduled_page_publication
+    end
+
+    it "schedules a job to publish a page" do
+      @page.publish_at = 1.hour.from_now
+      @page.save!
+
+      run_jobs
+      expect(@page.reload).to be_unpublished
+
+      Timecop.travel(61.minutes.from_now) do
+        run_jobs
+        expect(@page.reload).to be_published
+        expect(@page.publish_at).not_to be_nil
+      end
+    end
+
+    it "works on a newly created page" do
+      new_page = @course.wiki_pages.create!(title: "test page", workflow_state: "unpublished", publish_at: 1.hour.from_now)
+
+      Timecop.travel(61.minutes.from_now) do
+        run_jobs
+        expect(new_page.reload).to be_published
+        expect(new_page.publish_at).not_to be_nil
+      end
+    end
+
+    it "doesn't publish prematurely if the publish_at date changes" do
+      @page.update publish_at: 2.hours.from_now
+      @page.update publish_at: 4.hours.from_now
+
+      Timecop.travel(3.hours.from_now) do
+        run_jobs
+        expect(@page.reload).to be_unpublished
+      end
+    end
+
+    it "unpublishes when a future publish_at date is set" do
+      @page.publish!
+      mod = @course.context_modules.create! name: "the module"
+      tag = mod.add_item type: "page", id: @page.id
+      expect(tag).to be_published
+
+      @page.publish_at = 1.hour.from_now
+      @page.save!
+      expect(@page.reload).to be_unpublished
+      expect(tag.reload).to be_unpublished
+
+      Timecop.travel(61.minutes.from_now) do
+        run_jobs
+        expect(@page.reload).to be_published
+        expect(tag.reload).to be_published
+      end
+    end
+
+    it "publishes when a past publish_at date is set" do
+      @page.publish_at = 1.hour.ago
+      @page.save!
+      expect(@page.reload).to be_published
+      expect(@page.publish_at).not_to be_nil
+    end
+
+    it "clears a publish_at date when manually publishing" do
+      @page.publish_at = 1.hour.from_now
+      @page.save!
+
+      @page.publish!
+      expect(@page.reload.publish_at).to be_nil
+    end
+
+    it "unpublishes if publish_at date is removed" do
+      @page.publish_at = 1.hour.from_now
+      @page.save!
+
+      @page.update publish_at: nil
+      expect(@page.reload).to be_unpublished
+    end
+
+    it "clears a publish_at date when manually unpublishing" do
+      @page.publish_at = 1.hour.from_now
+      @page.save!
+
+      Timecop.travel(61.minutes.from_now) do
+        run_jobs
+        expect(@page.reload).to be_published
+        expect(@page.publish_at).not_to be_nil
+
+        new_page = WikiPage.find(@page.id)
+        new_page.unpublish!
+        expect(new_page.reload.publish_at).to be_nil
+      end
+    end
+
+    it "doesn't publish if the FF is off" do
+      @course.root_account.disable_feature! :scheduled_page_publication
+
+      @page.publish_at = 1.hour.from_now
+      @page.save!
+
+      Timecop.travel(61.minutes.from_now) do
+        run_jobs
+        expect(@page.reload).to be_unpublished
       end
     end
   end
@@ -273,6 +432,30 @@ describe WikiPage do
       expect(page.can_edit_page?(student)).to be_truthy
     end
 
+    it "is true for members who are in the course" do
+      course_with_designer(active_all: true)
+      page = @course.wiki_pages.create(title: "some page", editing_roles: "members")
+      expect(page.can_edit_page?(@designer)).to be_truthy
+    end
+
+    it "is not true for members who are in the course but not active" do
+      course_with_student(active_all: true)
+      page = @course.wiki_pages.create(title: "some page", editing_roles: "members")
+      student = @course.students.first
+      @course.enrollments.update!(workflow_state: "invited")
+      expect(page.can_edit_page?(student)).to be_falsey
+      @course.update!(workflow_state: "creation_pending")
+      expect(page.can_edit_page?(student)).to be_falsey
+      @course.update!(workflow_state: "deleted")
+      expect(page.can_edit_page?(student)).to be_falsey
+      @course.update!(workflow_state: "rejected")
+      expect(page.can_edit_page?(student)).to be_falsey
+      @course.update!(workflow_state: "completed")
+      expect(page.can_edit_page?(student)).to be_falsey
+      @course.update!(workflow_state: "inactive")
+      expect(page.can_edit_page?(student)).to be_falsey
+    end
+
     it "is not true for users who are not in the course (if it is not public)" do
       course_factory(active_all: true)
       page = @course.wiki_pages.create(title: "some page", editing_roles: "public")
@@ -280,13 +463,31 @@ describe WikiPage do
       expect(page.can_edit_page?(@user)).to be_falsey
     end
 
-    it "is true for users who are not in the course (if it is public)" do
+    it "is not true for users who are not in the course (if it is public)" do
       course_factory(active_all: true)
       @course.is_public = true
       @course.save!
       page = @course.wiki_pages.create(title: "some page", editing_roles: "public")
       user_factory(active_all: true)
-      expect(page.can_edit_page?(@user)).to be_truthy
+      expect(page.can_edit_page?(@user)).to be_falsey
+    end
+
+    it "is not true for users who are in the course but not active" do
+      course_with_student(active_all: true)
+      page = @course.wiki_pages.create(title: "some page", editing_roles: "public")
+      student = @course.students.first
+      @course.enrollments.update!(workflow_state: "invited")
+      expect(page.can_edit_page?(student)).to be_falsey
+      @course.update!(workflow_state: "creation_pending")
+      expect(page.can_edit_page?(student)).to be_falsey
+      @course.update!(workflow_state: "deleted")
+      expect(page.can_edit_page?(student)).to be_falsey
+      @course.update!(workflow_state: "rejected")
+      expect(page.can_edit_page?(student)).to be_falsey
+      @course.update!(workflow_state: "completed")
+      expect(page.can_edit_page?(student)).to be_falsey
+      @course.update!(workflow_state: "inactive")
+      expect(page.can_edit_page?(student)).to be_falsey
     end
 
     context "when the page's course is concluded" do
@@ -304,7 +505,7 @@ describe WikiPage do
       let(:page) do
         course.wiki_pages.create(
           title: "A Page",
-          editing_roles: editing_roles,
+          editing_roles:,
           workflow_state: "published"
         )
       end
@@ -313,7 +514,7 @@ describe WikiPage do
         let(:editing_roles) { "teachers" }
 
         it "returns false for a teacher" do
-          expect(subject).to eq false
+          expect(subject).to be false
         end
       end
 
@@ -321,7 +522,7 @@ describe WikiPage do
         let(:editing_roles) { "teachers,students" }
 
         it "returns false for a teacher" do
-          expect(subject).to eq false
+          expect(subject).to be false
         end
       end
 
@@ -329,7 +530,15 @@ describe WikiPage do
         let(:editing_roles) { "teachers,students,public" }
 
         it "returns false for a teacher" do
-          expect(subject).to eq false
+          expect(subject).to be false
+        end
+      end
+
+      context "with 'teachers,students,members' as the editing role" do
+        let(:editing_roles) { "teachers,students,members" }
+
+        it "returns false for a teacher" do
+          expect(subject).to be false
         end
       end
     end
@@ -356,7 +565,7 @@ describe WikiPage do
       context "when the current user is a teacher in the group's course" do
         let(:current_user) { teacher }
 
-        it { is_expected.to eq true }
+        it { is_expected.to be true }
       end
 
       context "when the current user is a concluded teacher" do
@@ -364,7 +573,23 @@ describe WikiPage do
 
         let(:current_user) { teacher }
 
-        it { is_expected.to eq false }
+        it { is_expected.to be false }
+      end
+
+      context "with 'members' as the editing role" do
+        let(:editing_roles) { "members" }
+
+        it "returns false for a teacher" do
+          expect(subject).to be false
+        end
+      end
+
+      context "with 'members,public' as the editing role" do
+        let(:editing_roles) { "members,public" }
+
+        it "returns false for a teacher" do
+          expect(subject).to be false
+        end
       end
     end
   end
@@ -841,15 +1066,15 @@ describe WikiPage do
         ---
         id: 787500
         wiki_id: 15160
-        title: \"\\U0001F4D8\\U0001F4D5Ss10.20 | Social Studies: Warm Up - Las Cruces, New Mexico\"
-        body: \"<p style=\\\"text-align: center;\\\"><a id=\"media_comment_m-5Ej8kqbPvbAhbBX7zWCEtynxijhqH27P\" class=\"instructure_inline_media_comment audio_comment\" data-media_comment_type=\"audio\" data-alt=\"\" href=\"/media_objects/m-5Ej8kqbPvbAhbBX7zWCEtynxijhqH27P\"/></p>\\r\
-        <p style=\\\"text-align: center;\\\"> </p>\\r\
+        title: "\\U0001F4D8\\U0001F4D5Ss10.20 | Social Studies: Warm Up - Las Cruces, New Mexico"
+        body: "<p style=\\"text-align: center;\\"><a id="media_comment_m-5Ej8kqbPvbAhbBX7zWCEtynxijhqH27P" class="instructure_inline_media_comment audio_comment" data-media_comment_type="audio" data-alt="" href="/media_objects/m-5Ej8kqbPvbAhbBX7zWCEtynxijhqH27P"/></p>\\r\
+        <p style=\\"text-align: center;\\"> </p>\\r\
         <p
-          style=\\\"text-align: center;\\\"><span style=\\\"font-size: 18pt;\\\">Geography is the
+          style=\\"text-align: center;\\"><span style=\\"font-size: 18pt;\\">Geography is the
           study of Earth and its land, water, air and people. We are concentrating on learning
           about the physical features, climate and natural resources that affect an area and
           its people.</span></p>\\r\
-          center;\\\"> </p>\"
+          center;\\"> </p>"
         user_id:#{" "}
         created_at: !ruby/object:ActiveSupport::TimeWithZone
           utc: &1 2020-11-05 20:24:57.390301492 Z
@@ -881,26 +1106,62 @@ describe WikiPage do
         id: 19903
         wiki_id: 513
         title: Jason otitis media treatment
-        body: \"<ul>\\r\\n
-                        <li\n  class=\\\"distractors\\\"><a class=\\\"radio_link\\\" href=\\\"#\\\">Yes</a></li>\\r\\n
-                        <li class=\\\"distractors\\\"><a\n  class=\\\"radio_link answer\\\" href=\\\"#\\\">No</a></li>\\r\\n
+        body: "<ul>\\r\\n
+                        <li\n  class=\\"distractors\\"><a class=\\"radio_link\\" href=\\"#\\">Yes</a></li>\\r\\n
+                        <li class=\\"distractors\\"><a\n  class=\\"radio_link answer\\" href=\\"#\\">No</a></li>\\r\\n
                       </ul>\\r\\n</div>\\r\\n
-                      <div class=\\\"col-md-4\\\">
-                        <img\n  src=\\\"/courses/348/files/102814/preview\\\" alt=\\\"Antibiotics\\\" width=\\\"100%\\\"\n  height=\\\"auto\\\" data-api-endpoint=\\\"https://dev.iheed.org/api/v1/courses/328/files/41094\\\"\n  data-api-returntype=\\\"File\\\">
+                      <div class=\\"col-md-4\\">
+                        <img\n  src=\\"/courses/348/files/102814/preview\\" alt=\\"Antibiotics\\" width=\\"100%\\"\n  height=\\"auto\\" data-api-endpoint=\\"https://dev.iheed.org/api/v1/courses/328/files/41094\\"\n  data-api-returntype=\\"File\\">
                       </div>\\r\\n
                     </div>\\r\\n
-                    <div class=\\\"feedback\\\">\\r\\n
+                    <div class=\\"feedback\\">\\r\\n
                       <p>Jason\n  does not need antibiotics at this time. He is not systemically unwell, he has no\n  high-risk complications and there is no discharge from his ear.</p>\\r\\n
                     </div>\\r\\n
-                    <div\n  class=\\\"feedback correct\\\">\\r\\n<p>Correct.</p>\\r\\n</div>\\r\\n
-                    <div class=\\\"feedback\n  incorrect\\\">\\r\\n<p>Incorrect.</p>\\r\\n</div>\\r\\n
+                    <div\n  class=\\"feedback correct\\">\\r\\n<p>Correct.</p>\\r\\n</div>\\r\\n
+                    <div class=\\"feedback\n  incorrect\\">\\r\\n<p>Incorrect.</p>\\r\\n</div>\\r\\n
                   </div>\\r\\n
-                </div>\\r\\n<div class=\\\"content-box\\\">\\r\\n<div\n  class=\\\"grid-row spacer center-xs\\\">\\r\\n
-                <div class=\\\"col-md-4 text-left\\\">\\r\\n<p\n  class=\\\"text-info\\\">Listen to the audio to hear the advice you give Laura about\n  what to do next.</p>\\r\\n</div>\\r\\n<div class=\\\"col-md-4\\\">
-                <a id=\"media_comment_m-52Qmsrg9rxySvtzA6e9VdzxrB9FHZBVx\" class=\"instructure_inline_media_comment audio_comment\" href=\"/media_objects/m-52Qmsrg9rxySvtzA6e9VdzxrB9FHZBVx\"/>\"
+                </div>\\r\\n<div class=\\"content-box\\">\\r\\n<div\n  class=\\"grid-row spacer center-xs\\">\\r\\n
+                <div class=\\"col-md-4 text-left\\">\\r\\n<p\n  class=\\"text-info\\">Listen to the audio to hear the advice you give Laura about\n  what to do next.</p>\\r\\n</div>\\r\\n<div class=\\"col-md-4\\">
+                <a id="media_comment_m-52Qmsrg9rxySvtzA6e9VdzxrB9FHZBVx" class="instructure_inline_media_comment audio_comment" href="/media_objects/m-52Qmsrg9rxySvtzA6e9VdzxrB9FHZBVx"/>"
       YAML
       good_yaml = WikiPage.reinterpret_version_yaml(bad_yaml)
       expect(good_yaml).to include("<a id=\\\"media_comment_m-52Qmsrg9rxySvtzA6e9VdzxrB9FHZBVx\\\"")
+    end
+  end
+
+  describe "url" do
+    before :once do
+      course_factory(active_all: true)
+      @page = @course.wiki_pages.create!(title: "original-name")
+      @lookup = @page.wiki_page_lookups.create!(slug: "new-name")
+      @page.current_lookup = @lookup
+      @page.save!
+    end
+
+    context "when permanent_page_links flag is disabled" do
+      before :once do
+        Account.site_admin.disable_feature!(:permanent_page_links)
+      end
+
+      it "returns the page's url attribute" do
+        expect(@page.url).to eq("original-name")
+      end
+    end
+
+    context "when permanent_page_links flag is enabled" do
+      before :once do
+        Account.site_admin.enable_feature!(:permanent_page_links)
+      end
+
+      it "returns the page's current lookup's slug" do
+        expect(@page.url).to eq("new-name")
+      end
+
+      it "returns the page's url attribute if current lookup is nil" do
+        @page.current_lookup = nil
+        @page.save!
+        expect(@page.url).to eq("original-name")
+      end
     end
   end
 end

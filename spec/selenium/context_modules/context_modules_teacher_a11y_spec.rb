@@ -19,10 +19,14 @@
 
 require_relative "../helpers/context_modules_common"
 require_relative "../helpers/public_courses_context"
+require_relative "page_objects/modules_index_page"
+require_relative "page_objects/modules_settings_tray"
 
 describe "context modules" do
   include_context "in-process server selenium tests"
   include ContextModulesCommon
+  include ModulesIndexPage
+  include ModulesSettingsTray
 
   context "as a teacher", priority: "1" do
     before(:once) do
@@ -60,6 +64,7 @@ describe "context modules" do
     end
 
     it "creates a new module using enter key", priority: "2" do
+      Account.site_admin.disable_feature! :differentiated_modules
       get "/courses/#{@course.id}/modules"
       add_form = new_module_form
       replace_content(add_form.find_element(:id, "context_module_name"), "module 1")
@@ -87,11 +92,14 @@ describe "context modules" do
             close_button = div.find_element(:css, ".ui-dialog-titlebar-close.ui-corner-all")
           end
         end
+
         check_element_has_focus(close_button)
       end
     end
 
-    it "retains focus when deleting prerequisites" do
+    it "retains focus when deleting prerequisites without differentiated modules" do
+      Account.site_admin.disable_feature! :differentiated_modules
+
       modules = create_modules(2)
       get "/courses/#{@course.id}/modules"
       mod1 = f("#context_module_#{modules[1].id}")
@@ -111,6 +119,26 @@ describe "context modules" do
       links[0].click
       wait_for_animations
       check_element_has_focus(add_button)
+    end
+
+    it "retains focus when deleting prerequisites with different modules" do
+      differentiated_modules_on
+      modules = create_modules(3)
+      go_to_modules
+      manage_module_button(modules[2]).click
+      module_index_menu_tool_link("Edit").click
+
+      2.times do
+        click_add_prerequisites_button
+      end
+
+      expect(remove_prerequisite_button.size).to eq 2
+      click_remove_prerequisite_button(1)
+
+      check_element_has_focus(remove_prerequisite_button[0])
+      click_remove_prerequisite_button(0)
+
+      check_element_has_focus(add_prerequisites_button)
     end
 
     it "adds a title attribute to the text header" do
@@ -192,11 +220,11 @@ describe "context modules" do
       end
 
       before do
-        skip_if_chrome("skipped - research find html")
         get "/courses/#{@course.id}/modules"
 
         # focus the first item
         f("html").send_keys("j")
+        @active_element = driver.execute_script("return document.activeElement")
       end
 
       let(:context_modules) { ff(".context_module .collapse_module_link") }
@@ -217,50 +245,99 @@ describe "context modules" do
         # Navigate through modules and module items
         check_element_has_focus(context_modules[0])
 
-        send_keys(:arrow_down)
+        @active_element.send_keys(:arrow_down)
         check_element_has_focus(context_module_items[0])
 
-        send_keys("j")
+        @active_element.send_keys("j")
         check_element_has_focus(context_module_items[1])
 
-        send_keys("k")
+        @active_element.send_keys("k")
         check_element_has_focus(context_module_items[0])
 
-        send_keys(:arrow_up)
+        @active_element.send_keys(:arrow_up)
         check_element_has_focus(context_modules[0])
       end
 
-      it "edits modules" do
-        send_keys("e")
-        expect(f("#add_context_module_form")).to be_displayed
-      end
-
-      it "creates a module" do
-        send_keys("n")
-        expect(f("#add_context_module_form")).to be_displayed
-      end
-
       it "indents / outdent" do
-        send_keys(:arrow_down)
+        @active_element.send_keys(:arrow_down)
         check_element_has_focus(context_module_items[0])
 
         # Test Indent / Outdent
         expect(f(".context_module_item")).to have_class("indent_0")
 
-        send_keys("i")
+        @active_element.send_keys("i")
         wait_for_ajax_requests
         expect(f(".context_module_item")).to have_class("indent_1")
 
-        send_keys("o")
+        @active_element.send_keys("o")
         wait_for_ajax_requests
         expect(f(".context_module_item")).to have_class("indent_0")
       end
 
       it "deletes" do
         # Test Delete key
-        send_keys("d")
+        @active_element.send_keys("d")
         driver.switch_to.alert.accept
         expect(context_module_items).to have_size(2)
+      end
+    end
+
+    context "Keyboard Accessibility only for non-differentiated modules modals", priority: "1" do
+      before :once do
+        Account.site_admin.disable_feature! :differentiated_modules
+        modules = create_modules(2, true)
+        modules[0].add_item({ id: @assignment.id, type: "assignment" })
+        modules[0].add_item({ id: @assignment2.id, type: "assignment" })
+        modules[1].add_item({ id: @assignment3.id, type: "assignment" })
+      end
+
+      before do
+        get "/courses/#{@course.id}/modules"
+
+        # focus the first item
+        f("html").send_keys("j")
+        @active_element = driver.execute_script("return document.activeElement")
+      end
+
+      let(:context_modules) { ff(".context_module .collapse_module_link") }
+      let(:context_module_items) { ff(".context_module_item a.title") }
+
+      it "edits modules" do
+        @active_element.send_keys("e")
+        expect(f("#add_context_module_form")).to be_displayed
+      end
+
+      it "creates a module" do
+        @active_element.send_keys("n")
+        expect(f("#add_context_module_form")).to be_displayed
+      end
+    end
+
+    context "Specific Keyboard Accessibility with differentiated modules", priority: "1" do
+      before :once do
+        differentiated_modules_on
+        modules = create_modules(2, true)
+        modules[0].add_item({ id: @assignment.id, type: "assignment" })
+        modules[0].add_item({ id: @assignment2.id, type: "assignment" })
+        modules[1].add_item({ id: @assignment3.id, type: "assignment" })
+      end
+
+      before do
+        go_to_modules
+
+        # focus the first item
+        f("html").send_keys("j")
+        @active_element = driver.execute_script("return document.activeElement")
+      end
+
+      it "edits modules with differentiated modules" do
+        @active_element.send_keys("e")
+        expect(settings_tray_exists?).to be_truthy
+      end
+
+      it "creates a module with differentiated modules" do
+        @active_element.send_keys("n")
+        expect(add_module_tray_exists?).to be true
       end
     end
   end

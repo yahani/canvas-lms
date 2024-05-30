@@ -32,7 +32,7 @@ describe CalendarEventsController do
 
   let_once(:teacher_enrollment) { course_with_teacher(active_all: true) }
   let_once(:course) { teacher_enrollment.course }
-  let_once(:student_enrollment) { student_in_course(course: course) }
+  let_once(:student_enrollment) { student_in_course(course:) }
   let_once(:course_event) { course.calendar_events.create(title: "some assignment") }
   let_once(:other_teacher_enrollment) { course_with_teacher(active_all: true) }
 
@@ -59,7 +59,13 @@ describe CalendarEventsController do
       user_session(@teacher)
       make_request.call(conference_params)
       expect(response.status).to be < 400
-      expect(get_event.call.web_conference).not_to be nil
+      expect(get_event.call.web_conference).not_to be_nil
+    end
+
+    it "does not error on bad conference params" do
+      user_session(@teacher)
+      make_request.call(" s")
+      expect(response.status).to be < 400
     end
 
     it "accepts an existing conference" do
@@ -194,15 +200,6 @@ describe CalendarEventsController do
       assert_unauthorized
     end
 
-    include_examples "accepts web_conference" do
-      let(:make_request) do
-        lambda do |params|
-          get "edit", params: { course_id: @course.id, id: @event.id, web_conference: params }
-        end
-      end
-      let(:get_event) { -> { @event.reload } }
-    end
-
     it "allows editing of event assigned to section" do
       course_with_teacher(active_all: true)
       section = add_section("Section 01", course: @course)
@@ -211,28 +208,6 @@ describe CalendarEventsController do
       get "edit", params: { course_id: @course.id, id: section_event.id }
       assert_status(200)
     end
-
-    # context "with web conferences" do
-    #   it "can update with a new conference" do
-    #     user_session(@teacher)
-    #     get 'edit', params: {course_id: @course.id, id: @event.id, web_conference: conference_params}
-    #     expect(response).to be_successful
-    #     expect(@event.reload.web_conference_id).not_to be nil
-    #   end
-
-    #   it "can update with an existing conference" do
-    #     user_session(@teacher)
-    #     conference = @course.web_conferences.create!(conference_params)
-    #     get 'edit', params: {course_id: @course.id, id: @event.id, web_conference: {id: conference.id, **conference_params}}
-    #     expect(@event.reload.web_conference_id).to eq conference.id
-    #   end
-
-    #   it "cannot create with an existing conference the user doesn't have permission for" do
-    #     user_session(@teacher)
-    #     get 'edit', params: {course_id: @course.id, id: @event.id, web_conference: {id: other_teacher_conference.id}}
-    #     assert_unauthorized
-    #   end
-    # end
   end
 
   describe "PUT 'update'" do
@@ -317,8 +292,8 @@ describe CalendarEventsController do
       expect(assigns[:event]).not_to be_frozen
       expect(assigns[:event]).to be_deleted
       @course.reload
-      expect(@course.calendar_events).to be_include(@event)
-      expect(@course.calendar_events.active).not_to be_include(@event)
+      expect(@course.calendar_events).to include(@event)
+      expect(@course.calendar_events.active).not_to include(@event)
     end
   end
 end

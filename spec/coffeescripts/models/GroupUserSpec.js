@@ -16,21 +16,19 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Backbone from '@canvas/backbone'
-import Group from '@canvas/groups/backbone/models/Group.coffee'
-import GroupUser from '@canvas/groups/backbone/models/GroupUser.coffee'
-import GroupCategory from '@canvas/groups/backbone/models/GroupCategory.coffee'
-import $ from 'jquery'
+import Group from '@canvas/groups/backbone/models/Group'
+import GroupUser from '@canvas/groups/backbone/models/GroupUser'
+import GroupCategory from '@canvas/groups/backbone/models/GroupCategory'
 
 QUnit.module('GroupUser', {
   setup() {
     this.groupUser = new GroupUser({category: new GroupCategory()})
     this.leaveGroupStub = sandbox.stub(this.groupUser, 'leaveGroup')
     this.joinGroupStub = sandbox.stub(this.groupUser, 'joinGroup')
-  }
+  },
 })
 
-test('updates group correctly upon save and fires joinGroup and leaveGroup appropriately', function() {
+test('updates group correctly upon save and fires joinGroup and leaveGroup appropriately', function () {
   const group1 = new Group({id: 777})
   this.groupUser.save({group: group1})
   equal(this.groupUser.get('group'), group1)

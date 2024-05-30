@@ -17,7 +17,7 @@
  */
 
 import gql from 'graphql-tag'
-import {shape, string} from 'prop-types'
+import {bool, shape, string} from 'prop-types'
 
 export const Group = {
   fragment: gql`
@@ -25,19 +25,27 @@ export const Group = {
       _id
       contextName: name
       assetString
+      canMessage
     }
   `,
 
   shape: shape({
     _id: string,
     contextName: string,
-    assetString: string
+    assetString: string,
+    canMessage: bool,
   }),
 
-  mock: ({_id = '1', contextName = 'Study Group 1', assetString = 'group_1'} = {}) => ({
+  mock: ({
+    _id = '1',
+    contextName = 'Study Group 1',
+    assetString = 'group_1',
+    canMessage = false,
+  } = {}) => ({
     _id,
     contextName,
     assetString,
-    __typename: 'Group'
-  })
+    canMessage,
+    __typename: 'Group',
+  }),
 }

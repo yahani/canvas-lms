@@ -16,10 +16,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Backbone from '@canvas/backbone'
-import CourseRestore from 'ui/features/account_admin_tools/backbone/models/CourseRestore.js'
-import CourseSearchFormView from 'ui/features/account_admin_tools/backbone/views/CourseSearchFormView.js'
+import CourseRestore from 'ui/features/account_admin_tools/backbone/models/CourseRestore'
+import CourseSearchFormView from 'ui/features/account_admin_tools/backbone/views/CourseSearchFormView'
 import $ from 'jquery'
+import 'jquery-migrate'
 import assertions from 'helpers/assertions'
 
 QUnit.module('CourseSearchFormView', {
@@ -31,28 +31,22 @@ QUnit.module('CourseSearchFormView', {
   },
   teardown() {
     return this.courseSearchFormView.remove()
-  }
+  },
 })
 
-test('should be accessible', function(assert) {
+// eslint-disable-next-line qunit/resolve-async
+test('should be accessible', function (assert) {
   const done = assert.async()
   assertions.isAccessible(this.courseSearchFormView, done, {a11yReport: true})
 })
 
-test('#search, when form is submited, search is called', function() {
-  sandbox
-    .mock(this.courseRestore)
-    .expects('search')
-    .once()
-    .returns($.Deferred().resolve())
-  this.courseSearchFormView.$courseSearchField.val(this.course_id)
+test('#search, when form is submited, search is called', function () {
+  sandbox.mock(this.courseRestore).expects('search').once().returns($.Deferred().resolve())
+  this.courseSearchFormView.$searchField.val(this.course_id)
   return this.courseSearchFormView.$el.submit()
 })
 
-test('#search shows an error when given a blank query', function() {
-  sandbox
-    .mock(this.courseSearchFormView.$courseSearchField)
-    .expects('errorBox')
-    .once()
+test('#search shows an error when given a blank query', function () {
+  sandbox.mock(this.courseSearchFormView.$searchField).expects('errorBox').once()
   return this.courseSearchFormView.$el.submit()
 })

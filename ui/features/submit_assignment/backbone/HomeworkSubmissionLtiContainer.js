@@ -18,12 +18,12 @@
 import Backbone from '@canvas/backbone'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import _ from 'underscore'
-import ExternalContentReturnView from '@canvas/external-tools/backbone/views/ExternalContentReturnView.coffee'
+import {has} from 'lodash'
+import ExternalContentReturnView from '@canvas/external-tools/backbone/views/ExternalContentReturnView'
 import ExternalToolCollection from './collections/ExternalToolCollection'
-import ExternalContentFileSubmissionView from './views/ExternalContentFileSubmissionView.coffee'
-import ExternalContentUrlSubmissionView from './views/ExternalContentUrlSubmissionView.coffee'
-import ExternalContentLtiLinkSubmissionView from './views/ExternalContentLtiLinkSubmissionView.coffee'
+import ExternalContentFileSubmissionView from './views/ExternalContentFileSubmissionView'
+import ExternalContentUrlSubmissionView from './views/ExternalContentUrlSubmissionView'
+import ExternalContentLtiLinkSubmissionView from './views/ExternalContentLtiLinkSubmissionView'
 import {recordEulaAgreement} from '../jquery/helper'
 import {handleContentItem, handleDeepLinkingError} from '../deepLinking'
 import processSingleContentItem from '@canvas/deep-linking/processors/processSingleContentItem'
@@ -56,13 +56,12 @@ export default class HomeworkSubmissionLtiContainer {
     ) {
       return
     }
-    processSingleContentItem(event)
-      .then(result => {
-        handleContentItem(result, this.contentReturnView, this.removeDeepLinkingListener)
-      })
-      .catch(e => {
-        handleDeepLinkingError(e, this.contentReturnView, this.embedLtiLaunch.bind(this))
-      })
+    try {
+      const result = processSingleContentItem(event)
+      handleContentItem(result, this.contentReturnView, this.removeDeepLinkingListener)
+    } catch (e) {
+      handleDeepLinkingError(e, this.contentReturnView, this.embedLtiLaunch.bind(this))
+    }
   }
 
   removeDeepLinkingListener = () => {
@@ -88,7 +87,7 @@ export default class HomeworkSubmissionLtiContainer {
   // private methods below ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
   cleanupViewsForTool(tool) {
-    if (_.has(this.renderedViews, tool.get('id'))) {
+    if (has(this.renderedViews, tool.get('id'))) {
       const views = this.renderedViews[tool.get('id')]
       views.forEach(v => v.remove())
     }
@@ -105,7 +104,7 @@ export default class HomeworkSubmissionLtiContainer {
       model: tool,
       launchType: 'homework_submission',
       launchParams: {assignment_id: ENV.SUBMIT_ASSIGNMENT.ID},
-      displayAsModal: false
+      displayAsModal: false,
     })
 
     this.contentReturnView = returnView
@@ -126,7 +125,7 @@ export default class HomeworkSubmissionLtiContainer {
 
           // Disable submit button if the file does not match the required type
           if (!isValidFileSubmission(homeworkSubmissionView.model.attributes)) {
-            $('.external-tool-submission button[type=submit]').attr('disabled', true)
+            $('.external-tool-submission button[type=submit]').prop('disabled', true)
             $.flashError(I18n.t('Invalid submission file type'))
           }
 
@@ -150,15 +149,15 @@ export default class HomeworkSubmissionLtiContainer {
 
     const homeworkSubmissionView = new ViewClass({
       externalTool: tool,
-      model: new Backbone.Model(item)
+      model: new Backbone.Model(item),
     })
 
-    homeworkSubmissionView.on('relaunchTool', function (tool, _model) {
+    homeworkSubmissionView.on('relaunchTool', function (t) {
       this.remove()
-      return this.parentView.embedLtiLaunch(tool.get('id'))
+      return this.parentView.embedLtiLaunch(t.get('id'))
     })
 
-    homeworkSubmissionView.on('cancel', function (_tool, _model) {
+    homeworkSubmissionView.on('cancel', function () {
       return this.parentView.cancelSubmission()
     })
 
@@ -167,5 +166,5 @@ export default class HomeworkSubmissionLtiContainer {
 }
 HomeworkSubmissionLtiContainer.homeworkSubmissionViewMap = {
   FileItem: ExternalContentFileSubmissionView,
-  LtiLinkItem: ExternalContentLtiLinkSubmissionView
+  LtiLinkItem: ExternalContentLtiLinkSubmissionView,
 }

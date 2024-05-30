@@ -20,9 +20,10 @@ import Quiz from '@canvas/quizzes/backbone/models/Quiz'
 import QuizCollection from 'ui/features/quizzes_index/backbone/collections/QuizCollection'
 import QuizItemGroupView from 'ui/features/quizzes_index/backbone/views/QuizItemGroupView'
 import $ from 'jquery'
+import 'jquery-migrate'
 import fakeENV from 'helpers/fakeENV'
 import assertions from 'helpers/assertions'
-import 'helpers/jquery.simulate'
+import '@canvas/jquery/jquery.simulate'
 
 const createView = function (collection) {
   if (collection == null) {
@@ -30,13 +31,13 @@ const createView = function (collection) {
       {
         id: 1,
         title: 'Foo',
-        permissions: {delete: true}
+        permissions: {delete: true},
       },
       {
         id: 2,
         title: 'Bar',
-        permissions: {delete: true}
-      }
+        permissions: {delete: true},
+      },
     ])
   }
   const view = new QuizItemGroupView({collection, listId: 'assignment-quizzes'})
@@ -50,7 +51,7 @@ QUnit.module('QuizItemGroupView', {
   },
   teardown() {
     fakeENV.teardown()
-  }
+  },
 })
 
 // eslint-disable-next-line qunit/resolve-async
@@ -74,7 +75,7 @@ test('#isEmpty is true if collection is empty', () => {
 test('#isEmpty is true if all items are hidden', () => {
   const collection = new QuizCollection([
     {id: 1, hidden: true},
-    {id: 2, hidden: true}
+    {id: 2, hidden: true},
   ])
   const view = createView(collection)
   ok(view.isEmpty())

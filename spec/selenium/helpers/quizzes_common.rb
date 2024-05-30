@@ -29,6 +29,12 @@ module QuizzesCommon
     @quiz
   end
 
+  def add_quiz_to_module
+    @course.context_modules.create! name: "Module 1"
+    mod = @course.context_modules.first
+    mod.add_item(type: "quiz", id: @quiz.id)
+  end
+
   # The default time for a quiz due date is 11:59pm
   def default_time_for_due_date(date)
     date.change({ hour: 23, min: 59 })
@@ -154,7 +160,7 @@ module QuizzesCommon
       question_data: {
         name: "first question",
         question_type: "multiple_choice_question",
-        answers: answers,
+        answers:,
         points_possible: 1
       },
       assessment_question: a
@@ -249,7 +255,7 @@ module QuizzesCommon
       question_data: {
         name: "first question",
         question_type: "multiple_choice_question",
-        answers: answers,
+        answers:,
         points_possible: 1
       },
       assessment_question: a
@@ -259,7 +265,7 @@ module QuizzesCommon
       question_data: {
         name: "second question",
         question_type: "multiple_choice_question",
-        answers: answers,
+        answers:,
         points_possible: 1
       },
       assessment_question: b
@@ -598,10 +604,10 @@ module QuizzesCommon
     els.each do |el|
       # its a question
       if el["class"].include?("question_holder")
-        id = el.find_element(:css, "a")["name"].gsub(/question_/, "")
+        id = el.find_element(:css, "a")["name"].gsub("question_", "")
         question = {
           id: id.to_i,
-          el: el,
+          el:,
           type: "question"
         }
 
@@ -615,12 +621,12 @@ module QuizzesCommon
 
         # its a group
       elsif el["class"].include?("group_top")
-        last_group_id = el["id"].gsub(/group_top_/, "").to_i
+        last_group_id = el["id"].gsub("group_top_", "").to_i
         data << {
           id: last_group_id,
           questions: [],
           type: "group",
-          el: el
+          el:
         }
 
         # group ended

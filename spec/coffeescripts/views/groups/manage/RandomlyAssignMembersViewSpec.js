@@ -17,10 +17,9 @@
  */
 
 import $ from 'jquery'
-import _ from 'underscore'
-import GroupCategoryView from 'ui/features/manage_groups/backbone/views/GroupCategoryView.js'
-import RandomlyAssignMembersView from 'ui/features/manage_groups/backbone/views/RandomlyAssignMembersView.js'
-import GroupCategory from '@canvas/groups/backbone/models/GroupCategory.coffee'
+import 'jquery-migrate'
+import GroupCategoryView from 'ui/features/manage_groups/backbone/views/GroupCategoryView'
+import GroupCategory from '@canvas/groups/backbone/models/GroupCategory'
 import 'helpers/fakeENV'
 
 let server = null
@@ -32,9 +31,9 @@ const queueResponse = (method, url, json) =>
   server.respondWith(method, url, [
     200,
     {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
     },
-    JSON.stringify(json)
+    JSON.stringify(json),
   ])
 
 const groupsResponse =
@@ -52,7 +51,7 @@ const groupsResponse =
       context_type: 'Course',
       course_id: 1,
       avatar_url: null,
-      role: null
+      role: null,
     },
     {
       description: null,
@@ -66,7 +65,7 @@ const groupsResponse =
       context_type: 'Course',
       course_id: 1,
       avatar_url: null,
-      role: null
+      role: null,
     },
     {
       description: null,
@@ -80,8 +79,8 @@ const groupsResponse =
       context_type: 'Course',
       course_id: 1,
       avatar_url: null,
-      role: null
-    }
+      role: null,
+    },
   ]
 
 const unassignedUsersResponse =
@@ -94,21 +93,21 @@ const unassignedUsersResponse =
       short_name: 'Panda Farmer',
       sis_user_id: '337733',
       sis_login_id: 'pandafarmer134123@gmail.com',
-      login_id: 'pandafarmer134123@gmail.com'
+      login_id: 'pandafarmer134123@gmail.com',
     },
     {
       id: 45,
       name: 'Elmer Fudd',
       sortable_name: 'Fudd, Elmer',
       short_name: 'Elmer Fudd',
-      login_id: 'elmerfudd'
+      login_id: 'elmerfudd',
     },
     {
       id: 2,
       name: 'Leeroy Jenkins',
       sortable_name: 'Jenkins, Leeroy',
-      short_name: 'Leeroy Jenkins'
-    }
+      short_name: 'Leeroy Jenkins',
+    },
   ]
 
 const assignUnassignedMembersResponse =
@@ -124,7 +123,7 @@ const assignUnassignedMembersResponse =
     updated_at: '2013-07-17T11:05:38-06:00',
     user_id: null,
     workflow_state: 'running',
-    url: 'http://localhost:3000/api/v1/progress/105'
+    url: 'http://localhost:3000/api/v1/progress/105',
   }
 const partialProgressResponse =
   // GET  /api/v1/progress/105
@@ -139,7 +138,7 @@ const partialProgressResponse =
     updated_at: '2013-07-17T11:05:44-06:00',
     user_id: null,
     workflow_state: 'running',
-    url: 'http://localhost:3000/api/v1/progress/105'
+    url: 'http://localhost:3000/api/v1/progress/105',
   }
 const progressResponse =
   // GET  /api/v1/progress/105
@@ -154,7 +153,7 @@ const progressResponse =
     updated_at: '2013-07-17T11:05:44-06:00',
     user_id: null,
     workflow_state: 'completed',
-    url: 'http://localhost:3000/api/v1/progress/105'
+    url: 'http://localhost:3000/api/v1/progress/105',
   }
 
 const groupCategoryResponse =
@@ -165,7 +164,7 @@ const groupCategoryResponse =
     role: null,
     self_signup: 'enabled',
     context_type: 'Course',
-    course_id: 1
+    course_id: 1,
   }
 
 QUnit.module('RandomlyAssignMembersView', {
@@ -175,7 +174,7 @@ QUnit.module('RandomlyAssignMembersView', {
     window.ENV = {
       group_user_type: 'student',
       permissions: {can_manage_groups: true},
-      IS_LARGE_ROSTER: false
+      IS_LARGE_ROSTER: false,
     }
 
     model = new GroupCategory({id: 20, name: 'Project Group'})
@@ -205,7 +204,7 @@ QUnit.module('RandomlyAssignMembersView', {
     window.ENV = this._ENV
     view.remove()
     document.getElementById('fixtures').innerHTML = ''
-  }
+  },
 })
 
 test('randomly assigns unassigned users', () => {
@@ -245,6 +244,7 @@ test('randomly assigns unassigned users', () => {
   )
   queueResponse('GET', /progress/, partialProgressResponse)
   server.respond()
+  clock.tick(1)
 
   // #
   // verify that there is progress bar
@@ -254,15 +254,10 @@ test('randomly assigns unassigned users', () => {
   equal($groups.length, 0, 'Hides groups during assigning process')
 
   // #
-  // forward the clock so that we get another request for progress, and reset
-  // the stored responses so that we can respond with complete progress (from
-  // the same url)
-  clock.tick(1001)
-
-  // #
   // progressable mixin ensures that the progress model is now polling, respond to it with a 100% completion
   queueResponse('GET', /progress/, progressResponse)
   server.respond()
+  clock.tick(1)
 
   // #
   // the 100% completion response will cascade a model.fetch request
@@ -273,13 +268,15 @@ test('randomly assigns unassigned users', () => {
     {
       ...groupCategoryResponse,
       groups_count: 1,
-      unassigned_users_count: 0
+      unassigned_users_count: 0,
     }
   )
   server.respond()
+  clock.tick(1)
 
   queueResponse('GET', '/api/v1/group_categories/20/groups?per_page=50', groupsResponse)
   server.respond()
+  clock.tick(1)
 
   queueResponse(
     'GET',
@@ -287,6 +284,7 @@ test('randomly assigns unassigned users', () => {
     []
   )
   server.respond()
+  clock.tick(1)
 
   // #
   // verify that the groups are shown again and the progress bar is hidden

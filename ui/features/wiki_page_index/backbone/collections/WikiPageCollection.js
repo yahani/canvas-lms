@@ -15,8 +15,8 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
-import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection.coffee'
-import WikiPage from '@canvas/wiki/backbone/models/WikiPage.coffee'
+import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection'
+import WikiPage from '@canvas/wiki/backbone/models/WikiPage'
 
 export default class WikiPageCollection extends PaginatedCollection {
   initialize() {
@@ -26,7 +26,7 @@ export default class WikiPageCollection extends PaginatedCollection {
       title: 'asc',
       created_at: 'desc',
       updated_at: 'desc',
-      todo_date: 'desc'
+      todo_date: 'desc',
     }
     this.setSortField('title')
 
@@ -35,7 +35,7 @@ export default class WikiPageCollection extends PaginatedCollection {
       // only change other models if one of the models is being set to true
       if (!value) return
 
-      for (const m of this.filter(m => !!m.get('front_page'))) {
+      for (const m of this.filter(m_ => !!m_.get('front_page'))) {
         if (m !== model) m.set('front_page', false)
       }
     })
@@ -47,7 +47,8 @@ export default class WikiPageCollection extends PaginatedCollection {
   }
 
   setSortField(sortField, sortOrder = null) {
-    if (this.sortOrders[sortField] === undefined) throw `${sortField} is not a valid sort field`
+    if (this.sortOrders[sortField] === undefined)
+      throw new Error(`${sortField} is not a valid sort field`)
 
     // toggle the sort order if no sort order is specified and the sort field is the current sort field
     if (!sortOrder && this.currentSortField === sortField) {
@@ -59,7 +60,7 @@ export default class WikiPageCollection extends PaginatedCollection {
 
     this.setParams({
       sort: this.currentSortField,
-      order: this.sortOrders[this.currentSortField]
+      order: this.sortOrders[this.currentSortField],
     })
 
     return this.trigger('sortChanged', this.currentSortField, this.sortOrders)

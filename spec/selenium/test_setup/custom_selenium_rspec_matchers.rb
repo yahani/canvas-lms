@@ -195,12 +195,12 @@ module CustomSeleniumRSpecMatchers
     end
 
     failure_message do |element|
-      "expected #{element.inspect}'s #{attribute} attribute to have value of #{expected || "not nil"}, "\
+      "expected #{element.inspect}'s #{attribute} attribute to have value of #{expected || "not nil"}, " \
         "actual #{attribute} attribute value: #{element.attribute(attribute.to_s)}"
     end
 
     failure_message_when_negated do |element|
-      "expected #{element.inspect}'s #{attribute} attribute to NOT have value of #{expected || "not nil"}, "\
+      "expected #{element.inspect}'s #{attribute} attribute to NOT have value of #{expected || "not nil"}, " \
         "actual #{attribute} attribute type: #{element.attribute(attribute.to_s)}"
     end
   end
@@ -229,6 +229,36 @@ module CustomSeleniumRSpecMatchers
 
     failure_message_when_negated do |element|
       "expected #{element.inspect}'s disabled attribute to NOT be true, actual disabled attribute type: #{element.attribute(:disabled)}"
+    end
+  end
+
+  # assert whether or not an element meets a custom criteria for being inactive.
+  # namely .5 transparency and be non-clickable
+  # will return as soon as the expectation is met, e.g.
+  #
+  #   expect(f("#assignment_group_category_id")).to be_inactive
+  #
+  matcher :be_inactive do
+    match do |element|
+      wait_for(method: :be_non_interactable) do
+        element.style("opacity") == "0.5" && element.style("pointer-events") == "none"
+      end
+    end
+
+    match_when_negated do |element|
+      wait_for(method: :be_non_interactable) do
+        element.style("opacity") == "1" && element.style("pointer-events") == "auto"
+      end
+    end
+
+    failure_message do |element|
+      "expected #{element.inspect}'s opacity to be 0.5, actual opacity is: #{element.style("opacity")}" if element.style("opacity") != "0.5"
+      "expected #{element.inspect}'s pointer-events to be 'none', actual pointer-events is : #{element.style("pointer-events")}" if element.style("pointer-events") != "none"
+    end
+
+    failure_message_when_negated do |element|
+      "expected #{element.inspect}'s opacity to be 1, actual opacity is: #{element.style("opacity")}" if element.style("opacity") != "1"
+      "expected #{element.inspect}'s pointer-events to be 'auto', actual pointer-events is : #{element.style("pointer-events")}" if element.style("pointer-events") != "auto"
     end
   end
 

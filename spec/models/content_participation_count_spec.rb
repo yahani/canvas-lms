@@ -193,7 +193,7 @@ describe ContentParticipationCount do
 
     it "is read after viewing the submission comment" do
       @submission = @assignment.update_submission(@student, { commenter: @teacher, comment: "good!" }).first
-      @submission.change_read_state("read", @student)
+      @submission.mark_item_read("comment")
       expect(ContentParticipationCount.unread_submission_count_for(@course, @student)).to eq 0
     end
 
@@ -209,6 +209,22 @@ describe ContentParticipationCount do
       @submission.graded_at = Time.now
       @submission.save!
       expect(ContentParticipationCount.unread_submission_count_for(@course, @student)).to eq 0
+    end
+
+    it "counts unread for automatically posted submissions that have no posted_at" do
+      student2 = User.create!
+      @submission = @assignment.update_submission(@student, { commenter: student2, comment: "good!" }).first
+      expect(@submission.reload.posted_at).to be_nil
+      expect(ContentParticipationCount.unread_submission_count_for(@course, @student)).to eq 1
+    end
+
+    context "muted assignments" do
+      it "does not ignore muted assignments" do
+        @assignment.grade_student(@student, grade: 3, grader: @teacher)
+        @assignment.muted = true
+        @assignment.save
+        expect(ContentParticipationCount.unread_submission_count_for(@course, @student)).to eq 1
+      end
     end
   end
 end

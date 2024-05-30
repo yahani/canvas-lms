@@ -17,7 +17,6 @@
  */
 
 module.exports = {
-  // eslint-disable-line import/no-commonjs
   name: 'is_IS',
   day: {
     abbrev: ['Sun', 'Mán', 'Þri', 'Mið', 'Fim', 'Fös', 'Lau'],
@@ -28,8 +27,8 @@ module.exports = {
       'Miðvikudagur',
       'Fimmtudagur',
       'Föstudagur',
-      'Laugardagur'
-    ]
+      'Laugardagur',
+    ],
   },
   month: {
     abbrev: ['Jan', 'Feb', 'Mar', 'Apr', 'Maí', 'Jún', 'Júl', 'Ágú', 'Sep', 'Okt', 'Nóv', 'Des'],
@@ -45,13 +44,13 @@ module.exports = {
       'September',
       'Október',
       'Nóvember',
-      'Desember'
-    ]
+      'Desember',
+    ],
   },
   meridiem: ['', ''],
   date: '%Y-%m-%d',
   time24: '%T',
   dateTime: '%a %d %b %Y %T %Z',
   time12: '',
-  full: '%b %-d, %Y %-l:%M%P'
+  full: '%b %-d, %Y %-l:%M%P',
 }

@@ -17,7 +17,7 @@
  */
 
 import $ from 'jquery'
-import _ from 'underscore'
+import {find, sortBy, filter as lodashFilter} from 'lodash'
 import createStore from './createStoreJestCompatible'
 import ExternalAppsStore from './ExternalAppsStore'
 import parseLinkHeader from 'link-header-parsing/parseLinkHeaderFromXHR'
@@ -25,9 +25,9 @@ import '@canvas/rails-flash-notifications'
 
 const PER_PAGE = 250
 
-const sort = function(apps) {
+const sort = function (apps) {
   if (apps) {
-    return _.sortBy(apps, app => {
+    return sortBy(apps, app => {
       if (app.name) {
         return app.name.toUpperCase()
       } else {
@@ -46,16 +46,16 @@ const defaultState = {
   links: {},
   filter: 'all',
   filterText: '',
-  hasMore: false // flag to indicate if there are more pages of external tools
+  hasMore: false, // flag to indicate if there are more pages of external tools
 }
 
 const store = createStore(defaultState)
 
-store.reset = function() {
+store.reset = function () {
   this.setState(defaultState)
 }
 
-store.fetch = function() {
+store.fetch = function () {
   const url =
     this.getState().links.next ||
     `/api/v1${ENV.CONTEXT_BASE_URL}/app_center/apps?per_page=${PER_PAGE}`
@@ -64,15 +64,15 @@ store.fetch = function() {
     url,
     type: 'GET',
     success: this._fetchSuccessHandler.bind(this),
-    error: this._fetchErrorHandler.bind(this)
+    error: this._fetchErrorHandler.bind(this),
   })
 }
 
-store.filteredApps = function(toFilter = this.getState().apps) {
+store.filteredApps = function (toFilter = this.getState().apps) {
   const filter = this.getState().filter
   const filterText = new RegExp(this.getState().filterText, 'i')
 
-  return _.filter(toFilter, app => {
+  return lodashFilter(toFilter, app => {
     if (!app.name) {
       return false
     }
@@ -91,12 +91,13 @@ store.filteredApps = function(toFilter = this.getState().apps) {
   })
 }
 
-store.findAppByShortName = function(shortName) {
-  return _.find(this.getState().apps, app => app.short_name === shortName)
+store.findAppByShortName = function (shortName) {
+  return find(this.getState().apps, app => app.short_name === shortName)
 }
 
-store.flagAppAsInstalled = function(shortName) {
-  _.find(this.getState().apps, app => {
+store.flagAppAsInstalled = function (shortName) {
+  // eslint-disable-next-line lodash/collection-return, , lodash/collection-method-value
+  find(this.getState().apps, app => {
     if (app.short_name === shortName) {
       app.is_installed = true
     }
@@ -105,7 +106,7 @@ store.flagAppAsInstalled = function(shortName) {
 
 // *** CALLBACK HANDLERS ***/
 
-store._fetchSuccessHandler = function(apps, status, xhr) {
+store._fetchSuccessHandler = function (apps, status, xhr) {
   const links = parseLinkHeader(xhr)
   let tools = apps
   if (links.current !== links.first) {
@@ -117,7 +118,7 @@ store._fetchSuccessHandler = function(apps, status, xhr) {
     isLoading: false,
     isLoaded: true,
     apps: sort(tools),
-    hasMore: !!links.next
+    hasMore: !!links.next,
   })
 
   // Update the installed app list in case this is a reload from
@@ -126,12 +127,12 @@ store._fetchSuccessHandler = function(apps, status, xhr) {
   ExternalAppsStore.fetch()
 }
 
-store._fetchErrorHandler = function() {
+store._fetchErrorHandler = function () {
   this.setState({
     isLoading: false,
     isLoaded: false,
     apps: [],
-    hasMore: true
+    hasMore: true,
   })
 }
 

@@ -50,9 +50,57 @@ class BigBlueButtonConference < WebConference
     visible: false
   }
 
+  user_setting_field :share_webcam, {
+    name: -> { t("Share webcam") },
+    description: -> { t("Share webcam") },
+    type: :boolean,
+    default: true,
+    visible: false
+  }
+
+  user_setting_field :share_microphone, {
+    name: -> { t("Share microphone") },
+    description: -> { t("Share microphone") },
+    type: :boolean,
+    default: true,
+    visible: false
+  }
+
+  user_setting_field :send_public_chat, {
+    name: -> { t("Send public chat messages") },
+    description: -> { t("Send public chat messages") },
+    type: :boolean,
+    default: true,
+    visible: false
+  }
+
+  user_setting_field :send_private_chat, {
+    name: -> { t("Send private chat messages") },
+    description: -> { t("Send private chat messages") },
+    type: :boolean,
+    default: true,
+    visible: false
+  }
+
+  user_setting_field :enable_waiting_room, {
+    name: -> { t("Enable waiting room") },
+    description: -> { t("Enable waiting room") },
+    type: :boolean,
+    default: false,
+    visible: false
+  }
+
+  user_setting_field :share_other_webcams, {
+    name: -> { t("See other viewers webcams") },
+    description: -> { t("See other viewers webcams") },
+    type: :boolean,
+    default: true,
+    visible: false
+  }
+
   class << self
     def send_request(action, options, use_fallback_config: false)
-      url_str = generate_request(action, options, use_fallback_config: use_fallback_config)
+      url_str = generate_request(action, options, use_fallback_config:)
       http_response = nil
       Canvas.timeout_protection("big_blue_button") do
         logger.debug "big blue button api call: #{url_str}"
@@ -134,21 +182,45 @@ class BigBlueButtonConference < WebConference
     settings[:record] &&= config[:recording_enabled]
     settings[:domain] ||= config[:domain] # save the domain
     current_host = URI(settings[:default_return_url] || "http://www.instructure.com").host
-    response = send_request(:create, {
-                              :meetingID => conference_key,
-                              :name => title,
-                              :voiceBridge => format("%020d", global_id),
-                              :attendeePW => settings[:user_key],
-                              :moderatorPW => settings[:admin_key],
-                              :logoutURL => (settings[:default_return_url] || "http://www.instructure.com"),
-                              :record => settings[:record] ? "true" : "false",
-                              :welcome => settings[:record] ? t("This conference may be recorded.") : "",
-                              "meta_canvas-recording-ready-user" => recording_ready_user,
-                              "meta_canvas-recording-ready-url" => recording_ready_url(current_host)
-                            }) or return nil
+    req_params = {
+      :meetingID => conference_key,
+      :name => title,
+      :voiceBridge => format("%020d", global_id),
+      :attendeePW => settings[:user_key],
+      :moderatorPW => settings[:admin_key],
+      :logoutURL => settings[:default_return_url] || "http://www.instructure.com",
+      :record => settings[:record] ? true : false,
+      "meta_canvas-recording-ready-user" => recording_ready_user,
+      "meta_canvas-recording-ready-url" => recording_ready_url(current_host)
+    }
+
+    if context.is_a?(Course)
+      req_params[:bbbCanvasCourseName] = context.name
+      req_params[:bbbCanvasCourseCode] = context.course_code
+    end
+
+    if Account.site_admin.feature_enabled? :bbb_modal_update
+      req_params.merge!({
+                          lockSettingsDisableCam: settings[:share_webcam] ? false : true,
+                          lockSettingsDisableMic: settings[:share_microphone] ? false : true,
+                          lockSettingsDisablePublicChat: settings[:send_public_chat] ? false : true,
+                          lockSettingsDisablePrivateChat: settings[:send_private_chat] ? false : true,
+                          guestPolicy: settings[:enable_waiting_room] ? "ASK_MODERATOR" : "ALWAYS_ACCEPT",
+                          webcamsOnlyForModerator: settings[:share_other_webcams] ? false : true,
+                        })
+    end
+    response = send_request(:create, req_params) or return nil
     @conference_active = true
     settings[:create_time] = response[:createTime] if response.present?
     save
+    InstStatsd::Statsd.increment("bigbluebutton.started")
+    InstStatsd::Statsd.increment("bigbluebutton.start.setting.record") if req_params[:record] == true
+    InstStatsd::Statsd.increment("bigbluebutton.start.setting.share_webcam") if req_params[:lockSettingsDisableCam] == false
+    InstStatsd::Statsd.increment("bigbluebutton.start.setting.share_microphone") if req_params[:lockSettingsDisableMic] == false
+    InstStatsd::Statsd.increment("bigbluebutton.start.setting.send_public_chat") if req_params[:lockSettingsDisablePublicChat] == false
+    InstStatsd::Statsd.increment("bigbluebutton.start.setting.send_private_chat") if req_params[:lockSettingsDisablePrivateChat] == false
+    InstStatsd::Statsd.increment("bigbluebutton.start.setting.enable_waiting_room") if req_params[:guestPolicy] == "ASK_MODERATOR"
+    InstStatsd::Statsd.increment("bigbluebutton.start.setting.share_other_webcams") if req_params[:webcamsOnlyForModerator] == false
     conference_key
   end
 
@@ -197,7 +269,8 @@ class BigBlueButtonConference < WebConference
   def recording_formats(recording)
     recording_formats = recording.fetch(:playback, []).map do |format|
       show_to_students = !!format[:length] || format[:type] == "notes" # either is an actual recording or shared notes
-      format.merge(show_to_students: show_to_students)
+      format[:translated_type] = translate_playback_format_type(format[:type])
+      format.merge(show_to_students:)
     end
     {
       recording_id: recording[:recordID],
@@ -207,6 +280,23 @@ class BigBlueButtonConference < WebConference
       playback_formats: recording_formats,
       created_at: recording[:startTime].to_i,
     }
+  end
+
+  def translate_playback_format_type(format_type)
+    case format_type
+    when "notes"
+      I18n.t("playback.notes", "Notes")
+    when "presentation"
+      I18n.t("playback.presentation", "Presentation")
+    when "statistics"
+      I18n.t("playback.statistics", "Statistics")
+    when "podcast"
+      I18n.t("playback.podcast", "Podcast")
+    when "video"
+      I18n.t("playback.video", "Video")
+    else
+      format_type
+    end
   end
 
   def delete_recording(recording_id)
@@ -242,12 +332,11 @@ class BigBlueButtonConference < WebConference
 
   def self.fetch_and_preload_recordings(conferences, use_fallback_config: false)
     # have a limit so we don't send a ridiculously long URL over
-    limit = Setting.get("big_blue_button_preloaded_recordings_limit", "50").to_i
-    conferences.each_slice(limit) do |sliced_conferences|
+    conferences.each_slice(50) do |sliced_conferences|
       meeting_ids = sliced_conferences.map(&:conference_key).join(",")
       response = send_request(:getRecordings,
                               { meetingID: meeting_ids },
-                              use_fallback_config: use_fallback_config)
+                              use_fallback_config:)
       result = response[:recordings] if response
       result = [] if result.is_a?(String)
       grouped_result = Array(result).group_by { |r| r[:meetingID] }
@@ -280,18 +369,29 @@ class BigBlueButtonConference < WebConference
   end
 
   def join_url(user, type = :user)
+    additional_params = {}
+
+    if config[:send_avatar]
+      additional_params[:avatarUrl] = user.avatar_url
+    end
+
+    unless user.pronouns.nil?
+      additional_params[:userdataPronouns] = user.pronouns
+    end
+
     generate_request :join,
                      fullName: user.short_name,
                      meetingID: conference_key,
-                     password: settings[(type == :user ? :user_key : :admin_key)],
+                     password: settings[((type == :user) ? :user_key : :admin_key)],
                      userID: user.id,
-                     createTime: settings[:create_time]
+                     createTime: settings[:create_time],
+                     **additional_params
   end
 
   def end_meeting
     response = send_request(:end, {
                               meetingID: conference_key,
-                              password: settings[(type == :user ? :user_key : :admin_key)],
+                              password: settings[((type == :user) ? :user_key : :admin_key)],
                             })
     response[:ended] if response
   end

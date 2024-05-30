@@ -67,7 +67,8 @@ class PseudonymsController < ApplicationController
       scope = @context.pseudonyms.active.where(user_id: @user)
       @pseudonyms = Api.paginate(
         scope,
-        self, api_v1_account_pseudonyms_url
+        self,
+        api_v1_account_pseudonyms_url
       )
     else
       bookmark = BookmarkedCollection::SimpleBookmarker.new(Pseudonym, :id)
@@ -78,8 +79,25 @@ class PseudonymsController < ApplicationController
     render json: @pseudonyms.map { |p| pseudonym_json(p, @current_user, session) }
   end
 
+  # @API Kickoff password recovery flow
+  # Given a user email, generate a nonce and email it to the user
+  #
+  # @response_field requested The recovery request status
+  #
+  # @example_response
+  #   {
+  #     "requested": true
+  #   }
   def forgot_password
-    email = params[:pseudonym_session][:unique_id_forgot] if params[:pseudonym_session]
+    if api_request?
+      return unless authorized_action(@current_user.pseudonym.account, @current_user, [:manage_user_logins])
+    end
+
+    email = if api_request?
+              params[:email]
+            elsif params[:pseudonym_session]
+              params[:pseudonym_session][:unique_id_forgot]
+            end
     @ccs = []
     if email.present?
       shards = Set.new
@@ -117,11 +135,23 @@ class PseudonymsController < ApplicationController
         false
       end
     end
+
+    if api_request?
+      @ccs.each do |cc|
+        return unless authorized_action(cc.pseudonym.account, @current_user, [:manage_user_logins])
+      end
+
+      if @ccs.empty?
+        render json: { requested: false }, status: :not_found
+        return
+      end
+    end
+
     respond_to do |format|
       # Whether the email was actually found or not, we display the same
       # message. Otherwise this form could be used to fish for valid
       # email addresses.
-      flash[:notice] = t "notices.email_sent", "Confirmation email sent to %{email}, make sure to check your spam box", email: email
+      flash[:notice] = t("notices.email_sent", "Confirmation email sent to %{email}, make sure to check your spam box", email:)
       @ccs.each(&:forgot_password!)
       format.html { redirect_to(canvas_login_url) }
       format.json { render json: { requested: true } }
@@ -146,7 +176,7 @@ class PseudonymsController < ApplicationController
       end
       @password_pseudonyms = @cc.user.pseudonyms.active_only.select { |p| p.account.canvas_authentication? }
       js_env PASSWORD_POLICY: @domain_root_account.password_policy,
-             PASSWORD_POLICIES: @password_pseudonyms.map { |p| [p.id, p.account.password_policy] }.to_h
+             PASSWORD_POLICIES: @password_pseudonyms.to_h { |p| [p.id, p.account.password_policy] }
     end
   end
 
@@ -233,6 +263,26 @@ class PseudonymsController < ApplicationController
   #     * student_other
   #     * teacher
   #
+  # @argument user[existing_user_id] [String]
+  #   A Canvas User ID to identify a user in a trusted account (alternative to `id`,
+  #   `existing_sis_user_id`, or `existing_integration_id`). This parameter is
+  #   not available in OSS Canvas.
+  #
+  # @argument user[existing_integration_id] [String]
+  #   An Integration ID to identify a user in a trusted account (alternative to `id`,
+  #   `existing_user_id`, or `existing_sis_user_id`). This parameter is not
+  #   available in OSS Canvas.
+  #
+  # @argument user[existing_sis_user_id] [String]
+  #   An SIS User ID to identify a user in a trusted account (alternative to `id`,
+  #   `existing_integration_id`, or `existing_user_id`). This parameter is not
+  #   available in OSS Canvas.
+  #
+  # @argument user[trusted_account] [String]
+  #   The domain of the account to search for the user. This field is required when
+  #   identifying a user in a trusted account. This parameter is not available in OSS
+  #   Canvas.
+  #
   # @example_request
   #
   #   #create a facebook login for user with ID 123
@@ -241,6 +291,16 @@ class PseudonymsController < ApplicationController
   #        -F 'login[unique_id]=112233445566' \
   #        -F 'login[authentication_provider_id]=facebook' \
   #        -H 'Authorization: Bearer <token>'
+  #
+  # @example_request
+  #
+  #   #create a login for user in another trusted account:
+  #   curl 'https://<canvas>/api/v1/accounts/<account_id>/logins' \
+  #        -F 'user[existing_user_sis_id]=SIS42' \
+  #        -F 'user[trusted_account]=canvas.example.edu' \
+  #        -F 'login[unique_id]=112233445566' \
+  #        -H 'Authorization: Bearer <token>'
+  #
   def create
     return unless get_user
 
@@ -334,6 +394,10 @@ class PseudonymsController < ApplicationController
   #     * student
   #     * student_other
   #     * teacher
+  #
+  # @argument override_sis_stickiness [boolean]
+  #   Default is true. If false, any fields containing “sticky” changes will not be updated.
+  #   See SIS CSV Format documentation for information on which fields can have SIS stickiness
   #
   # @example_request
   #   curl https://<canvas>/api/v1/accounts/:account_id/logins/:login_id \
@@ -463,16 +527,24 @@ class PseudonymsController < ApplicationController
     # note: make sure sis_user_id is updated (if happening)
     # before password, since it may affect the :change_password permissions
 
+    @override_sis_stickiness = !params[:override_sis_stickiness] || value_to_boolean(params[:override_sis_stickiness]) || params[:action] != "update"
+
     has_right_if_requests_change(:unique_id, :update) do
-      @pseudonym.unique_id = params[:pseudonym][:unique_id]
+      if can_modify_field(@override_sis_stickiness, @pseudonym.stuck_sis_fields, :unique_id)
+        @pseudonym.unique_id = params[:pseudonym][:unique_id]
+      end
     end or return false
 
     has_right_if_requests_change(:authentication_provider, :update) do
-      @pseudonym.authentication_provider = params[:pseudonym][:authentication_provider]
+      if can_modify_field(@override_sis_stickiness, @pseudonym.stuck_sis_fields, :authentication_provider)
+        @pseudonym.authentication_provider = params[:pseudonym][:authentication_provider]
+      end
     end or return false
 
     has_right_if_requests_change(:declared_user_type, :update) do
-      @pseudonym.declared_user_type = params[:pseudonym][:declared_user_type]
+      if can_modify_field(@override_sis_stickiness, @pseudonym.stuck_sis_fields, :declared_user_type)
+        @pseudonym.declared_user_type = params[:pseudonym][:declared_user_type]
+      end
     end or return false
 
     has_right_if_requests_change(:sis_user_id, :manage_sis) do
@@ -489,29 +561,33 @@ class PseudonymsController < ApplicationController
     if params[:pseudonym].key?(:password) && !@pseudonym.passwordable?
       @pseudonym.errors.add(:password, "password can only be set for Canvas authentication")
       respond_to do |format|
-        format.html { render(params[:action] == "edit" ? :edit : :new) }
+        format.html { render((params[:action] == "edit") ? :edit : :new) }
         format.json { render json: @pseudonym.errors, status: :bad_request }
       end
       return false
     end
 
     has_right_if_requests_change(:password, :change_password) do
-      @pseudonym.password = params[:pseudonym][:password]
-      @pseudonym.password_confirmation = params[:pseudonym][:password_confirmation]
+      if can_modify_field(@override_sis_stickiness, @pseudonym.stuck_sis_fields, :password)
+        @pseudonym.password = params[:pseudonym][:password]
+        @pseudonym.password_confirmation = params[:pseudonym][:password_confirmation]
+      end
     end or return false
 
     # give a 400 instead of a 401 if the workflow_state doesn't make sense
     if params[:pseudonym].key?(:workflow_state) && !%w[active suspended].include?(params[:pseudonym][:workflow_state])
       @pseudonym.errors.add(:workflow_state, "invalid workflow_state")
       respond_to do |format|
-        format.html { render(params[:action] == "edit" ? :edit : :new) }
+        format.html { render((params[:action] == "edit") ? :edit : :new) }
         format.json { render json: @pseudonym.errors, status: :bad_request }
       end
       return false
     end
 
     has_right_if_requests_change(:workflow_state, :delete) do
-      @pseudonym.workflow_state = params[:pseudonym][:workflow_state]
+      if can_modify_field(@override_sis_stickiness, @pseudonym.stuck_sis_fields, :workflow_state)
+        @pseudonym.workflow_state = params[:pseudonym][:workflow_state]
+      end
     end or return false
   end
 
@@ -527,5 +603,9 @@ class PseudonymsController < ApplicationController
       render_unauthorized_action
       false
     end
+  end
+
+  def can_modify_field(override_sis_stickiness, stick_fields_set, key)
+    override_sis_stickiness || !stick_fields_set.include?(key)
   end
 end

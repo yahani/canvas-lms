@@ -144,7 +144,7 @@ module Context
     raise ArgumentError, "only_check is either an empty array or you are aking for invalid types" if types_to_check.empty?
 
     base_cache_key = "active_record_types3"
-    cache_key = [base_cache_key, (only_check.presence || "everything"), self].cache_key
+    cache_key = [base_cache_key, only_check.presence || "everything", self].cache_key
 
     # if it exists in redis, return that
     if (cached = Rails.cache.read(cache_key))
@@ -222,9 +222,9 @@ module Context
     if context && klass == ContextExternalTool
       res = klass.find_external_tool_by_id(id, context)
     elsif context && (klass.column_names & ["context_id", "context_type"]).length == 2
-      res = klass.where(context: context, id: id).first
+      res = klass.where(context:, id:).first
     else
-      res = klass.find_by(id: id)
+      res = klass.find_by(id:)
       res = nil if context && res.respond_to?(:context_id) && res.context_id != context.id
     end
     res
@@ -253,10 +253,7 @@ module Context
     user = User.find(params[:user_id]) if params[:user_id]
     context = course || group || user
 
-    media_obj = MediaObject.where(media_id: params[:media_object_id]).first if params[:media_object_id]
-    context = media_obj.context if media_obj
-
-    return nil unless context
+    return nil unless context || params[:controller] == "media_objects"
 
     case params[:controller]
     when "files"
@@ -275,8 +272,17 @@ module Context
       end
     when "external_tools"
       if params[:action] == "retrieve"
-        tool_url = CGI.parse(uri.query)["url"].first rescue nil
-        object = ContextExternalTool.find_external_tool(tool_url, context) if tool_url
+        query_params = CGI.parse(uri.query)
+        tool_url = query_params["url"]&.first
+        resource_link_lookup_uuid = query_params["resource_link_lookup_uuid"]&.first
+        object = if tool_url
+                   ContextExternalTool.find_external_tool(tool_url, context)
+                 elsif resource_link_lookup_uuid
+                   Lti::ResourceLink.where(
+                     lookup_uuid: resource_link_lookup_uuid,
+                     context:
+                   ).active.take&.current_external_tool(context)
+                 end
       elsif params[:id]
         object = ContextExternalTool.find_external_tool_by_id(params[:id], context)
       end
@@ -287,7 +293,12 @@ module Context
                  context.context_modules.find_by(id: params[:id])
                end
     when "media_objects"
-      object = media_obj
+      object = if params[:media_object_id]
+                 MediaObject.where(media_id: params[:media_object_id]).first
+               elsif params[:attachment_id]
+                 # get possibly replaced attachment, see app/models/attachment.rb find_attachment_possibly_replaced
+                 Attachment.find_by(id: params[:attachment_id])&.context&.attachments&.find_by(id: params[:attachment_id])
+               end
     when "context"
       object = context.users.find(params[:id]) if params[:action] == "roster_user" && params[:id]
     else
@@ -298,11 +309,29 @@ module Context
     nil
   end
 
+  def self.api_type_name(klass)
+    case klass.to_s
+    when "Announcement"
+      "announcements"
+    when "Attachment"
+      "files"
+    when "ContextModule"
+      "modules"
+    when "ContentTag"
+      "module_items"
+    when "WikiPage"
+      "pages"
+    else
+      klass.table_name
+    end
+  end
+
   def self.asset_name(asset)
     name = asset.display_name.presence if asset.respond_to?(:display_name)
     name ||= asset.title.presence if asset.respond_to?(:title)
     name ||= asset.short_description.presence if asset.respond_to?(:short_description)
     name ||= asset.name if asset.respond_to?(:name)
+    name ||= asset.asset_name if asset.respond_to?(:asset_name)
     name || ""
   end
 

@@ -29,13 +29,12 @@ describe SIS::CSV::ImportRefactored do
     expect(importer.errors.first.last).to eq "Couldn't find Canvas CSV import headers"
   end
 
-  it "does not raise error for UTF-8 encoded texts" do
-    expect do
-      process_csv_data(
-        "abstract_course_id,short_name,long_name,account_id,term_id,status",
-        (+"C001,Hu\u0000m101,Humanities\xA0,A001,T001,active").force_encoding("UTF-8")
-      )
-    end.not_to raise_error
+  it "errors files with invalid UTF-8" do
+    importer = process_csv_data(
+      "xlist_course_id,section_id,status",
+      (+"ABC2119_ccutrer_2012201_xlist,26076.20122\xA0,active").force_encoding("UTF-8")
+    )
+    expect(importer.errors.first.last).to eq "Invalid UTF-8"
   end
 
   it "works with valid UTF-8 when split across bytes" do
@@ -399,7 +398,7 @@ describe SIS::CSV::ImportRefactored do
     end
 
     it "alsoes retry in a new job" do
-      Setting.set("number_of_tries_before_failing", 2)
+      stub_const("SIS::CSV::ImportRefactored::MAX_TRIES", 2)
       allow(InstStatsd::Statsd).to receive(:increment)
       expect_any_instance_of(SIS::CSV::ImportRefactored).to receive(:run_parallel_importer).exactly(6).and_call_original
       expect_any_instance_of(SIS::CSV::ImportRefactored).to receive(:try_importing_segment).exactly(6).and_call_original
@@ -429,50 +428,6 @@ describe SIS::CSV::ImportRefactored do
         "term_id,name,status",
         "T001,Winter13,active"
       )
-    end
-
-    it "will attempt re-downloading corrupted csv files from s3" do
-      flakey_attachment_cls = Class.new do
-        attr_reader :read_count
-
-        def initialize(valid_csv_string)
-          @read_count = 0
-          @csv_string = valid_csv_string
-          @bad_string = valid_csv_string.gsub("\"", "\" \n")
-        end
-
-        def display_name
-          "test-file.csv"
-        end
-
-        def open
-          csv_string = @csv_string
-          @read_count += 1
-          if @read_count == 1
-            csv_string = @bad_string
-          end
-          tf = Tempfile.new(["attachment_csv_#{@read_count}", "csv"], Dir.tmpdir)
-          tf.write(csv_string)
-          tf.rewind
-          tf
-        end
-      end
-      csv_string = <<~CSV
-        term_id,name,status
-        "T001","Winter13",active
-      CSV
-      fake_attachment = flakey_attachment_cls.new(csv_string)
-      root_account = account_model
-      user = user_model
-      batch = root_account.sis_batches.create!(user_id: user.id)
-      opts = { batch: batch }
-      sis_importer = SIS::CSV::ImportRefactored.new(root_account, opts)
-      attachment = attachment_model
-      parallel_importer = ParallelImporter.new(sis_batch: batch, index: 0, batch_size: 25, importer_type: "Term", attachment_id: attachment)
-      allow(parallel_importer).to receive(:attachment).and_return(fake_attachment)
-      importer_object = SIS::CSV::TermImporter.new(sis_importer)
-      sis_importer.try_importing_segment(nil, parallel_importer, importer_object, skip_progress: true)
-      expect(fake_attachment.read_count).to eq(2)
     end
   end
 end

@@ -23,7 +23,13 @@ class Discussion
     include SeleniumDependencies
 
     # ---------------------- Selectors ---------------------
+    def course_pacing_notice_selector
+      "[data-testid='CoursePacingNotice']"
+    end
 
+    def assign_to_button_selector
+      "button[data-testid='manage-assign-to']"
+    end
     # ---------------------- Elements ----------------------
 
     def discussion_page_body
@@ -63,10 +69,14 @@ class Discussion
     end
 
     def course_pacing_notice
-      f("[data-testid='CoursePacingNotice']")
+      f(course_pacing_notice_selector)
     end
 
+    def assign_to_button
+      f(assign_to_button_selector)
+    end
     # ---------------------- Actions ----------------------
+
     def visit(course, discussion)
       get("/courses/#{course.id}/discussion_topics/#{discussion.id}")
       wait_for_ajaximations
@@ -78,6 +88,10 @@ class Discussion
     def start_reply_with_media
       create_reply_button.click
       add_media_button.click
+    end
+
+    def click_assign_to_button
+      assign_to_button.click
     end
   end
 end

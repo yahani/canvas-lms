@@ -28,10 +28,18 @@ export default createStore({
   normalizeParams(originalParams) {
     const params = {
       ...originalParams,
-      include: ['total_students', 'active_teachers', 'subaccount', 'term', 'concluded'],
+      include: [
+        'total_students',
+        'active_teachers',
+        'subaccount',
+        'term',
+        'concluded',
+        'ui_invoked',
+      ],
       teacher_limit: 25,
       per_page: COURSES_TO_FETCH_PER_PAGE,
-      no_avatar_fallback: '1'
+      no_avatar_fallback: '1',
+      search_term: originalParams.search_term?.trim(),
     }
     const propsToCleanUp = [
       'enrollment_term_id',
@@ -40,11 +48,12 @@ export default createStore({
       'order',
       'search_by',
       'page',
-      'blueprint'
+      'blueprint',
+      'public',
     ]
     propsToCleanUp.forEach(p => {
       if (!originalParams[p]) delete params[p]
     })
     return params
-  }
+  },
 })

@@ -29,15 +29,15 @@
 //   else
 //     errors = $form.data 'errors'
 import $ from 'jquery'
-import _ from 'underscore'
+import {size} from 'lodash'
 import {useScope as useI18nScope} from '@canvas/i18n'
 
 const I18n = useI18nScope('validate')
 
-export default $.fn.validate = function() {
+export default $.fn.validate = function () {
   const errors = {}
 
-  this.find('[required]').each(function() {
+  this.find('[required]').each(function () {
     const $input = $(this)
     const name = $input.attr('name')
     const value = $input.val()
@@ -45,12 +45,12 @@ export default $.fn.validate = function() {
       ;(errors[name] || (errors[name] = [])).push({
         name,
         type: 'required',
-        message: I18n.t('is_required', 'This field is required')
+        message: I18n.t('is_required', 'This field is required'),
       })
     }
   })
 
-  const hasErrors = _.size(errors) > 0
+  const hasErrors = size(errors) > 0
   if (hasErrors) {
     this.data('errors', errors)
     return false

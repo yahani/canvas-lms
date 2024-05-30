@@ -16,10 +16,10 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import $ from 'jquery'
-import preventDefault from 'prevent-default'
+import preventDefault from '@canvas/util/preventDefault'
 import 'jqueryui/dialog'
 
-$.fn.openAsDialog = function(options) {
+$.fn.openAsDialog = function (options) {
   return this.click(
     preventDefault(e => {
       const $link = $(e.target)
@@ -29,13 +29,15 @@ $.fn.openAsDialog = function(options) {
         height: 500,
         title: $link.attr('title'),
         resizable: false,
-        ...options
+        modal: true,
+        zIndex: 1000,
+        ...options,
       }
 
       const $dialog = $('<div>')
       const $iframe = $('<iframe>', {
         style: 'position:absolute;top:0;left:0;border:none',
-        src: `${$link.attr('href')}?embedded=1&no_headers=1`
+        src: `${$link.attr('href')}?embedded=1&no_headers=1`,
       })
       $dialog.append($iframe)
 

@@ -21,9 +21,14 @@ import {renderIntoDiv as render} from './rce/root'
 import {headerFor, originFromHost} from './rcs/api'
 import getTranslations from './getTranslations'
 import defaultTinymceConfig from './defaultTinymceConfig'
-import {setLocale} from './canvasFileBrowser/natcompare'
+import {setLocale} from './common/natcompare'
+import {Mathml} from './enhance-user-content/mathml'
+
+export * from './enhance-user-content/index'
 
 export const defaultConfiguration = defaultTinymceConfig
+export {instuiPopupMountNode} from './util/fullscreenHelpers'
+export {Mathml}
 
 export function renderIntoDiv(editorEl, props, cb) {
   const language = normalizeLocale(props.language)

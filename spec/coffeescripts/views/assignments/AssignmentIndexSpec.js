@@ -16,19 +16,20 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import AssignmentGroup from '@canvas/assignments/backbone/models/AssignmentGroup.coffee'
-import Course from '@canvas/courses/backbone/models/Course.coffee'
+import AssignmentGroup from '@canvas/assignments/backbone/models/AssignmentGroup'
+import Course from '@canvas/courses/backbone/models/Course'
 import AssignmentGroupCollection from '@canvas/assignments/backbone/collections/AssignmentGroupCollection'
-import AssignmentGroupListView from 'ui/features/assignment_index/backbone/views/AssignmentGroupListView.coffee'
-import AssignmentSettingsView from 'ui/features/assignment_index/backbone/views/AssignmentSettingsView.coffee'
-import AssignmentSyncSettingsView from 'ui/features/assignment_index/backbone/views/AssignmentSyncSettingsView.coffee'
-import AssignmentGroupWeightsView from 'ui/features/assignment_index/backbone/views/AssignmentGroupWeightsView.coffee'
-import IndexView from 'ui/features/assignment_index/backbone/views/IndexView.coffee'
+import AssignmentGroupListView from 'ui/features/assignment_index/backbone/views/AssignmentGroupListView'
+import AssignmentSettingsView from 'ui/features/assignment_index/backbone/views/AssignmentSettingsView'
+import AssignmentSyncSettingsView from 'ui/features/assignment_index/backbone/views/AssignmentSyncSettingsView'
+import AssignmentGroupWeightsView from 'ui/features/assignment_index/backbone/views/AssignmentGroupWeightsView'
+import IndexView from 'ui/features/assignment_index/backbone/views/IndexView'
 import ToggleShowByView from 'ui/features/assignment_index/backbone/views/ToggleShowByView'
 import $ from 'jquery'
+import 'jquery-migrate'
 import fakeENV from 'helpers/fakeENV'
 import assertions from 'helpers/assertions'
-import 'helpers/jquery.simulate'
+import '@canvas/jquery/jquery.simulate'
 
 const fixtures = $('#fixtures')
 
@@ -43,15 +44,15 @@ function assignmentIndex(opts = {withAssignmentSettings: false}) {
     name: 'Group 1',
     assignments: [
       {id: 1, name: 'Foo Name'},
-      {id: 2, name: 'Bar Title'}
-    ]
+      {id: 2, name: 'Bar Title'},
+    ],
   })
   const group2 = new AssignmentGroup({
     name: 'Group 2',
     assignments: [
       {id: 1, name: 'Baz Title'},
-      {id: 2, name: 'Qux Name'}
-    ]
+      {id: 2, name: 'Qux Name'},
+    ],
   })
   assignmentGroups = new AssignmentGroupCollection([group1, group2], {course})
 
@@ -62,24 +63,24 @@ function assignmentIndex(opts = {withAssignmentSettings: false}) {
       model: course,
       assignmentGroups,
       weightsView: AssignmentGroupWeightsView,
-      userIsAdmin: true
+      userIsAdmin: true,
     })
   assignmentSyncSettingsView = new AssignmentSyncSettingsView({
     collection: assignmentGroups,
     model: course,
-    sisName: 'ENV.SIS_NAME'
+    sisName: 'ENV.SIS_NAME',
   })
 
   const assignmentGroupsView = new AssignmentGroupListView({
     collection: assignmentGroups,
-    course
+    course,
   })
 
   let showByView = false
   if (!ENV.PERMISSIONS.manage) {
     showByView = new ToggleShowByView({
       course,
-      assignmentGroups
+      assignmentGroups,
     })
   }
 
@@ -90,7 +91,7 @@ function assignmentIndex(opts = {withAssignmentSettings: false}) {
     assignmentSettingsView,
     assignmentSyncSettingsView,
     showByView,
-    ...opts
+    ...opts,
   })
 
   return app.render()
@@ -101,8 +102,8 @@ QUnit.module('AssignmentIndex', {
     fakeENV.setup({
       PERMISSIONS: {manage: true},
       URLS: {
-        assignment_sort_base_url: 'test'
-      }
+        assignment_sort_base_url: 'test',
+      },
     })
     this.enable_spy = sandbox.spy(IndexView.prototype, 'enableSearch')
   },
@@ -111,7 +112,7 @@ QUnit.module('AssignmentIndex', {
     fakeENV.teardown()
     assignmentGroups = null
     fixtures.empty()
-  }
+  },
 })
 
 // eslint-disable-next-line qunit/resolve-async
@@ -184,19 +185,21 @@ test('should show modules column', () => {
 })
 
 test("should show 'Add Quiz/Test' button if quiz lti is enabled", () => {
+  ENV.FEATURES.instui_nav = true
   ENV.PERMISSIONS.manage_assignments_add = true
   ENV.QUIZ_LTI_ENABLED = true
-  const view = assignmentIndex()
-  const $button = view.$('.new_quiz_lti')
+  const view = assignmentIndex({withAssignmentSettings: true})
+  const $button = view.$('#new_quiz_lti')
   equal($button.length, 1)
   ok(/\?quiz_lti$/.test($button.attr('href')))
 })
 
 test("should not show 'Add Quiz/Test' button if quiz lti is not enabled", () => {
+  ENV.FEATURES.instui_nav = true
   ENV.PERMISSIONS.manage_assignments_add = true
   ENV.QUIZ_LTI_ENABLED = false
-  const view = assignmentIndex()
-  equal(view.$('.new_quiz_lti').length, 0)
+  const view = assignmentIndex({withAssignmentSettings: true})
+  equal(view.$('#new_quiz_lti').length, 0)
 })
 
 test('should contain a drag and drop warning for screen readers', () => {
@@ -209,8 +212,8 @@ QUnit.module('student index view', {
     fakeENV.setup({
       PERMISSIONS: {manage: false},
       URLS: {
-        assignment_sort_base_url: 'test'
-      }
+        assignment_sort_base_url: 'test',
+      },
     })
   },
 
@@ -218,7 +221,7 @@ QUnit.module('student index view', {
     fakeENV.teardown()
     assignmentGroups = null
     fixtures.empty()
-  }
+  },
 })
 
 test('should not contain a drag and drop warning for screen readers', () => {
@@ -239,14 +242,17 @@ test('should clear search on toggle', () => {
 QUnit.module('AssignmentIndex - bulk edit', {
   setup() {
     fakeENV.setup({
-      PERMISSIONS: {manage_assignments: true}
+      PERMISSIONS: {manage_assignments: true},
+      URLS: {
+        new_assignment_url: 'test',
+      },
     })
   },
 
   teardown() {
     fakeENV.teardown()
     fixtures.empty()
-  }
+  },
 })
 
 test('it should show bulk edit menu', () => {

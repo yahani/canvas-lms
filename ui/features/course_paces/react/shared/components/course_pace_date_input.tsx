@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -27,7 +28,7 @@ import {ScreenReaderContent, PresentationContent} from '@instructure/ui-a11y-con
 import {IconWarningLine} from '@instructure/ui-icons'
 
 import CanvasDateInput, {
-  CanvasDateInputMessageType
+  CanvasDateInputMessageType,
 } from '@canvas/datetime/react/components/DateInput'
 import {BlackoutDate, InputInteraction} from '../types'
 import {coursePaceTimezone, weekendIntegers} from '../api/backend_serializer'
@@ -35,8 +36,6 @@ import {useScope as useI18nScope} from '@canvas/i18n'
 import * as DateHelpers from '../../utils/date_stuff/date_helpers'
 
 const I18n = useI18nScope('course_pace_date_input')
-
-const {Item: FlexItem} = Flex as any
 
 export type CoursePacesDateInputProps = {
   readonly id?: string
@@ -90,7 +89,7 @@ const CoursePaceDateInput = ({
   weekendsDisabled = false,
   blackoutDates = [],
   startDate,
-  endDate
+  endDate,
 }: CoursePacesDateInputProps) => {
   const [customErrors, setCustomErrors] = useState<string[]>([])
   const formatDateReadonly = useDateTimeFormat(
@@ -168,24 +167,24 @@ const CoursePaceDateInput = ({
     type: 'error' as const,
     text: (
       <Flex>
-        <FlexItem margin="0 x-small 0 0" align="start">
+        <Flex.Item margin="0 x-small 0 0" align="start">
           <IconWarningLine />
-        </FlexItem>
-        <FlexItem>{e}</FlexItem>
+        </Flex.Item>
+        <Flex.Item>{e}</Flex.Item>
       </Flex>
-    )
+    ),
   }))
   if (messages.length === 0 && message) {
     messages.push({
       type: message.type === 'warning' ? 'hint' : message.type,
       text: (
         <Flex>
-          <FlexItem margin="0 x-small 0 0" align="start">
+          <Flex.Item margin="0 x-small 0 0" align="start">
             <IconWarningLine color={message.type} />
-          </FlexItem>
+          </Flex.Item>
           <Text color={message.type}>{message.text}</Text>
         </Flex>
-      )
+      ),
     })
   }
 
@@ -210,7 +209,7 @@ const CoursePaceDateInput = ({
           width={width}
           messages={messages}
           interaction={interaction}
-          withRunningValue
+          withRunningValue={true}
         />
         {messages.length === 0 && helpText && (
           <div style={{whiteSpace: 'nowrap', marginTop: '.5rem'}}>

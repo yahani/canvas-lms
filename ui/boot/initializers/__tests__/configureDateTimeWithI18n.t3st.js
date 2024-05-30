@@ -25,8 +25,7 @@
 //
 // =~*~=~=*!=~=~!!~=+!+!fv....................................~=+!+!13333333333.
 
-import '../../../../public/javascripts/translations/_core'
-import '../../../../public/javascripts/translations/_core_en'
+import CoreTranslations from '../../../../public/javascripts/translations/en.json'
 
 import '../../../ext/custom_moment_locales/ca'
 import '../../../ext/custom_moment_locales/de'
@@ -40,15 +39,17 @@ import '../../../ext/custom_moment_locales/mi_nz'
 import '../../../ext/custom_moment_locales/hy_am'
 import '../../../ext/custom_moment_locales/sl'
 
-import $ from '@canvas/datetime'
+import $ from 'jquery'
+import '@canvas/datetime/jquery'
+import {parse, format, hasMeridiem} from '@canvas/datetime'
 import * as configureDateTime from '../configureDateTime'
 import * as configureDateTimeMomentParser from '../configureDateTimeMomentParser'
+// eslint-disable-next-line import/no-nodejs-modules
 import fs from 'fs'
-import I18n from '@canvas/i18n'
+import I18n, {useTranslations} from '@canvas/i18n'
+// eslint-disable-next-line import/no-nodejs-modules
 import path from 'path'
-import timezone from 'timezone'
 import YAML from 'yaml'
-import { parse, format, hasMeridiem } from 'datetime'
 
 import defaultTZLocaleData from 'timezone/locales'
 import ar_SA from '../../../ext/custom_timezone_locales/ar_SA'
@@ -92,6 +93,8 @@ const tzLocales = [
   uk_UA,
 ]
 
+useTranslations(CoreTranslations)
+
 const locales = loadAvailableLocales()
 const tzLocaleData = tzLocales.reduce((acc, locale) => {
   acc[locale.name] = locale
@@ -101,6 +104,7 @@ const tzLocaleData = tzLocales.reduce((acc, locale) => {
 const dates = createDateSamples()
 
 for (const locale of locales) {
+  // eslint-disable-next-line jest/valid-describe
   describe(locale.key, () => {
     beforeAll(() => {
       I18n.locale = locale.key
@@ -109,7 +113,7 @@ for (const locale of locales) {
       window.ENV.BIGEASY_LOCALE = locale.bigeasy
       window.ENV.MOMENT_LOCALE = locale.moment
       window.__PRELOADED_TIMEZONE_DATA__ = {
-        [locale.bigeasy]: tzLocaleData[locale.bigeasy]
+        [locale.bigeasy]: tzLocaleData[locale.bigeasy],
       }
 
       configureDateTimeMomentParser.up()
@@ -127,17 +131,13 @@ for (const locale of locales) {
         const formattedTime = format(date, 'time.formats.tiny')
         const formatted = `${formattedDate} ${formattedTime}`
 
-        expect(
-          parse(formatted).getTime()
-        ).toEqual(
-          date.getTime()
-        )
+        expect(parse(formatted).getTime()).toEqual(date.getTime())
       }
     })
 
     test(`hour format matches timezone locale`, () => {
       if (locale.key === 'ca') {
-        pending("it's broken for ca, needs investigation")
+        this.pending("it's broken for ca, needs investigation")
       }
 
       const formats = [
@@ -145,7 +145,7 @@ for (const locale of locales) {
         'date.formats.full',
         'date.formats.full_with_weekday',
         'time.formats.tiny',
-        'time.formats.tiny_on_the_hour'
+        'time.formats.tiny_on_the_hour',
       ]
 
       for (const format of formats) {
@@ -157,7 +157,7 @@ for (const locale of locales) {
 
 function createDateSamples() {
   const dates = []
-  const currentYear = (new Date()).getFullYear()
+  const currentYear = new Date().getFullYear()
   const otherYear = currentYear + 4
 
   for (let i = 0; i < 12; ++i) {
@@ -171,23 +171,20 @@ function createDateSamples() {
 }
 
 function loadAvailableLocales() {
-  const manifest = (
-    YAML.parse(
-      fs.readFileSync(
-        path.resolve(__dirname, '../../../../config/locales/locales.yml'),
-        'utf8'
-      )
-    )
+  const manifest = YAML.parse(
+    fs.readFileSync(path.resolve(__dirname, '../../../../config/locales/locales.yml'), 'utf8')
   )
 
-  return Object.keys(manifest).map(key => {
-    const locale = manifest[key]
-    const base = key.split('-')[0]
+  return Object.keys(manifest)
+    .map(key => {
+      const locale = manifest[key]
+      const base = key.split('-')[0]
 
-    return {
-      key,
-      moment: locale.moment_locale || key.toLowerCase(),
-      bigeasy: locale.bigeasy_locale || manifest[base].bigeasy_locale
-    }
-  }).filter(x => x.key)
+      return {
+        key,
+        moment: locale.moment_locale || key.toLowerCase(),
+        bigeasy: locale.bigeasy_locale || manifest[base].bigeasy_locale,
+      }
+    })
+    .filter(x => x.key)
 }

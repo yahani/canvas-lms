@@ -27,6 +27,7 @@ module Api::V1::CalendarEvent
   include Api::V1::Course
   include Api::V1::Group
   include Api::V1::Conferences
+  include ::RruleHelper
 
   def event_json(event, user, session, options = {})
     if event.is_a?(::CalendarEvent)
@@ -41,15 +42,27 @@ module Api::V1::CalendarEvent
     include = options[:include]
     include ||= excludes.include?("child_events") ? [] : ["child_events"]
 
-    context = (options[:context] || event.context)
-    duplicates = options[:duplicates] || []
+    context = options[:context] || event.context
+    duplicates = options.delete(:duplicates) || []
     participant = nil
 
     hash = api_json(
       event,
       user,
       session,
-      only: %w[id created_at updated_at start_at end_at all_day all_day_date title workflow_state comments series_uuid rrule]
+      only: %w[id
+               created_at
+               updated_at
+               start_at
+               end_at
+               all_day
+               all_day_date
+               title
+               workflow_state
+               comments
+               series_uuid
+               rrule
+               blackout_date]
     )
 
     if user
@@ -59,7 +72,7 @@ module Api::V1::CalendarEvent
 
     hash["type"] = "event"
     if event.context_type == "CourseSection"
-      hash["title"] += " (#{context.name})"
+      hash["title"] += " (#{context.name})" unless hash["title"].end_with?(" (#{context.name})")
       hash["description"] = api_user_content(event.description, event.context.course) unless excludes.include?("description")
     else
       hash["description"] = api_user_content(event.description, context) unless excludes.include?("description")
@@ -154,9 +167,11 @@ module Api::V1::CalendarEvent
 
         hash["child_events"] = events.map do |e|
           e.parent_event = event
-          calendar_event_json(e, user, session,
+          calendar_event_json(e,
+                              user,
+                              session,
                               include: appointment_group ? ["participants"] : [],
-                              appointment_group: appointment_group,
+                              appointment_group:,
                               current_participant: participant,
                               url_override: can_manage,
                               child_events_count: 0,
@@ -173,9 +188,19 @@ module Api::V1::CalendarEvent
     end
 
     hash["url"] = api_v1_calendar_event_url(event) if options.key?(:url_override) ? options[:url_override] || hash["own_reservation"] : event.grants_right?(user, session, :read)
-    hash["html_url"] = calendar_url_for(options[:effective_context] || event.effective_context, event: event)
-    hash["duplicates"] = duplicates
+    hash["html_url"] = calendar_url_for(options[:effective_context] || event.effective_context, event:)
+    if duplicates
+      hash["duplicates"] = duplicates.map { |dupe| { "calendar_event" => calendar_event_json(dupe, user, session, options) } }
+    end
     hash["important_dates"] = event.important_dates
+    hash["blackout_date"] = event.blackout_date
+    if event[:series_uuid] && event[:rrule]
+      hash["series_head"] = event.series_head?
+      if include.include?("series_natural_language")
+        series_nat_lang = rrule_to_natural_language(event[:rrule])
+        hash["series_natural_language"] = series_nat_lang
+      end
+    end
     hash
   end
 
@@ -219,7 +244,8 @@ module Api::V1::CalendarEvent
       group,
       user,
       session,
-      only: %w[id created_at description end_at max_appointments_per_participant min_appointments_per_participant participants_per_appointment start_at title updated_at workflow_state participant_visibility], methods: :sub_context_codes
+      only: %w[id created_at description end_at max_appointments_per_participant min_appointments_per_participant participants_per_appointment start_at title updated_at workflow_state participant_visibility],
+      methods: :sub_context_codes
     )
 
     if user
@@ -252,7 +278,9 @@ module Api::V1::CalendarEvent
         user_json_preloads(all_child_events.map(&:context)) if !all_child_events.empty? && all_child_events.first.context.is_a?(User) && user_json_is_admin?(@context, user)
       end
       hash["appointments"] = appointments_scope.map do |event|
-        calendar_event_json(event, user, session,
+        calendar_event_json(event,
+                            user,
+                            session,
                             context: group,
                             appointment_group: group,
                             appointment_group_id: group.id,
@@ -265,6 +293,7 @@ module Api::V1::CalendarEvent
     hash["participant_type"] = group.participant_type
     hash["url"] = api_v1_appointment_group_url(group)
     hash["html_url"] = appointment_group_url(hash["id"])
+    hash["allow_observer_signup"] = group.allow_observer_signup if Account.site_admin.feature_enabled?(:observer_appointment_groups)
     hash
   ensure
     @context = orig_context

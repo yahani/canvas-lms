@@ -45,6 +45,7 @@ describe FeatureFlags do
                                                          "hidden_feature" => Feature.new(feature: "hidden_feature", applies_to: "Course", state: "hidden"),
                                                          "hidden_root_opt_in_feature" => Feature.new(feature: "hidden_feature", applies_to: "Course", state: "hidden", root_opt_in: true),
                                                          "hidden_user_feature" => Feature.new(feature: "hidden_user_feature", applies_to: "User", state: "hidden"),
+                                                         "shadow_feature" => Feature.new(feature: "shadow_feature", applies_to: "Course", state: "on", shadow: true),
                                                          "disabled_feature" => Feature::DISABLED_FEATURE
                                                        })
     allow(analytics_service).to receive(:persist_feature_evaluation)
@@ -60,7 +61,7 @@ describe FeatureFlags do
       expect(t_sub_account.feature_enabled?(:default_on_feature)).to be_truthy
       expect(t_sub_account.feature_enabled?(:account_feature)).to be_truthy
       Account.ensure_dummy_root_account
-      expect(Account.find(0).feature_enabled?(:account_feature)).to eq false
+      expect(Account.find(0).feature_enabled?(:account_feature)).to be false
     end
 
     it "logs feature enablement" do
@@ -101,8 +102,9 @@ describe FeatureFlags do
       feature = double(
         "Feature double",
         feature: "some_feature",
-        visible_on: ->(_) { return false },
-        state: "allowed"
+        visible_on: ->(_) { false },
+        state: "allowed",
+        shadow?: false
       )
       expect(feature).to receive(:applies_to_object).and_return(true)
       allow(Feature.definitions).to receive(:[]).and_call_original
@@ -320,6 +322,13 @@ describe FeatureFlags do
       end
     end
 
+    describe "shadow" do
+      it "does not find the feature unless site admin" do
+        expect(t_root_account.lookup_feature_flag("shadow_feature", include_shadowed: false)).to be_nil
+        expect(t_root_account.lookup_feature_flag("shadow_feature", include_shadowed: true)).to be_default
+      end
+    end
+
     context "cross-sharding" do
       specs_require_sharding
 
@@ -389,14 +398,14 @@ describe FeatureFlags do
     it "caches an object's feature flag" do
       enable_cache do
         t_root_account.feature_flag("course_feature")
-        expect(Rails.cache).to be_exist(t_cache_key)
+        expect(Rails.cache).to exist(t_cache_key)
       end
     end
 
     it "caches a nil result" do
       enable_cache do
         t_root_account.feature_flag("course_feature2")
-        expect(Rails.cache).to be_exist(t_root_account.feature_flag_cache_key("course_feature2"))
+        expect(Rails.cache).to exist(t_root_account.feature_flag_cache_key("course_feature2"))
         expect(FeatureFlag).not_to receive(:where)
         t_root_account.reload.feature_flag("course_feature2")
       end
@@ -406,7 +415,7 @@ describe FeatureFlags do
       enable_cache do
         t_root_account.feature_flag("course_feature")
         t_root_account.feature_flags.where(feature: "course_feature").first.update_attribute(:state, "on")
-        expect(Rails.cache).not_to be_exist(t_cache_key)
+        expect(Rails.cache).not_to exist(t_cache_key)
       end
     end
 
@@ -414,7 +423,7 @@ describe FeatureFlags do
       enable_cache do
         t_root_account.feature_flag("course_feature")
         t_root_account.feature_flags.where(feature: "course_feature").first.destroy
-        expect(Rails.cache).not_to be_exist(t_cache_key)
+        expect(Rails.cache).not_to exist(t_cache_key)
       end
     end
 

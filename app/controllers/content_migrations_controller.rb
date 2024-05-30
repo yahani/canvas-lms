@@ -146,44 +146,63 @@ class ContentMigrationsController < ApplicationController
   def index
     Folder.root_folders(@context) # ensure course root folder exists so file imports can run
 
-    scope = @context.content_migrations.where(child_subscription_id: nil).order("id DESC")
-    @migrations = Api.paginate(scope, self, api_v1_course_content_migration_list_url(@context))
-    @migrations.each(&:check_for_pre_processing_timeout)
-    content_migration_json_hash = content_migrations_json(@migrations, @current_user, session)
-
-    if api_request?
-      render json: content_migration_json_hash
-    else
-      @plugins = ContentMigration.migration_plugins(true).sort_by { |p| [p.metadata(:sort_order) || CanvasSort::Last, p.metadata(:select_text)] }
-
-      options = @plugins.map { |p| { label: p.metadata(:select_text), id: p.id } }
-
-      external_tools = ContextExternalTool.all_tools_for(@context, placements: :migration_selection, root_account: @domain_root_account, current_user: @current_user)
-      options.concat(external_tools.map do |et|
-        {
-          id: et.asset_string,
-          label: et.label_for("migration_selection", I18n.locale)
-        }
-      end)
-
-      js_env EXTERNAL_TOOLS: external_tools_json(external_tools, @context, @current_user, session)
-      js_env UPLOAD_LIMIT: Attachment.quota_available(@context)
-      js_env SELECT_OPTIONS: options
-      js_env QUESTION_BANKS: @context.assessment_question_banks.except(:preload).select([:title, :id]).active
+    if Account.site_admin.feature_enabled?(:instui_for_import_page) && !api_request?
+      # Only js_env used for the redesign code
       js_env COURSE_ID: @context.id
-      js_env CONTENT_MIGRATIONS: content_migration_json_hash
-      js_env(OLD_START_DATE: datetime_string(@context.start_at, :verbose))
-      js_env(OLD_END_DATE: datetime_string(@context.conclude_at, :verbose))
+      js_env UPLOAD_LIMIT: Attachment.quota_available(@context)
+      js_env QUESTION_BANKS: @context.assessment_question_banks.except(:preload).select([:title, :id]).active
+      js_env(SHOW_BP_SETTINGS_IMPORT_OPTION: MasterCourses::MasterTemplate.blueprint_eligible?(@context) &&
+        @context.account.grants_any_right?(@current_user, session, :manage_courses, :manage_courses_admin) &&
+        @context.account.grants_right?(@current_user, :manage_master_courses))
 
-      js_env(SHOW_SELECT: should_show_course_copy_dropdown)
-      js_env(CONTENT_MIGRATIONS_EXPIRE_DAYS: ContentMigration.expire_days)
+      # These values are used based on the same logic as ui/features/content_migrations/setup.js do.
       js_env(QUIZZES_NEXT_ENABLED: new_quizzes_enabled?)
       js_env(NEW_QUIZZES_IMPORT: new_quizzes_import_enabled?)
       js_env(NEW_QUIZZES_MIGRATION: new_quizzes_migration_enabled?)
-      js_env(NEW_QUIZZES_IMPORT_THIRD: new_quizzes_import_third_party?)
       js_env(NEW_QUIZZES_MIGRATION_DEFAULT: new_quizzes_migration_default)
-      js_env(SHOW_SELECTABLE_OUTCOMES_IN_IMPORT: @domain_root_account.feature_enabled?("selectable_outcomes_in_course_copy"))
-      set_tutorial_js_env
+    else
+      scope = @context.content_migrations.where(child_subscription_id: nil).order("id DESC")
+      @migrations = Api.paginate(scope, self, api_v1_course_content_migration_list_url(@context))
+      @migrations.each(&:check_for_pre_processing_timeout)
+      content_migration_json_hash = content_migrations_json(@migrations, @current_user, session)
+
+      if api_request?
+        render json: content_migration_json_hash
+      else # Block below should be removed when instui_for_import_page FF stops begin a thing
+        @plugins = ContentMigration.migration_plugins(true).sort_by { |p| [p.metadata(:sort_order) || CanvasSort::Last, p.metadata(:select_text)] }
+
+        options = @plugins.map { |p| { label: p.metadata(:select_text), id: p.id } }
+
+        external_tools = Lti::ContextToolFinder.all_tools_for(@context, placements: :migration_selection, root_account: @domain_root_account, current_user: @current_user)
+        options.concat(external_tools.map do |et|
+          {
+            id: et.asset_string,
+            label: et.label_for("migration_selection", I18n.locale)
+          }
+        end)
+
+        js_env EXTERNAL_TOOLS: external_tools_json(external_tools, @context, @current_user, session)
+        js_env UPLOAD_LIMIT: Attachment.quota_available(@context)
+        js_env SELECT_OPTIONS: options
+        js_env QUESTION_BANKS: @context.assessment_question_banks.except(:preload).select([:title, :id]).active
+        js_env COURSE_ID: @context.id
+        js_env CONTENT_MIGRATIONS: content_migration_json_hash
+        js_env(OLD_START_DATE: datetime_string(@context.start_at, :verbose))
+        js_env(OLD_END_DATE: datetime_string(@context.conclude_at, :verbose))
+
+        js_env(SHOW_SELECT: should_show_course_copy_dropdown)
+        js_env(CONTENT_MIGRATIONS_EXPIRE_DAYS: ContentMigration.expire_days)
+        js_env(QUIZZES_NEXT_ENABLED: new_quizzes_enabled?)
+        js_env(NEW_QUIZZES_IMPORT: new_quizzes_import_enabled?)
+        js_env(NEW_QUIZZES_MIGRATION: new_quizzes_migration_enabled?)
+        js_env(NEW_QUIZZES_MIGRATION_DEFAULT: new_quizzes_migration_default)
+        js_env(SHOW_SELECTABLE_OUTCOMES_IN_IMPORT: @domain_root_account.feature_enabled?("selectable_outcomes_in_course_copy"))
+        js_env(BLUEPRINT_ELIGIBLE_IMPORT: MasterCourses::MasterTemplate.blueprint_eligible?(@context))
+        js_env(SHOW_BP_SETTINGS_IMPORT_OPTION: MasterCourses::MasterTemplate.blueprint_eligible?(@context) &&
+          @context.account.grants_any_right?(@current_user, session, :manage_courses, :manage_courses_admin) &&
+          @context.account.grants_right?(@current_user, :manage_master_courses))
+        set_tutorial_js_env
+      end
     end
   end
 
@@ -295,8 +314,13 @@ class ContentMigrationsController < ApplicationController
   #   The id of an assignment group in the target course. If provided, all
   #   imported assignments will be moved to the given assignment group.
   #
-  # @argument settings[importer_skips] [Optional,Array,"all_course_settings"]
+  # @argument settings[importer_skips] [Optional,Array,"all_course_settings"|"visibility_settings"]
   #   Set of importers to skip, even if otherwise selected by migration settings.
+  #
+  # @argument settings[import_blueprint_settings] [Boolean]
+  #   Import the "use as blueprint course" setting as well as the list of locked items
+  #   from the source course or package. The destination course must not be associated
+  #   with an existing blueprint course and cannot have any student or observer enrollments.
   #
   # @argument date_shift_options[shift_dates] [Boolean]
   #   Whether to shift dates in the copied course
@@ -436,7 +460,7 @@ class ContentMigrationsController < ApplicationController
       }
     end
 
-    render json: json
+    render json:
   end
 
   # @API List items for selective import
@@ -495,14 +519,15 @@ class ContentMigrationsController < ApplicationController
   #
   # You can include multiple copy parameters to selectively import multiple items or groups of items.
   #
-  # @argument type ["context_modules"|"assignments"|"quizzes"|"assessment_question_banks"|"d"iscussion_topics"|"wiki_pages"|"context_external_tools"|"tool_profiles"|"announcements"|"calendar_events"|"rubrics"|"groups"|"learning_outcomes"|"attachments"]
+  # @argument type ["context_modules"|"assignments"|"quizzes"|"assessment_question_banks"|"discussion_topics"|"wiki_pages"|"context_external_tools"|"tool_profiles"|"announcements"|"calendar_events"|"rubrics"|"groups"|"learning_outcomes"|"attachments"]
   #   The type of content to enumerate.
   #
   # @returns list of content items
   def content_list
     @content_migration = @context.content_migrations.find(params[:id])
     base_url = api_v1_course_content_migration_selective_data_url(@context, @content_migration)
-    formatter = Canvas::Migration::Helpers::SelectiveContentFormatter.new(@content_migration, base_url,
+    formatter = Canvas::Migration::Helpers::SelectiveContentFormatter.new(@content_migration,
+                                                                          base_url,
                                                                           global_identifiers: @content_migration.use_global_identifiers?)
 
     unless formatter.valid_type?(params[:type])
@@ -510,6 +535,36 @@ class ContentMigrationsController < ApplicationController
     end
 
     render json: formatter.get_content_list(params[:type])
+  end
+
+  # @API Get asset id mapping
+  #
+  # Given a complete course copy or blueprint import content migration, return a mapping of asset ids
+  # from the source course to the destination course that were copied in this migration or an earlier one
+  # with the same course pair and migration_type (course copy or blueprint).
+  #
+  # The returned object's keys are asset types as they appear in API URLs (+announcements+, +assignments+,
+  # +discussion_topics+, +files+, +module_items+, +modules+, +pages+, and +quizzes+). The values are a mapping
+  # from id in source course to id in destination course for objects of this type.
+  #
+  # @example_request
+  #
+  #     curl https://<canvas>/api/v1/courses/<course_id>/content_migrations/<id>/asset_id_mapping \
+  #         -H 'Authorization: Bearer <token>'
+  #
+  # @example_response
+  #
+  #    {
+  #      "assignments": {"13": "740", "14": "741"},
+  #      "discussion_topics": {"15": "743", "16": "744"}
+  #    }
+  #
+  def asset_id_mapping
+    content_migration = @context.content_migrations.find(params[:id])
+    return render json: { message: "Migration is incomplete" }, status: :bad_request unless content_migration.imported?
+    return render json: { message: "Migration is not course copy or blueprint" }, status: :bad_request unless content_migration.source_course_id.present?
+
+    render json: content_migration.asset_id_mapping
   end
 
   protected
@@ -524,7 +579,8 @@ class ContentMigrationsController < ApplicationController
         available_migrators: RoleOverride::GRANULAR_MANAGE_COURSE_CONTENT_PERMISSIONS,
         content_list: RoleOverride::GRANULAR_MANAGE_COURSE_CONTENT_PERMISSIONS,
         create: [:manage_course_content_add],
-        update: [:manage_course_content_edit]
+        update: [:manage_course_content_edit],
+        asset_id_mapping: RoleOverride::GRANULAR_MANAGE_COURSE_CONTENT_PERMISSIONS
       }
     )
   end

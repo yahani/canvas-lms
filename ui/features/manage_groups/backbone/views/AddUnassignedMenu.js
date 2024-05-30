@@ -17,7 +17,7 @@
 
 import PopoverMenuView from './PopoverMenuView'
 import AddUnassignedUsersView from './AddUnassignedUsersView'
-import InputFilterView from 'backbone-input-filter-view'
+import InputFilterView from '@canvas/backbone-input-filter-view'
 import template from '../../jst/addUnassignedMenu.handlebars'
 import $ from 'jquery'
 import '../../jquery/outerclick'
@@ -33,7 +33,7 @@ export default class AddUnassignedMenu extends PopoverMenuView {
 
     this.prototype.events = {
       ...PopoverMenuView.prototype.events,
-      'click .assign-user-to-group': 'setGroup'
+      'click .assign-user-to-group': 'setGroup',
     }
   }
 
@@ -44,7 +44,7 @@ export default class AddUnassignedMenu extends PopoverMenuView {
     if (options.inputFilterView == null)
       options.inputFilterView = new InputFilterView({
         collection: this.collection,
-        setParamOnInvalid: true
+        setParamOnInvalid: true,
       })
     this.my = 'right-8 top-47'
     this.at = 'left center'
@@ -60,7 +60,7 @@ export default class AddUnassignedMenu extends PopoverMenuView {
     return this.hide()
   }
 
-  showBy($target, focus = false) {
+  showBy(_$target, _focus = false) {
     this.collection.reset()
     this.collection.deleteParam('search_term')
     return super.showBy(...arguments)
@@ -73,7 +73,7 @@ export default class AddUnassignedMenu extends PopoverMenuView {
   toJSON() {
     return {
       users: this.collection.toJSON(),
-      ENV
+      ENV,
     }
   }
 

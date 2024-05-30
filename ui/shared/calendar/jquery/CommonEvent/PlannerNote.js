@@ -17,10 +17,10 @@
  */
 
 import {useScope as useI18nScope} from '@canvas/i18n'
-import fcUtil from '../fcUtil.coffee'
+import fcUtil from '../fcUtil'
 import CommonEvent from './CommonEvent'
 import {extend} from '@canvas/util/legacyCoffeesScriptHelpers'
-import '@canvas/datetime'
+import '@canvas/datetime/jquery'
 import '@canvas/jquery/jquery.instructure_misc_helpers'
 
 const I18n = useI18nScope('calendar')
@@ -98,7 +98,7 @@ Object.assign(PlannerNote.prototype, {
         details: this.description,
         todo_date: fcUtil.unwrap(this.start).toISOString(),
         id: this.object.id,
-        type: 'planner_note'
+        type: 'planner_note',
       },
       success,
       error
@@ -115,5 +115,5 @@ Object.assign(PlannerNote.prototype, {
       url = `${plannerNotesAPI}/${this.object.id}`
     }
     return [method, url]
-  }
+  },
 })

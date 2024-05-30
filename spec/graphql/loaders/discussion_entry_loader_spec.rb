@@ -24,8 +24,8 @@ describe Loaders::DiscussionEntryLoader do
     student_in_course(active_all: true)
     @student.update(name: "Student")
     @de1 = @discussion.discussion_entries.create!(message: "peekaboo", user: @teacher, created_at: Time.zone.now)
-    @de2 = @discussion.discussion_entries.create!(message: "can't touch this.", user: @student, created_at: Time.zone.now - 1.day)
-    @de3 = @discussion.discussion_entries.create!(message: "goodbye", user: @teacher, created_at: Time.zone.now - 2.days)
+    @de2 = @discussion.discussion_entries.create!(message: "can't touch this.", user: @student, created_at: 1.day.ago)
+    @de3 = @discussion.discussion_entries.create!(message: "goodbye", user: @teacher, created_at: 2.days.ago)
     @de4 = @discussion.discussion_entries.create!(message: "sub entry", user: @teacher, parent_id: @de2.id)
     @de3.destroy
   end
@@ -123,7 +123,24 @@ describe Loaders::DiscussionEntryLoader do
       Loaders::DiscussionEntryLoader.for(
         current_user: @teacher
       ).load(@de2).then do |discussion_entries|
-        expect(discussion_entries.map(&:id)).to match_array [@de4.id, de5.id]
+        expect(discussion_entries.map(&:id)).to match_array [@de4.id]
+      end
+    end
+  end
+
+  it "includes all entries where user_search_id matches" do
+    de5 = @de4.discussion_subentries.create!(discussion_topic: @discussion, message: "grandchild but legacy false")
+    de6 = @de4.discussion_subentries.create!(discussion_topic: @discussion, message: "grandchild but legacy true")
+    # legacy gets set based on the feature flag state so explicitly updating the entries.
+    DiscussionEntry.where(id: de5).update_all(legacy: false, parent_id: @de4.id)
+    DiscussionEntry.where(id: de6).update_all(legacy: false, parent_id: @de4.id, user_id: @teacher.id)
+
+    GraphQL::Batch.batch do
+      Loaders::DiscussionEntryLoader.for(
+        current_user: @teacher,
+        user_search_id: @teacher.id
+      ).load(@de2).then do |discussion_entries|
+        expect(discussion_entries.map(&:id)).to match_array [@de4.id, de6.id]
       end
     end
   end
@@ -239,6 +256,25 @@ describe Loaders::DiscussionEntryLoader do
           # @de3 is deleted and will be excluded.
           # @de4 has no entry_participant and is considered unread and will be included.
           expect(discussion_entries).to match_array([@de2, @de4])
+        end
+      end
+    end
+
+    context "search term" do
+      it "by unread workflow state" do
+        # explicit and implicit read states
+        @de1.change_read_state("read", @teacher)
+        @de2.change_read_state("unread", @teacher)
+        @de4.discussion_entry_participants.where(user_id: @teacher).delete_all
+
+        GraphQL::Batch.batch do
+          Loaders::DiscussionEntryLoader.for(
+            current_user: @teacher,
+            filter: "unread",
+            search_term: "touch"
+          ).load(@discussion).then do |discussion_entries|
+            expect(discussion_entries).to match_array([@de2])
+          end
         end
       end
     end

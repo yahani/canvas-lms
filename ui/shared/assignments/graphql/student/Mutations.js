@@ -27,7 +27,7 @@ export const DefaultMocks = {
   CreateSubmissionDraftPayload: () => ({errors: null}),
   CreateSubmissionPayload: () => ({errors: null}),
   DeleteSubmissionDraftPayload: () => ({errors: null}),
-  MarkSubmissionCommentsReadPayload: () => ({errors: null})
+  MarkSubmissionCommentsReadPayload: () => ({errors: null}),
 }
 
 export const CREATE_SUBMISSION = gql`
@@ -40,6 +40,7 @@ export const CREATE_SUBMISSION = gql`
     $mediaId: ID
     $resourceLinkLookupUuid: String
     $url: String
+    $studentId: ID
   ) {
     createSubmission(
       input: {
@@ -50,6 +51,7 @@ export const CREATE_SUBMISSION = gql`
         mediaId: $mediaId
         resourceLinkLookupUuid: $resourceLinkLookupUuid
         url: $url
+        studentId: $studentId
       }
     ) {
       submission {
@@ -72,6 +74,7 @@ export const CREATE_SUBMISSION_COMMENT = gql`
     $fileIds: [ID!]
     $mediaObjectId: ID
     $mediaObjectType: String
+    $reviewerSubmissionId: ID
   ) {
     createSubmissionComment(
       input: {
@@ -81,6 +84,7 @@ export const CREATE_SUBMISSION_COMMENT = gql`
         fileIds: $fileIds
         mediaObjectId: $mediaObjectId
         mediaObjectType: $mediaObjectType
+        reviewerSubmissionId: $reviewerSubmissionId
       }
     ) {
       submissionComment {

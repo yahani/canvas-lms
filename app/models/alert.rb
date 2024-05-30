@@ -69,7 +69,7 @@ class Alert < ActiveRecord::Base
     self.repetition = nil if repetition.blank?
   end
 
-  def as_json(**)
+  def as_json(*)
     converted_recipients = recipients.to_a.map do |recipient|
       case recipient
       when String
@@ -81,10 +81,10 @@ class Alert < ActiveRecord::Base
       end
     end
     {
-      id: id,
+      id:,
       criteria: criteria.map { |c| c.as_json(include_root: false) },
       recipients: converted_recipients,
-      repetition: repetition
+      repetition:
     }.with_indifferent_access
   end
 

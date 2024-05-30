@@ -18,13 +18,17 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
+require "feedjira"
+
 describe CalendarsController do
   def course_event(date = nil)
     date = Date.parse(date) if date
     @event = @course.calendar_events.create(title: "some assignment", start_at: date, end_at: date)
   end
 
-  before(:once) { course_with_student(active_all: true) }
+  before(:once) do
+    course_with_student(active_all: true)
+  end
 
   before { user_session(@student) }
 
@@ -44,24 +48,24 @@ describe CalendarsController do
       expect(assigns[:contexts][1]).to eql(@course)
     end
 
-    it "only enrolled students can make reservations" do
+    it "sets user_is_student based off enrollments" do
       course_event
       get "show", params: { user_id: @user.id }
       expect(response).to be_successful
-      expect(assigns[:contexts_json][0][:can_make_reservation]).to eql(false)
-      expect(assigns[:contexts_json][1][:can_make_reservation]).to eql(true)
+      expect(assigns[:contexts_json][0][:user_is_student]).to be(false)
+      expect(assigns[:contexts_json][1][:user_is_student]).to be(true)
     end
 
     it "js_env DUE_DATE_REQUIRED_FOR_ACCOUNT is true when AssignmentUtil.due_date_required_for_account? == true" do
       allow(AssignmentUtil).to receive(:due_date_required_for_account?).and_return(true)
       get "show", params: { user_id: @user.id }
-      expect(assigns[:js_env][:DUE_DATE_REQUIRED_FOR_ACCOUNT]).to eq(true)
+      expect(assigns[:js_env][:DUE_DATE_REQUIRED_FOR_ACCOUNT]).to be(true)
     end
 
     it "js_env DUE_DATE_REQUIRED_FOR_ACCOUNT is false when AssignmentUtil.due_date_required_for_account? == false" do
       allow(AssignmentUtil).to receive(:due_date_required_for_account?).and_return(false)
       get "show", params: { user_id: @user.id }
-      expect(assigns[:js_env][:DUE_DATE_REQUIRED_FOR_ACCOUNT]).to eq(false)
+      expect(assigns[:js_env][:DUE_DATE_REQUIRED_FOR_ACCOUNT]).to be(false)
     end
 
     it "js_env SIS_NAME is SIS when @context does not respond_to assignments" do
@@ -80,13 +84,13 @@ describe CalendarsController do
     it "js_env MAX_NAME_LENGTH_REQUIRED_FOR_ACCOUNT is true when AssignmentUtil.name_length_required_for_account? == true" do
       allow(AssignmentUtil).to receive(:name_length_required_for_account?).and_return(true)
       get "show", params: { user_id: @user.id }
-      expect(assigns[:js_env][:MAX_NAME_LENGTH_REQUIRED_FOR_ACCOUNT]).to eq(true)
+      expect(assigns[:js_env][:MAX_NAME_LENGTH_REQUIRED_FOR_ACCOUNT]).to be(true)
     end
 
     it "js_env MAX_NAME_LENGTH_REQUIRED_FOR_ACCOUNT is false when AssignmentUtil.name_length_required_for_account? == false" do
       allow(AssignmentUtil).to receive(:name_length_required_for_account?).and_return(false)
       get "show", params: { user_id: @user.id }
-      expect(assigns[:js_env][:MAX_NAME_LENGTH_REQUIRED_FOR_ACCOUNT]).to eq(false)
+      expect(assigns[:js_env][:MAX_NAME_LENGTH_REQUIRED_FOR_ACCOUNT]).to be(false)
     end
 
     it "js_env MAX_NAME_LENGTH is a 15 when AssignmentUtil.assignment_max_name_length returns 15" do
@@ -95,22 +99,79 @@ describe CalendarsController do
       expect(assigns[:js_env][:MAX_NAME_LENGTH]).to eq(15)
     end
 
-    specs_require_sharding
+    it "sets account's auto_subscribe" do
+      account = @user.account
+      account.account_calendar_visible = true
+      account.account_calendar_subscription_type = "auto"
+      account.save!
+      @admin = account_admin_user(account:, active_all: true)
+      @admin.set_preference(:enabled_account_calendars, account.id)
+      get "show"
+      expect(assigns[:contexts_json].find { |c| c[:type] == "account" }[:auto_subscribe]).to be(true)
+    end
 
-    it "sets permissions using contexts from the correct shard" do
-      # non-shard-aware code could use a shard2 id on shard1. this could grab the wrong course,
-      # or no course at all. this sort of aliasing used to break a permission check in show
-      invalid_shard1_course_id = (Course.maximum(:id) || 0) + 1
-      @shard2.activate do
-        account = Account.create!
-        @course = account.courses.build
-        @course.id = invalid_shard1_course_id
-        @course.save!
-        @course.offer!
-        student_in_course(active_all: true, user: @user)
-      end
-      get "show", params: { user_id: @user.id }
-      expect(response).to be_successful
+    it "sets viewed_auto_subscribed_account_calendars for viewed auto-subscribed account calendars" do
+      account = @student.account
+      account.account_calendar_visible = true
+      account.account_calendar_subscription_type = "auto"
+      account.save!
+      @admin = account_admin_user(account:, active_all: true)
+      @admin.set_preference(:enabled_account_calendars, account.id)
+      get "show"
+      expect(@student.get_preference(:viewed_auto_subscribed_account_calendars)).to eql([account.global_id])
+    end
+
+    it "does not set viewed_auto_subscribed_account_calendars for viewed manual-subscribed account calendars" do
+      account = @user.account
+      account.account_calendar_visible = true
+      account.account_calendar_subscription_type = "manual"
+      account.save!
+      @admin = account_admin_user(account:, active_all: true)
+      @admin.set_preference(:enabled_account_calendars, account.id)
+      get "show"
+      expect(@student.get_preference(:viewed_auto_subscribed_account_calendars)).to eql([])
+    end
+
+    it "includes unviewed, auto subscribed calendars to be selected" do
+      account = @user.account
+      account.account_calendar_visible = true
+      account.account_calendar_subscription_type = "auto"
+      account.save!
+      @admin = account_admin_user(account:, active_all: true)
+      @admin.set_preference(:enabled_account_calendars, account.id)
+      @student.set_preference(:selected_calendar_contexts, [])
+      get "show"
+      expect(assigns[:selected_contexts]).to eql([account.asset_string])
+    end
+
+    it "has account calendars cope with a non-array user preference" do
+      # this was caught in Sentry when the :selected_calendar_contexts preference
+      # was a string instead of an array.
+      account = @user.account
+      account.account_calendar_visible = true
+      account.account_calendar_subscription_type = "auto"
+      account.save!
+      @admin = account_admin_user(account:, active_all: true)
+      @admin.set_preference(:enabled_account_calendars, account.id)
+      # this pref should be an array, but sometimes is not
+      @student.set_preference(:selected_calendar_contexts, account.asset_string)
+      get "show"
+      expect(assigns[:selected_contexts]).to eql([account.asset_string])
+    end
+
+    it "sets selected_contexts to nil if the user_preference is nil" do
+      # this was caught in Sentry when the :selected_calendar_contexts preference
+      # was a string instead of an array.
+      account = @user.account
+      account.account_calendar_visible = true
+      account.account_calendar_subscription_type = "auto"
+      account.save!
+      @admin = account_admin_user(account:, active_all: true)
+      @admin.set_preference(:enabled_account_calendars, account.id)
+      # this pref should be an array, but sometimes is not
+      @student.set_preference(:selected_calendar_contexts, nil)
+      get "show"
+      expect(assigns[:selected_contexts]).to be_nil
     end
 
     it "sets context.course_sections.can_create_ag based off :manage_calendar permission" do
@@ -128,6 +189,78 @@ describe CalendarsController do
           expect(section[:can_create_ag]).to be_truthy
         else
           expect(section[:can_create_ag]).to be_falsey
+        end
+      end
+    end
+
+    it "does not set context.course_sections on account contexts" do
+      account = @course.account
+      account.account_calendar_visible = true
+      account.save!
+      @admin = account_admin_user(account:, active_all: true)
+      @course.enroll_teacher(@admin, enrollment_state: :active)
+      @admin.set_preference(:enabled_account_calendars, account.id)
+      user_session(@admin)
+
+      get "show"
+      contexts = assigns(:contexts_json)
+      expect(contexts.find { |c| c[:type] == "account" }[:course_sections]).to be_nil
+      expect(contexts.find { |c| c[:type] == "course" }[:course_sections].length).to be 1
+    end
+
+    it "emits calendar.visit metric to statsd with appropriate enrollment tags" do
+      allow(InstStatsd::Statsd).to receive(:increment)
+      course_with_teacher(user: @user, active_all: true)
+
+      get "show", params: { user_id: @user.id }
+      expect(InstStatsd::Statsd).to have_received(:increment).once.with("calendar.visit", tags: %w[enrollment_type:StudentEnrollment enrollment_type:TeacherEnrollment])
+    end
+
+    context "with sharding" do
+      specs_require_sharding
+
+      it "sets permissions using contexts from the correct shard" do
+        # non-shard-aware code could use a shard2 id on shard1. this could grab the wrong course,
+        # or no course at all. this sort of aliasing used to break a permission check in show
+        invalid_shard1_course_id = (Course.maximum(:id) || 0) + 1
+        @shard2.activate do
+          account = Account.create!
+          @course = account.courses.build
+          @course.id = invalid_shard1_course_id
+          @course.save!
+          @course.offer!
+          student_in_course(active_all: true, user: @user)
+        end
+        get "show", params: { user_id: @user.id }
+        expect(response).to be_successful
+      end
+
+      it "sets context.course_sections.can_create_ag for users in sections on multiple shards" do
+        # ensure we're shard aware by picking a section id that is guaranteed to not exist on shard1
+        invalid_shard1_section_id = (CourseSection.maximum(:id) || 0) + 1
+        @user.enrollments.destroy_all
+        @shard2.activate do
+          account2 = Account.create!
+          course_with_student(account: account2, user: @user)
+          @section = @course.course_sections.build
+          @section.id = invalid_shard1_section_id
+          @section.name = "Teacher Section"
+          @section.save!
+          @course.enroll_teacher(@user, enrollment_state: :active, section: @section)
+          @user.enrollments.shard(Shard.current).update_all(limit_privileges_to_course_section: true)
+        end
+
+        get "show", params: { user_id: @user.id }
+        expect(response).to be_successful
+
+        contexts = assigns(:contexts_json)
+        sections = contexts[1][:course_sections]
+        sections.each do |section|
+          if section[:name] == "Teacher Section"
+            expect(section[:can_create_ag]).to be_truthy
+          else
+            expect(section[:can_create_ag]).to be_falsey
+          end
         end
       end
     end
@@ -184,18 +317,17 @@ describe CalendarEventsApiController do
 
       it "includes absolute path for rel='self' link" do
         get "public_feed", params: { feed_code: @user.feed_code }, format: "atom"
-        feed = Atom::Feed.load_feed(response.body) rescue nil
+        feed = Feedjira.parse(response.body)
         expect(feed).not_to be_nil
-        expect(feed.links.first.rel).to match(/self/)
-        expect(feed.links.first.href).to match(%r{http://})
+        expect(feed.feed_url).to match(%r{http://})
       end
 
       it "includes an author for each entry" do
         get "public_feed", params: { feed_code: @user.feed_code }, format: "atom"
-        feed = Atom::Feed.load_feed(response.body) rescue nil
+        feed = Feedjira.parse(response.body)
         expect(feed).not_to be_nil
         expect(feed.entries).not_to be_empty
-        expect(feed.entries.all? { |e| e.authors.present? }).to be_truthy
+        expect(feed.entries.all? { |e| e.author.present? }).to be_truthy
       end
 
       it "includes description in event for unlocked assignment" do

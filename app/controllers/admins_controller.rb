@@ -64,8 +64,7 @@ class AdminsController < ApplicationController
   #   created with the given role. Defaults to 'AccountAdmin'.
   #
   # @argument role_id [Integer]
-  #   The user's admin relationship with the account will be created with the
-  #   given role. Defaults to the built-in role for 'AccountAdmin'.
+  #   The user's admin relationship with the account will be created with the given role. Defaults to the built-in role for 'AccountAdmin'.
   #
   # @argument send_confirmation [Boolean]
   #   Send a notification email to
@@ -105,12 +104,10 @@ class AdminsController < ApplicationController
   # Remove the rights associated with an account admin role from a user.
   #
   # @argument role [String]
-  #   [DEPRECATED] Account role to remove from the user. Defaults to
-  #   'AccountAdmin'. Any other account role must be specified explicitly.
+  #   [DEPRECATED] Account role to remove from the user.
   #
-  # @argument role_id [Integer]
-  #   The user's admin relationship with the account will be created with the
-  #   given role. Defaults to the built-in role for 'AccountAdmin'.
+  # @argument role_id [Required, Integer]
+  #   The id of the role representing the user's admin relationship with the account.
   #
   # @returns Admin
   def destroy
@@ -134,11 +131,27 @@ class AdminsController < ApplicationController
   def index
     if authorized_action(@context, @current_user, :manage_account_memberships)
       user_ids = api_find_all(User, Array(params[:user_id])).pluck(:id) if params[:user_id]
-      scope = @context.account_users.active
+      scope = @context.account_users.active.preload(:user, :role)
       scope = scope.where(user_id: user_ids) if user_ids
       route = polymorphic_url([:api_v1, @context, :admins])
-      admins = Api.paginate(scope.order(:id), self, route)
+      admins = Api.paginate(scope.order(:id), self, route).reject { |admin| admin.user.nil? }
       render json: admins.collect { |admin| admin_json(admin, @current_user, session) }
+    end
+  end
+
+  # @API List my admin roles
+  #
+  # A paginated list of the current user's roles in the account. The results are the same
+  # as those returned by the {api:AdminsController#index List account admins} endpoint with
+  # +user_id+ set to +self+, except the "Admins - Add / Remove" permission is not required.
+  #
+  # @returns [Admin]
+  def self_roles
+    if authorized_action(@context, @current_user, :read)
+      scope = @context.account_users.active.where(user_id: @current_user)
+      route = polymorphic_url([:api_v1, @context, :self_roles])
+      admins = Api.paginate(scope.order(:id), self, route)
+      render json: admins.map { |admin| admin_json(admin, @current_user, session) }
     end
   end
 

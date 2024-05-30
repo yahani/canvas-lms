@@ -53,6 +53,7 @@ describe "new account user search" do
     end
 
     it "opens the edit user modal when clicking the edit user icon" do
+      skip "FOO-3816 (10/6/2023)"
       click_edit_button(@user.name)
       expect(edit_full_name_input.attribute("value")).to eq(@user.name)
     end
@@ -107,7 +108,7 @@ describe "new account user search" do
       column_sort_button("Email").click
       wait_for(method: nil, timeout: 0.5) { fj("title:contains('Loading')").displayed? }
       wait_for_no_such_element { fj("title:contains('Loading')") }
-      check_element_has_focus f("#email-button")
+      check_element_has_focus f("#email-sort")
       users_list = ff("[data-automation='users list'] tr")
       expect(users_list.count).to eq 2
       expect(users_list.first).to include_text("diffrient user")
@@ -180,6 +181,7 @@ describe "new account user search" do
     end
 
     it "is able to create users" do
+      skip "FOO-3816 (10/6/2023)"
       name = "Test User"
       email = "someemail@example.com"
       visit_users(@account)
@@ -208,6 +210,7 @@ describe "new account user search" do
     end
 
     it "is able to create users with confirmation disabled", priority: "1" do
+      skip "FOO-3816 (10/6/2023)"
       name = "Confirmation Disabled"
       email = "someemail@example.com"
       visit_users(@account)

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -17,19 +18,25 @@
  */
 
 import React from 'react'
+import {waitFor} from '@testing-library/react'
+import fetchMock from 'fetch-mock'
 import {renderConnected} from '../../../__tests__/utils'
-import {Header} from '../header'
+import {
+  PRIMARY_PACE,
+  HEADING_STATS_API_RESPONSE,
+  DEFAULT_STORE_STATE,
+} from '../../../__tests__/fixtures'
+import ConnectedHeader, {Header} from '../header'
+import {CoursePace} from 'features/course_paces/react/types'
+import {enableFetchMocks} from 'jest-fetch-mock'
+
+enableFetchMocks()
 
 const defaultProps = {
   context_type: 'Course',
   context_id: '17',
-  newPace: false
+  newPace: false,
 }
-
-beforeAll(() => {
-  window.ENV.FEATURES ||= {}
-  window.ENV.FEATURES.course_paces_for_sections = true
-})
 
 describe('Course paces header', () => {
   it('renders', () => {
@@ -41,7 +48,7 @@ describe('Course paces header', () => {
 
   describe('new paces alert', () => {
     it('renders an alert for new course paces', () => {
-      const {getByText} = renderConnected(<Header {...defaultProps} newPace />)
+      const {getByText} = renderConnected(<Header {...defaultProps} newPace={true} />)
       expect(
         getByText(
           'This is a new course pace and all changes are unpublished. Publish to save any changes and create the pace.'
@@ -51,7 +58,7 @@ describe('Course paces header', () => {
 
     it('renders an alert for new section paces', () => {
       const {getByText} = renderConnected(
-        <Header {...defaultProps} context_type="Section" newPace />
+        <Header {...defaultProps} context_type="Section" newPace={true} />
       )
       expect(
         getByText(
@@ -62,7 +69,7 @@ describe('Course paces header', () => {
 
     it('renders an alert for new student paces', () => {
       const {getByText} = renderConnected(
-        <Header {...defaultProps} context_type="Enrollment" newPace />
+        <Header {...defaultProps} context_type="Enrollment" newPace={true} />
       )
       expect(
         getByText(
@@ -70,11 +77,98 @@ describe('Course paces header', () => {
         )
       ).toBeInTheDocument()
     })
+
+    it('does not render publishing changes for student paces', () => {
+      const {queryByText} = renderConnected(<Header {...defaultProps} context_type="Enrollment" />)
+      expect(queryByText('All changes published')).not.toBeInTheDocument()
+    })
   })
 
   it('renders the unpublished changes message for a new pace', () => {
-    const {getByText} = renderConnected(<Header {...defaultProps} newPace />)
+    const {getByText} = renderConnected(<Header {...defaultProps} newPace={true} />)
     expect(getByText('Pace is new and unpublished')).toBeInTheDocument()
   })
   // the other messsages are tested with UnpublishedChangesIndicator
+
+  describe('with course paces for students', () => {
+    beforeAll(() => {
+      window.ENV.FEATURES ||= {}
+      window.ENV.FEATURES.course_paces_for_students = true
+    })
+
+    it('does render publishing changes for student paces', () => {
+      const {queryByText} = renderConnected(<Header {...defaultProps} context_type="Enrollment" />)
+      expect(queryByText('All changes published')).toBeInTheDocument()
+    })
+  })
+
+  describe('with course paces redesign ON', () => {
+    beforeAll(() => {
+      window.ENV.FEATURES ||= {}
+      window.ENV.FEATURES.course_paces_redesign = true
+    })
+
+    afterEach(() => {
+      fetchMock.restore()
+    })
+
+    it('renders metrics as table', async () => {
+      window.ENV.COURSE_ID = 30
+      const {getByRole, getByTestId} = renderConnected(
+        <ConnectedHeader {...defaultProps} coursePace={PRIMARY_PACE} />
+      )
+      await waitFor(() => {
+        expect(getByRole('columnheader', {name: 'Students'})).toBeInTheDocument()
+        expect(getByRole('columnheader', {name: 'Sections'})).toBeInTheDocument()
+        expect(getByTestId('duration-col-header')).toBeInTheDocument()
+      })
+    })
+
+    it('renders the data pulled from the context api', async () => {
+      window.ENV.COURSE_ID = 30
+      fetchMock.mock(
+        '/api/v1/courses/30/pace_contexts?type=course',
+        JSON.stringify(HEADING_STATS_API_RESPONSE)
+      )
+      const {getByRole, getByTestId} = renderConnected(
+        <ConnectedHeader {...defaultProps} coursePace={PRIMARY_PACE} />
+      )
+
+      await waitFor(() => {
+        expect(getByRole('heading', {name: 'Defense Against the Dark Arts'})).toBeInTheDocument()
+        expect(getByTestId('number-of-students').textContent).toEqual('30')
+        expect(getByTestId('number-of-sections').textContent).toEqual('3')
+        expect(getByTestId('default-pace-duration').textContent).toEqual('9 weeks, 2 days')
+      })
+    })
+
+    it('renders the proper button for preexisting pace', () => {
+      const {getByRole} = renderConnected(<ConnectedHeader {...defaultProps} />)
+      const getStartedButton = getByRole('button', {name: 'Edit Default Course Pace'})
+      expect(getStartedButton).toBeInTheDocument()
+    })
+
+    it('renders the proper button for empty state', () => {
+      const coursePace = {
+        ...DEFAULT_STORE_STATE.coursePace,
+        id: undefined,
+        context_type: 'Course',
+      } as CoursePace
+      const state = {...DEFAULT_STORE_STATE, coursePace}
+      const {getByRole} = renderConnected(<ConnectedHeader {...defaultProps} />, state)
+      const getStartedButton = getByRole('button', {name: 'Create Course Pace'})
+      expect(getStartedButton).toBeInTheDocument()
+    })
+
+    it('renders an info tooltip for durations stat', () => {
+      const {getAllByRole} = renderConnected(
+        <ConnectedHeader {...defaultProps} coursePace={PRIMARY_PACE} />
+      )
+      expect(
+        getAllByRole('tooltip', {
+          name: 'This duration does not take into account weekends and blackout days.',
+        })[0]
+      ).toBeInTheDocument()
+    })
+  })
 })

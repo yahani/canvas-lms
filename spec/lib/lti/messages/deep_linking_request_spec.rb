@@ -26,12 +26,12 @@ describe Lti::Messages::DeepLinkingRequest do
 
   let(:jwt_message) do
     Lti::Messages::DeepLinkingRequest.new(
-      tool: tool,
+      tool:,
       context: course,
-      user: user,
-      expander: expander,
-      return_url: return_url,
-      opts: opts
+      user:,
+      expander:,
+      return_url:,
+      opts:
     )
   end
 
@@ -44,13 +44,6 @@ describe Lti::Messages::DeepLinkingRequest do
 
     it 'sets the "deep_link_return_url"' do
       expect(subject["deep_link_return_url"]).to eq deep_linking_return_url
-    end
-
-    it 'sets the assignment "deep_link_return_url"' do
-      assignment_return_url = "http://www.platform.com/assignment/1/return_url"
-      allow(controller).to receive(:course_assignment_deep_linking_response_url).and_return(assignment_return_url)
-      allow(controller).to receive(:params).and_return({ "secure_params" => assignment.secure_params })
-      expect(subject["deep_link_return_url"]).to eq assignment_return_url
     end
 
     context "when assignment with nil lti_context_id exists" do
@@ -97,6 +90,19 @@ describe Lti::Messages::DeepLinkingRequest do
         let(:accept_media_types) { "application/vnd.ims.lti.v1.ltilink" }
         let(:auto_create) { true }
         let(:accept_multiple) { false }
+      end
+
+      context "when editing an existing collaboration (expander.collaboration != nil)" do
+        let(:collaboration) do
+          ExternalToolCollaboration.create! context: course, title: "foo", url: "http://notneededhere.example.com"
+        end
+
+        it "includes the content_item_id in the deep linking return URL's data JWT" do
+          expect(Lti::DeepLinkingData).to receive(:jwt_from) do |claims|
+            expect(claims[:content_item_id]).to eq(collaboration.id)
+          end
+          subject
+        end
       end
     end
 

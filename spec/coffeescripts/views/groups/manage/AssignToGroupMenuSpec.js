@@ -1,3 +1,4 @@
+/* eslint-disable qunit/resolve-async */
 /*
  * Copyright (C) 2013 - present Instructure, Inc.
  *
@@ -17,11 +18,12 @@
  */
 
 import $ from 'jquery'
-import AssignToGroupMenu from 'ui/features/manage_groups/backbone/views/AssignToGroupMenu.js'
-import GroupCollection from '@canvas/groups/backbone/collections/GroupCollection.coffee'
-import Group from '@canvas/groups/backbone/models/Group.coffee'
-import GroupUser from '@canvas/groups/backbone/models/GroupUser.coffee'
-import GroupCategory from '@canvas/groups/backbone/models/GroupCategory.coffee'
+import 'jquery-migrate'
+import AssignToGroupMenu from 'ui/features/manage_groups/backbone/views/AssignToGroupMenu'
+import GroupCollection from '@canvas/groups/backbone/collections/GroupCollection'
+import Group from '@canvas/groups/backbone/models/Group'
+import GroupUser from '@canvas/groups/backbone/models/GroupUser'
+import GroupCategory from '@canvas/groups/backbone/models/GroupCategory'
 import assertions from 'helpers/assertions'
 
 let view = null
@@ -34,20 +36,20 @@ QUnit.module('AssignToGroupMenu', {
       id: 1,
       name: 'bob',
       group: null,
-      category: groupCategory
+      category: groupCategory,
     })
     const groups = new GroupCollection(
       [
         new Group({
           id: 1,
-          name: 'a group'
-        })
+          name: 'a group',
+        }),
       ],
       {category: groupCategory}
     )
     view = new AssignToGroupMenu({
       collection: groups,
-      model: user
+      model: user,
     })
     view.render()
     view.$el.appendTo($('#fixtures'))
@@ -55,7 +57,7 @@ QUnit.module('AssignToGroupMenu', {
   teardown() {
     view.remove()
     document.getElementById('fixtures').innerHTML = ''
-  }
+  },
 })
 
 test('it should be accessible', assert => {

@@ -16,23 +16,23 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import _ from 'underscore'
-import createStore from '@canvas/util/createStore'
+import {each} from 'lodash'
+import createStore from '@canvas/backbone/createStore'
 import $ from 'jquery'
 
 const CourseEpubExportStore = createStore({}),
   _courses = {}
 
-CourseEpubExportStore.getAll = function() {
+CourseEpubExportStore.getAll = function () {
   $.getJSON('/api/v1/epub_exports', data => {
-    _.each(data.courses, course => {
+    each(data.courses, course => {
       _courses[course.id] = course
     })
     CourseEpubExportStore.setState(_courses)
   })
 }
 
-CourseEpubExportStore.get = function(course_id, id) {
+CourseEpubExportStore.get = function (course_id, id) {
   const url = '/api/v1/courses/' + course_id + '/epub_exports/' + id
   $.getJSON(url, data => {
     _courses[data.id] = data
@@ -40,7 +40,7 @@ CourseEpubExportStore.get = function(course_id, id) {
   })
 }
 
-CourseEpubExportStore.create = function(id) {
+CourseEpubExportStore.create = function (id) {
   const url = '/api/v1/courses/' + id + '/epub_exports'
   $.post(
     url,

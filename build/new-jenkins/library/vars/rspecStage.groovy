@@ -21,10 +21,9 @@ import org.jenkinsci.plugins.workflow.steps.FlowInterruptedException
 
 @Field static final SUCCESS_NOT_BUILT = [buildResult: 'SUCCESS', stageResult: 'NOT_BUILT']
 @Field static final SUCCESS_UNSTABLE = [buildResult: 'SUCCESS', stageResult: 'UNSTABLE']
-@Field static final RSPEC_NODE_REQUIREMENTS = [label: 'canvas-docker']
 
 def createDistribution(nestedStages) {
-  def rspecqNodeTotal = configuration.getInteger('rspecq-ci-node-total')
+  def rspecqNodeTotal = commitMessageFlag('rspecq-ci-node-total') as Integer
   def setupNodeHook = this.&setupNode
 
   def baseEnvVars = [
@@ -35,17 +34,17 @@ def createDistribution(nestedStages) {
   def rspecqEnvVars = baseEnvVars + [
     'COMPOSE_FILE=docker-compose.new-jenkins.yml:docker-compose.new-jenkins-selenium.yml',
     'EXCLUDE_TESTS=.*/(selenium/performance|instfs/selenium|contracts)',
-    "FORCE_FAILURE=${configuration.isForceFailureSelenium() ? '1' : ''}",
-    "RERUNS_RETRY=${configuration.getInteger('rspecq-max-requeues')}",
-    "RSPEC_PROCESSES=${configuration.getInteger('rspecq-processes')}",
-    "RSPECQ_MAX_REQUEUES=${configuration.getInteger('rspecq-max-requeues')}",
+    "FORCE_FAILURE=${commitMessageFlag('force-failure-rspec').asBooleanInteger()}",
+    "RERUNS_RETRY=${commitMessageFlag('rspecq-max-requeues') as Integer}",
+    "RSPEC_PROCESSES=${commitMessageFlag('rspecq-processes') as Integer}",
+    "RSPECQ_MAX_REQUEUES=${commitMessageFlag('rspecq-max-requeues') as Integer}",
     "RSPECQ_UPDATE_TIMINGS=${env.GERRIT_EVENT_TYPE == 'change-merged' ? '1' : '0'}",
   ]
 
   if(env.CRYSTALBALL_MAP == '1') {
     rspecqEnvVars = rspecqEnvVars + ['RSPECQ_FILE_SPLIT_THRESHOLD=9999', 'CRYSTALBALL_MAP=1']
   } else {
-    rspecqEnvVars = rspecqEnvVars + ["RSPECQ_FILE_SPLIT_THRESHOLD=${configuration.fileSplitThreshold()}"]
+    rspecqEnvVars = rspecqEnvVars + ["RSPECQ_FILE_SPLIT_THRESHOLD=${commitMessageFlag('rspecq-file-split-threshold') as Integer}"]
   }
 
   if(env.ENABLE_AXE_SELENIUM == '1') {
@@ -57,7 +56,7 @@ def createDistribution(nestedStages) {
   extendedStage('RSpecQ Reporter for Rspec')
     .envVars(rspecqEnvVars)
     .hooks(buildSummaryReportHooks.call() + [onNodeAcquired: setupNodeHook])
-    .nodeRequirements(RSPEC_NODE_REQUIREMENTS)
+    .nodeRequirements([label: nodeLabel()])
     .timeout(15)
     .queue(nestedStages, this.&runReporter)
 
@@ -65,7 +64,7 @@ def createDistribution(nestedStages) {
     extendedStage("RSpecQ Test Set ${(index + 1).toString().padLeft(2, '0')}")
       .envVars(rspecqEnvVars + ["CI_NODE_INDEX=$index"])
       .hooks(buildSummaryReportHooks.call() + [onNodeAcquired: setupNodeHook, onNodeReleasing: { tearDownNode() }])
-      .nodeRequirements(RSPEC_NODE_REQUIREMENTS)
+      .nodeRequirements([label: nodeLabel()])
       .timeout(15)
       .queue(nestedStages, this.&runRspecqSuite)
   }
@@ -105,7 +104,7 @@ def tearDownNode() {
 
   def destDir = "tmp/${env.CI_NODE_INDEX}"
   def srcDir = "${env.COMPOSE_PROJECT_NAME}_canvas_1:/usr/src/app"
-  def uploadDockerLogs = configuration.getBoolean('upload-docker-logs', 'false')
+  def uploadDockerLogs = commitMessageFlag('upload-docker-logs') as Boolean
 
   sh """#!/bin/bash
     set -ex
@@ -138,16 +137,18 @@ def tearDownNode() {
   archiveArtifacts allowEmptyArchive: true, artifacts: "$destDir/**/*"
 
   findFiles(glob: "$destDir/spec_failures/**/index.html").each { file ->
-    // tmp/node_18/spec_failures/Initial/spec/selenium/force_failure_spec.rb:20/index
+    // tmp/node_18/spec_failures/Initial/spec/selenium/force_failure_spec.rb:20/TestFailure::ErrorClass/index
     // split on the 5th to give us the rerun category (Initial, Rerun_1, Rerun_2...)
+    def splitPath = file.getPath().split('/')
+    def pathCategory = splitPath[3]
+    def specTitle = splitPath.toList().subList(4, splitPath.size() - 2).join('/')
+    def errorClass = splitPath[splitPath.size() - 2]
 
-    def pathCategory = file.getPath().split('/')[3]
     def finalCategory = reruns_retry.toInteger() == 0 ? 'Initial' : "Rerun_${reruns_retry.toInteger()}"
-    def splitPath = file.getPath().split('/').toList()
-    def specTitle = splitPath.subList(4, splitPath.size() - 1).join('/')
     def artifactsPath = "${currentBuild.getAbsoluteUrl()}artifact/${file.getPath()}"
 
     buildSummaryReport.addFailurePath(specTitle, artifactsPath, pathCategory)
+    buildSummaryReport.setFailureDetails(specTitle, errorClass)
 
     if (pathCategory == finalCategory) {
       buildSummaryReport.setFailureCategory(specTitle, buildSummaryReport.FAILURE_TYPE_TEST_NEVER_PASSED)
@@ -155,8 +156,6 @@ def tearDownNode() {
       buildSummaryReport.setFailureCategoryUnlessExists(specTitle, buildSummaryReport.FAILURE_TYPE_TEST_PASSED_ON_RETRY)
     }
   }
-
-  junit allowEmptyResults: true, testResults: "${destDir}_rspec_results/**/*.xml", skipMarkingBuildUnstable: true
 }
 
 def runRspecqSuite() {

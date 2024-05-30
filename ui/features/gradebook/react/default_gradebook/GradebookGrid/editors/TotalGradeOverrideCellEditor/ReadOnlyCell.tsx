@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2018 - present Instructure, Inc.
  *
@@ -19,22 +20,25 @@
 import React from 'react'
 import {Text} from '@instructure/ui-text'
 
-import {gradeInfo, gradeEntry} from '../GradeInput/PropTypes'
+import {
+  gradeInfo as gradeInfoPropType,
+  gradeEntry as gradeEntryPropType,
+} from '../GradeInput/PropTypes'
 import CellEditorComponent from '../CellEditorComponent'
 
 export default class ReadOnlyCell extends CellEditorComponent {
   static propTypes = {
-    gradeEntry: gradeEntry.isRequired,
-    gradeInfo: gradeInfo.isRequired,
-    pendingGradeInfo: gradeInfo
+    gradeEntry: gradeEntryPropType.isRequired,
+    gradeInfo: gradeInfoPropType.isRequired,
+    pendingGradeInfo: gradeInfoPropType,
   }
 
   static defaultProps = {
-    pendingGradeInfo: null
+    pendingGradeInfo: null,
   }
 
   render() {
-    const {gradeEntry, gradeInfo, pendingGradeInfo} = this.props // eslint-disable-line no-shadow
+    const {gradeEntry, gradeInfo, pendingGradeInfo} = this.props
     const displayValue = gradeEntry.formatGradeInfoForDisplay(pendingGradeInfo || gradeInfo)
 
     return (

@@ -19,7 +19,7 @@
 import $ from 'jquery'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import timeBlockRowTemplate from '../jst/TimeBlockRow.handlebars'
-import fcUtil from '@canvas/calendar/jquery/fcUtil.coffee'
+import fcUtil from '@canvas/calendar/jquery/fcUtil'
 import datePickerFormat from '@canvas/datetime/datePickerFormat'
 import '../fcMomentHandlebarsHelpers' // make sure fcMomentToString and fcMomentToDateString are available to TimeBlockRow.handlebars
 
@@ -39,7 +39,7 @@ export default class TimeBlockRow {
       },
       focusout: () => {
         timeoutId = setTimeout(() => this.$row.removeClass('focused'), 50)
-      }
+      },
     })
 
     this.$date = this.$row.find("input[name='date']")
@@ -47,13 +47,13 @@ export default class TimeBlockRow {
     this.$end_time = this.$row.find("input[name='end_time']")
 
     const $date_field = this.$date.date_field({
-      datepicker: {dateFormat: datePickerFormat(I18n.t('#date.formats.default'))}
+      datepicker: {dateFormat: datePickerFormat(I18n.t('#date.formats.default'))},
     })
     $date_field.change(this.validate)
     this.$start_time.time_field().change(this.validate)
     this.$end_time.time_field().change(this.validate)
 
-    if (this.locked) this.$row.find('button').attr('disabled', true)
+    if (this.locked) this.$row.find('button').prop('disabled', true)
 
     this.$row.find('.delete-block-link').click(this.remove)
   }

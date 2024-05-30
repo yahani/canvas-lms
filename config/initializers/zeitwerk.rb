@@ -26,9 +26,7 @@ Rails.autoloaders.main.ignore(
   # we don't want zeitwerk to try to eager_load some "Version" constant from any plugins
   "#{__dir__}/../../gems/plugins/simply_versioned/lib/simply_versioned/gem_version.rb",
   "#{__dir__}/../../gems/plugins/account_reports/lib/account_reports/version.rb",
-  "#{__dir__}/../../gems/plugins/moodle_importer/lib/moodle_importer/version.rb",
-  "#{__dir__}/../../lib/cdc_migration_testing", # these aren't really modules we use in canvas runtime
-  "#{__dir__}/../../gems/plugins/*/lib/cdc_migration_testing"
+  "#{__dir__}/../../gems/plugins/moodle_importer/lib/moodle_importer/version.rb"
 )
 
 Rails.autoloaders.each do |autoloader|
@@ -64,4 +62,9 @@ Rails.autoloaders.each do |autoloader|
     "vericite" => "VeriCite",
     "xml_helper" => "XMLHelper"
   )
+end
+
+Rails.application.config.after_initialize do
+  Rails.autoloaders.main.eager_load_namespace(Quizzes::QuizQuestion)
+  Rails.autoloaders.main.eager_load_namespace(AuthenticationProvider::SAML)
 end

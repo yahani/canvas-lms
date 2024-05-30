@@ -64,7 +64,7 @@ describe "calendar2" do
 
           orig_titles = ff(title_selector).map(&:text)
 
-          move_to_click("#minical td.fc-other-month.fc-day-number")
+          move_to_click("#minical td.fc-other-month.fc-day")
 
           expect(orig_titles).not_to eq ff(title_selector).map(&:text)
         end
@@ -136,7 +136,7 @@ describe "calendar2" do
 
         it "removes calendar item if calendar is unselected", priority: "1" do
           title = "blarg"
-          make_event context: @course, start: Time.now, title: title
+          make_event(context: @course, start: Time.now, title:)
           load_month_view
 
           # expect event to be on the calendar
@@ -175,37 +175,6 @@ describe "calendar2" do
           expect(undated_events.first.text).to eq "asdfjkasldfjklasdjfklasdjfklasjf..."
         end
       end
-    end
-  end
-
-  context "course paces" do
-    before do
-      course_with_teacher_logged_in
-      @course.account.enable_feature!(:course_paces)
-      @course.enable_course_paces = true
-      @course.restrict_enrollments_to_course_dates = true
-      @course.save!
-      @course_pace = course_pace_model(course: @course)
-      @student = user_factory(active_all: true, account: @course.account)
-      @course.enroll_student(@student).accept!
-    end
-
-    it "disables courses with course pace enabled for non-student users" do
-      get "/calendar2"
-
-      f(".context_list_context .context-list-toggle-box").click
-      context_course_item = f(".context_list_context:nth-child(2)")
-      expect(context_course_item).to have_class("disabled-context")
-      expect(context_course_item).to have_class("not-checked") # prevent the calendar to fetch course events if disabled
-    end
-
-    it "enables courses with course pace enabled for students" do
-      user_session(@student)
-      get "/calendar2"
-
-      f(".context_list_context .context-list-toggle-box").click
-      context_course_item = f(".context_list_context:nth-child(2)")
-      expect(context_course_item).not_to have_class("disabled-context")
     end
   end
 end

@@ -19,12 +19,11 @@
 // note: most of these tests are now redundant w/ i18nliner-js, leaving them
 // for a little bit though
 
-import $ from 'jquery'
-import I18n from '@canvas/i18n'
+import I18n, {useScope} from '@canvas/i18n'
 import I18nStubber from 'helpers/I18nStubber'
-import '@canvas/jquery/jquery.instructure_misc_helpers' // for $.raw
+import {raw} from '@instructure/html-escape'
 
-const scope = I18n.scoped('foo')
+const scope = useScope('foo')
 const t = (...args) => scope.t(...Array.from(args || []))
 const interpolate = (...args) => I18n.interpolate(...Array.from(args || []))
 
@@ -35,41 +34,13 @@ QUnit.module('I18n', {
 
   teardown() {
     return I18nStubber.clear()
-  }
+  },
 })
 
 test('missing placeholders', () => {
   equal(t('k', 'ohai %{name}'), 'ohai [missing %{name} value]')
   equal(t('k', 'ohai %{name}', {name: null}), 'ohai [missing %{name} value]')
   equal(t('k', 'ohai %{name}', {name: undefined}), 'ohai [missing %{name} value]')
-})
-
-test('default locale fallback on lookup', () => {
-  I18nStubber.stub('en', {foo: {fallback_message: 'this is in the en locale'}}, () => {
-    I18n.locale = 'bad-locale'
-    equal(scope.lookup('foo.fallback_message'), 'this is in the en locale')
-  })
-})
-
-test('fallbacks should only include valid ancestors', () => {
-  I18nStubber.stub(
-    {en: {}, fr: {}, 'fr-CA': {}, 'fr-FR': {}, 'fr-FR-oh-la-la': {}, 'zh-Hant': {}},
-    null,
-    () => {
-      deepEqual(I18n.getLocaleAndFallbacks('fr-FR-oh-la-la'), [
-        'fr-FR-oh-la-la',
-        'fr-FR',
-        'fr',
-        'en'
-      ])
-    }
-  )
-})
-
-test('fallbacks should not include the default twice', () => {
-  I18nStubber.stub({en: {}, 'en-GB': {}, 'en-GB-x-custom': {}}, null, () => {
-    deepEqual(I18n.getLocaleAndFallbacks('en-GB-x-custom'), ['en-GB-x-custom', 'en-GB', 'en'])
-  })
 })
 
 test('html safety: should not html-escape translations or interpolations by default', () => {
@@ -83,8 +54,8 @@ test('html safety: should html-escape translations and interpolations if any int
   equal(
     t('bar', "only one of these won't get escaped: <input>, %{a}, %{b} & %{c}", {
       a: '<img>',
-      b: $.raw('<br>'),
-      c: '<hr>'
+      b: raw('<br>'),
+      c: '<hr>',
     }),
     'only one of these won&#39;t get escaped: &lt;input&gt;, &lt;img&gt;, <br> &amp; &lt;hr&gt;'
   )
@@ -96,7 +67,7 @@ test('wrappers: should auto-html-escape', () => {
 
 test('wrappers: should not escape already-escaped text', () => {
   equal(
-    t('bar', '*%{input}* > 1', {input: $.raw('<input>'), wrapper: '<b>$1</b>'}),
+    t('bar', '*%{input}* > 1', {input: raw('<input>'), wrapper: '<b>$1</b>'}),
     '<b><input></b> &gt; 1'
   )
 })
@@ -146,52 +117,48 @@ QUnit.module('I18n localize number', {
     this.separator = ','
     I18nStubber.pushFrame()
     I18nStubber.stub('foo', {
-      number: {
-        format: {
-          delimiter: this.delimiter,
-          separator: this.separator,
-          precision: 3,
-          strip_insignificant_zeros: false
-        }
-      }
+      'number.format.delimiter': this.delimiter,
+      'number.format.precision': 3,
+      'number.format.separator': this.separator,
+      'number.format.strip_insignificant_zeros': false,
     })
     return I18nStubber.setLocale('foo')
   },
 
   teardown() {
     return I18nStubber.clear()
-  }
+  },
 })
 
-test('uses delimiter from local', function() {
+test('uses delimiter from local', function () {
   equal(I18n.localizeNumber(1000), `1${this.delimiter}000`)
 })
 
-test('uses separator from local', function() {
+test('uses separator from local', function () {
   equal(I18n.localizeNumber(1.2), `1${this.separator}2`)
 })
 
-test('uses precision from number if not specified', function() {
+test('uses precision from number if not specified', function () {
   equal(I18n.localizeNumber(1.2345), `1${this.separator}2345`)
 })
 
-test('uses precision specified', function() {
+test('uses precision specified', function () {
   equal(I18n.localizeNumber(1.2, {precision: 3}), `1${this.separator}200`)
   equal(I18n.localizeNumber(1.2345, {precision: 3}), `1${this.separator}235`)
 })
 
-test('formats as a percentage if set to true', function() {
+test('formats as a percentage if set to true', function () {
   equal(I18n.localizeNumber(1.2, {percentage: true}), `1${this.separator}2%`)
 })
 
-test('allows stripping of 0s to be explicitly toggled along with precision', function() {
+test('allows stripping of 0s to be explicitly toggled along with precision', function () {
   equal(
     I18n.localizeNumber(1.12, {precision: 4, strip_insignificant_zeros: true}),
     `1${this.separator}12`
   )
 })
 
-test('does not have precision errors with large numbers', function() {
+test('does not have precision errors with large numbers', function () {
   equal(
     I18n.localizeNumber(50000000.12),
     `50${this.delimiter}000${this.delimiter}000${this.separator}12`

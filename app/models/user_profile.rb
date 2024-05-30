@@ -130,8 +130,8 @@ class UserProfile < ActiveRecord::Base
     end
   end
 
-  def insert_content_shares_tab(tabs, user, **)
-    if user&.can_content_share?
+  def insert_content_shares_tab(tabs, user, _opts)
+    if user&.can_view_content_shares?
       tabs <<
         {
           id: TAB_CONTENT_SHARES,
@@ -144,9 +144,8 @@ class UserProfile < ActiveRecord::Base
   end
 
   def insert_lti_tool_tabs(tabs, user, opts)
-    tools =
-      opts[:root_account].context_external_tools.active.having_setting("user_navigation")
-                         .select { |t| t.permission_given?(:user_navigation, user, opts[:root_account]) }
+    tools = Lti::ContextToolFinder.new(opts[:root_account], type: :user_navigation).all_tools_scope_union.to_unsorted_array
+                                  .select { |t| t.permission_given?(:user_navigation, user, opts[:root_account]) }
     tabs.concat(
       Lti::ExternalToolTab.new(user, :user_navigation, tools, opts[:language]).tabs
         .find_all { |tab| show_lti_tab?(tab, user, opts[:root_account]) }
@@ -183,7 +182,7 @@ class UserProfile < ActiveRecord::Base
     end
   end
 
-  def insert_past_global_announcements(tabs, user, **)
+  def insert_past_global_announcements(tabs, user, _opts)
     if user
       tabs <<
         {
@@ -198,6 +197,6 @@ class UserProfile < ActiveRecord::Base
 end
 
 def instructure_misc_plugin_available?
-  Object.const_defined?("InstructureMiscPlugin")
+  Object.const_defined?(:InstructureMiscPlugin)
 end
 private :instructure_misc_plugin_available?

@@ -20,7 +20,25 @@ import {createSvgElement} from './utils'
 
 export function buildMetadata(settings) {
   // Pull off any instance specific settings
-  const {name, originalName, alt, isDecorative, ...embedSettings} = settings
+  const {
+    name,
+    originalName,
+    alt,
+    isDecorative,
+    externalStyle,
+    externalWidth,
+    externalHeight,
+    x,
+    y,
+    translateX,
+    translateY,
+    width,
+    height,
+    transform,
+    embedImage,
+    error,
+    ...embedSettings
+  } = settings
   const metadata = createSvgElement('metadata')
   metadata.textContent = JSON.stringify(embedSettings)
   return metadata

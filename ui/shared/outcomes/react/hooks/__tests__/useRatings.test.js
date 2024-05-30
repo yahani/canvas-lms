@@ -42,7 +42,7 @@ const changeRating = (result, ratingIndex, attrs) => {
   const rating = newRatings[ratingIndex]
   newRatings.splice(ratingIndex, 1, {
     ...rating,
-    ...attrs
+    ...attrs,
   })
   result.current.setRatings(newRatings)
 }
@@ -68,7 +68,7 @@ describe('useRatings', () => {
       'Mastery',
       'Near Mastery',
       'Below Mastery',
-      'No Evidence'
+      'No Evidence',
     ])
     expectPoints(result, [4, 3, 2, 1, 0])
     expect(result.current.masteryPoints.value).toEqual(initialMasteryPoints)
@@ -78,15 +78,15 @@ describe('useRatings', () => {
     it('should reflect changes in ratings', () => {
       const {result} = renderHook(() => useRatings({initialRatings, initialMasteryPoints}))
 
-      changeRating(result, 0, {description: 'New Exceeds Mastery', points: 5})
-      changeRating(result, 1, {description: 'New Mastery', points: 4})
+      changeRating(result, 0, {description: 'New Exceeds Mastery', points: 5}, false)
+      changeRating(result, 1, {description: 'New Mastery', points: 4}, true)
 
       expectDescriptions(result, [
         'New Exceeds Mastery',
         'New Mastery',
         'Near Mastery',
         'Below Mastery',
-        'No Evidence'
+        'No Evidence',
       ])
 
       expectPoints(result, [5, 4, 2, 1, 0])
@@ -107,8 +107,8 @@ describe('useRatings', () => {
 
     it('returns true for hasChanged if ratings have changed', () => {
       const {result} = renderHook(() => useRatings({initialRatings, initialMasteryPoints}))
-      changeRating(result, 0, {description: 'New Exceeds Mastery', points: 5})
-      changeRating(result, 1, {description: 'New Mastery', points: 4})
+      changeRating(result, 0, {description: 'New Exceeds Mastery', points: 5}, false)
+      changeRating(result, 1, {description: 'New Mastery', points: 4}, true)
       expect(result.current.hasChanged).toBe(true)
     })
 
@@ -126,7 +126,7 @@ describe('useRatings', () => {
       it('should be ok when receiving good data', () => {
         const {result} = renderHook(() => useRatings({initialRatings, initialMasteryPoints}))
 
-        changeRating(result, 0, {description: 'Any description'})
+        changeRating(result, 0, {description: 'Any description'}, false)
 
         expectDescriptionErrors(result, [null, null, null, null, null])
         expect(result.current.hasError).toBeFalsy()
@@ -135,7 +135,7 @@ describe('useRatings', () => {
       it('should validate blank', () => {
         const {result} = renderHook(() => useRatings({initialRatings, initialMasteryPoints}))
 
-        changeRating(result, 0, {description: ''})
+        changeRating(result, 0, {description: ''}, false)
 
         expectDescriptionErrors(result, ['Missing required description', null, null, null, null])
         expect(result.current.hasError).toBeTruthy()
@@ -146,7 +146,7 @@ describe('useRatings', () => {
       it('should be ok for positive integer', () => {
         const {result} = renderHook(() => useRatings({initialRatings, initialMasteryPoints}))
 
-        changeRating(result, 0, {points: '10'})
+        changeRating(result, 0, {points: '10'}, false)
 
         expectPointsErrors(result, [null, null, null, null, null])
         expect(result.current.hasError).toBeFalsy()
@@ -155,7 +155,7 @@ describe('useRatings', () => {
       it('should be ok for positive float', () => {
         const {result} = renderHook(() => useRatings({initialRatings, initialMasteryPoints}))
 
-        changeRating(result, 0, {points: '10.5'})
+        changeRating(result, 0, {points: '10.5'}, false)
 
         expectPointsErrors(result, [null, null, null, null, null])
         expect(result.current.hasError).toBeFalsy()
@@ -164,7 +164,7 @@ describe('useRatings', () => {
       it('should validate blank points', () => {
         const {result} = renderHook(() => useRatings({initialRatings, initialMasteryPoints}))
 
-        changeRating(result, 0, {points: ''})
+        changeRating(result, 0, {points: ''}, false)
 
         expectPointsErrors(result, ['Missing required points', null, null, null, null])
         expect(result.current.hasError).toBeTruthy()
@@ -173,7 +173,7 @@ describe('useRatings', () => {
       it('should validate invalid points', () => {
         const {result} = renderHook(() => useRatings({initialRatings, initialMasteryPoints}))
 
-        changeRating(result, 0, {points: 'lorem'})
+        changeRating(result, 0, {points: 'lorem'}, false)
 
         expectPointsErrors(result, ['Invalid points', null, null, null, null])
         expect(result.current.hasError).toBeTruthy()
@@ -182,7 +182,7 @@ describe('useRatings', () => {
       it('should validate points with comma as invalid points', () => {
         const {result} = renderHook(() => useRatings({initialRatings, initialMasteryPoints}))
 
-        changeRating(result, 0, {points: '0,5'})
+        changeRating(result, 0, {points: '0,5'}, false)
 
         expectPointsErrors(result, ['Invalid points', null, null, null, null])
         expect(result.current.hasError).toBeTruthy()
@@ -191,7 +191,7 @@ describe('useRatings', () => {
       it('should validate negative points', () => {
         const {result} = renderHook(() => useRatings({initialRatings, initialMasteryPoints}))
 
-        changeRating(result, 0, {points: '-1'})
+        changeRating(result, 0, {points: '-1'}, false)
 
         expectPointsErrors(result, ['Negative points', null, null, null, null])
         expect(result.current.hasError).toBeTruthy()
@@ -201,7 +201,7 @@ describe('useRatings', () => {
         const {result} = renderHook(() => useRatings({initialRatings, initialMasteryPoints}))
 
         // change the first points to match the second
-        changeRating(result, 0, {points: '3'})
+        changeRating(result, 0, {points: '3'}, false)
 
         // note, the invalid message should be on the second
         expectPointsErrors(result, [null, 'Points must be unique', null, null, null])
@@ -277,7 +277,7 @@ describe('useRatings', () => {
         const {result} = renderHook(() =>
           useRatings({
             initialRatings: defaultRatings.filter(r => r.points !== 0),
-            initialMasteryPoints
+            initialMasteryPoints,
           })
         )
 
@@ -291,7 +291,7 @@ describe('useRatings', () => {
         const {result} = renderHook(() =>
           useRatings({
             initialRatings: null,
-            initialMasteryPoints
+            initialMasteryPoints,
           })
         )
 

@@ -22,6 +22,8 @@ import {
   IMAGE_EMBED_TYPE,
   NONE_TYPE,
   TEXT_TYPE,
+  DISPLAY_AS_LINK,
+  DISPLAY_AS_DOWNLOAD_LINK,
   getContentFromEditor,
   getContentFromElement,
   getLinkContentFromEditor,
@@ -29,9 +31,9 @@ import {
   isImageEmbed,
   isVideoElement,
   isAudioElement,
-  findMediaPlayerIframe
+  findMediaPlayerIframe,
 } from '../ContentSelection'
-import FakeEditor from './FakeEditor'
+import FakeEditor from '../../../__tests__/FakeEditor'
 
 describe('RCE > Plugins > Shared > Content Selection', () => {
   let $container
@@ -126,6 +128,27 @@ describe('RCE > Plugins > Shared > Content Selection', () => {
         expect(getContentFromElement($element, editor).isPreviewable).toEqual(false)
         $element.classList.add('instructure_scribd_file')
         expect(getContentFromElement($element, editor).isPreviewable).toEqual(true)
+      })
+
+      it('indicates the link displays as download link if it contains the "no_preview" class name', () => {
+        expect(getContentFromElement($element, editor).displayAs).toEqual(DISPLAY_AS_LINK)
+        $element.classList.add('no_preview')
+        expect(getContentFromElement($element, editor).displayAs).toEqual(DISPLAY_AS_DOWNLOAD_LINK)
+      })
+
+      it('includes the content type if the link contains the data course type', () => {
+        $element.setAttribute('data-course-type', 'wikiPages')
+        expect(getContentFromElement($element, editor).contentType).toEqual('wikiPages')
+      })
+
+      it('includes the filename if the link contains the title', () => {
+        $element.title = 'Assignment 1'
+        expect(getContentFromElement($element, editor).fileName).toEqual('Assignment 1')
+      })
+
+      it('includes published if the link contains data-published', () => {
+        $element.setAttribute('data-published', true)
+        expect(getContentFromElement($element, editor).published).toEqual(true)
       })
     })
 
@@ -318,6 +341,10 @@ describe('RCE > Plugins > Shared > Content Selection', () => {
       const result = findMediaPlayerIframe(shim)
       expect(result).toEqual(mediaIframe)
     })
+    it('does not error if given null', () => {
+      const result = findMediaPlayerIframe(null)
+      expect(result).toEqual(null)
+    })
   })
 
   describe('predicates', () => {
@@ -368,6 +395,15 @@ describe('RCE > Plugins > Shared > Content Selection', () => {
     it('ignore some random markup', () => {
       const $selectedNode = document.createElement('div')
       $selectedNode.innerHTML = 'hello world'
+      editor.setSelectedNode($selectedNode)
+      expect(isFileLink($selectedNode, editor)).toBeFalsy()
+      expect(isImageEmbed($selectedNode)).toBeFalsy()
+      expect(isVideoElement($selectedNode)).toBeFalsy()
+      expect(isAudioElement($selectedNode)).toBeFalsy()
+    })
+
+    it('does not error on null', () => {
+      const $selectedNode = null
       editor.setSelectedNode($selectedNode)
       expect(isFileLink($selectedNode, editor)).toBeFalsy()
       expect(isImageEmbed($selectedNode)).toBeFalsy()

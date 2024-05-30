@@ -63,22 +63,22 @@ describe ConversationMessage do
 
     it "creates appropriate notifications on new message", priority: "1" do
       message = add_message
-      expect(message.messages_sent).to be_include("Conversation Message")
-      expect(message.messages_sent).not_to be_include("Added To Conversation")
+      expect(message.messages_sent).to include("Conversation Message")
+      expect(message.messages_sent).not_to include("Added To Conversation")
     end
 
     it "creates appropriate notifications on added participants" do
       event = add_last_student
-      expect(event.messages_sent).not_to be_include("Conversation Message")
-      expect(event.messages_sent).to be_include("Added To Conversation")
+      expect(event.messages_sent).not_to include("Conversation Message")
+      expect(event.messages_sent).to include("Added To Conversation")
     end
 
     it "does not notify the author" do
       message = add_message
-      expect(message.messages_sent["Conversation Message"].map(&:user_id)).not_to be_include(@teacher.id)
+      expect(message.messages_sent["Conversation Message"].map(&:user_id)).not_to include(@teacher.id)
 
       event = add_last_student
-      expect(event.messages_sent["Added To Conversation"].map(&:user_id)).not_to be_include(@teacher.id)
+      expect(event.messages_sent["Added To Conversation"].map(&:user_id)).not_to include(@teacher.id)
     end
 
     it "does not notify unsubscribed participants" do
@@ -87,12 +87,12 @@ describe ConversationMessage do
       student_view.save
 
       message = add_message
-      expect(message.messages_sent["Conversation Message"].map(&:user_id)).not_to be_include(@first_student.id)
+      expect(message.messages_sent["Conversation Message"].map(&:user_id)).not_to include(@first_student.id)
     end
 
     it "notifies subscribed participants on new message" do
       message = add_message
-      expect(message.messages_sent["Conversation Message"].map(&:user_id)).to be_include(@first_student.id)
+      expect(message.messages_sent["Conversation Message"].map(&:user_id)).to include(@first_student.id)
     end
 
     it "limits notifications to message recipients, still excluding the author" do
@@ -107,12 +107,12 @@ describe ConversationMessage do
 
     it "notifies new participants" do
       event = add_last_student
-      expect(event.messages_sent["Added To Conversation"].map(&:user_id)).to be_include(@last_student.id)
+      expect(event.messages_sent["Added To Conversation"].map(&:user_id)).to include(@last_student.id)
     end
 
     it "does not notify existing participants on added participant" do
       event = add_last_student
-      expect(event.messages_sent["Added To Conversation"].map(&:user_id)).not_to be_include(@first_student.id)
+      expect(event.messages_sent["Added To Conversation"].map(&:user_id)).not_to include(@first_student.id)
     end
 
     it "adds a new message when a user replies to a notification" do
@@ -120,7 +120,8 @@ describe ConversationMessage do
       message = conversation_message.messages_sent["Conversation Message"].first
 
       expect(message.context).to eq conversation_message
-      message.context.reply_from(user: message.user, purpose: "general",
+      message.context.reply_from(user: message.user,
+                                 purpose: "general",
                                  subject: message.subject,
                                  text: "Reply to notification")
       # The initial message, the one the sent the notification,
@@ -131,17 +132,43 @@ describe ConversationMessage do
   end
 
   context "generate_user_note" do
-    it "adds a user note under nominal circumstances" do
-      Account.default.update_attribute :enable_user_notes, true
-      course_with_teacher(active_all: true)
-      student = student_in_course(active_all: true).user
-      conversation = @teacher.initiate_conversation([student])
-      conversation.add_message("reprimanded!", generate_user_note: true, root_account_id: Account.default.id)
-      expect(student.user_notes.size).to be(1)
-      note = student.user_notes.first
-      expect(note.creator).to eql(@teacher)
-      expect(note.title).to eql("Private message")
-      expect(note.note).to eql("reprimanded!")
+    context "when the deprecate_faculty_journal flag is disabled" do
+      before { Account.site_admin.disable_feature!(:deprecate_faculty_journal) }
+
+      it "adds a user note under nominal circumstances" do
+        Account.default.update_attribute :enable_user_notes, true
+        course_with_teacher(active_all: true)
+        student = student_in_course(active_all: true).user
+        conversation = @teacher.initiate_conversation([student])
+        conversation.add_message("reprimanded!", generate_user_note: true, root_account_id: Account.default.id)
+        expect(student.user_notes.size).to be(1)
+        note = student.user_notes.first
+        expect(note.creator).to eql(@teacher)
+        expect(note.title).to eql("Private message")
+        expect(note.note).to eql("reprimanded!")
+      end
+
+      it "allows user notes on more than one recipient" do
+        Account.default.update_attribute :enable_user_notes, true
+        course_with_teacher(active_all: true)
+        student1 = student_in_course(active_all: true).user
+        student2 = student_in_course(active_all: true).user
+        conversation = @teacher.initiate_conversation([student1, student2])
+        conversation.add_message("reprimanded!", generate_user_note: true, root_account_id: Account.default.id)
+        expect(student1.user_notes.size).to be(1)
+        expect(student2.user_notes.size).to be(1)
+      end
+    end
+
+    context "when the deprecate_faculty_journal flag is enabled" do
+      it "does not add a user note under nominal circumstances" do
+        Account.default.update_attribute :enable_user_notes, true
+        course_with_teacher(active_all: true)
+        student = student_in_course(active_all: true).user
+        conversation = @teacher.initiate_conversation([student])
+        conversation.add_message("reprimanded!", generate_user_note: true, root_account_id: Account.default.id)
+        expect(student.user_notes.size).to be(0)
+      end
     end
 
     it "fails if notes are disabled on the account" do
@@ -151,17 +178,6 @@ describe ConversationMessage do
       conversation = @teacher.initiate_conversation([student])
       conversation.add_message("reprimanded!", generate_user_note: true, root_account_id: Account.default.id)
       expect(student.user_notes.size).to be(0)
-    end
-
-    it "allows user notes on more than one recipient" do
-      Account.default.update_attribute :enable_user_notes, true
-      course_with_teacher(active_all: true)
-      student1 = student_in_course(active_all: true).user
-      student2 = student_in_course(active_all: true).user
-      conversation = @teacher.initiate_conversation([student1, student2])
-      conversation.add_message("reprimanded!", generate_user_note: true, root_account_id: Account.default.id)
-      expect(student1.user_notes.size).to be(1)
-      expect(student2.user_notes.size).to be(1)
     end
   end
 
@@ -189,7 +205,7 @@ describe ConversationMessage do
       @submission = @assignment.submit_homework(@user, body: "some message")
       @submission.add_comment(author: @user, comment: "hello")
 
-      expect(StreamItem.all.select { |i| i.asset_string.include?("conversation_") }).to be_empty
+      expect(StreamItem.select { |i| i.asset_string.include?("conversation_") }).to be_empty
     end
 
     it "does not create additional stream_items for additional messages in the same conversation" do
@@ -240,6 +256,37 @@ describe ConversationMessage do
       end
     end
 
+    context "when the deprecate_faculty_journal flag is disabled" do
+      before { Account.site_admin.disable_feature!(:deprecate_faculty_journal) }
+
+      it "user_note uses the recipients shard" do
+        conversation = nil
+        acc = nil
+        @shard1.activate do
+          acc = Account.default
+          acc.enable_user_notes = true
+          acc.save!
+          course_with_teacher(active_all: true)
+        end
+        a = @teacher.shard.activate do
+          attachment_model(context: @teacher, folder: @teacher.conversation_attachments_folder)
+        end
+        m = nil
+        @shard2.activate do
+          student_in_course(active_all: true)
+          m = @teacher.initiate_conversation([@student]).add_message("test", attachment_ids: [a.id])
+          conversation = m.conversation
+        end
+        @shard1.activate do
+          allow(Account).to receive(:default) { acc }
+          conversation_participant = conversation.conversation_participants.where(user_id: @teacher.id).first
+          conversation_participant.add_message("reprimanded!", generate_user_note: true, root_account_id: acc)
+          conversation_participant.reload
+          expect(@student.user_notes.last.root_account_id).to eq(Shard.relative_id_for(acc.id, acc.shard, @student.shard))
+        end
+      end
+    end
+
     context "sharding" do
       specs_require_sharding
 
@@ -266,6 +313,30 @@ describe ConversationMessage do
 
         @shard1.activate do
           expect(m.conversation.reload.conversation_messages.first.media_comment).to eq(@mc)
+        end
+      end
+
+      it "returns correct recipients for cross-shard users" do
+        @shard1.activate do
+          @account_1 = Account.create
+          @student = user_with_pseudonym(active_all: true, account: @account_1)
+        end
+        @shard2.activate do
+          @account_2 = Account.create
+          course_with_teacher(active_all: true)
+          @teacher_1 = @teacher
+          @course_1 = @course
+          @course_1.enroll_student(@student).accept!
+
+          @cp = @teacher_1.initiate_conversation([@student])
+          @convo = @cp.conversation
+          @m1 = @cp.add_message("Hi from shard 2", root_account_id: @account_2)
+        end
+
+        @shard1.activate do
+          @m2 = @convo.add_message(@student, "replying from shard 1", only_users: [@teacher_1], root_account_id: @account_1)
+          @m2 = ConversationMessage.find(@m2.id)
+          expect(@m2.recipients).to include(@teacher_1)
         end
       end
     end
@@ -320,8 +391,54 @@ describe ConversationMessage do
     end
   end
 
+  context "log_conversation_message_metrics" do
+    it "logs inbox.message.created.react when react_inbox is ON in root account" do
+      Account.default.enable_feature! :react_inbox
+      allow(InstStatsd::Statsd).to receive(:increment)
+
+      course_with_teacher(active_all: true)
+      student1 = student_in_course(active_all: true).user
+      conversation = @teacher.initiate_conversation([student1])
+      conversation.add_message("hello", generate_user_note: false, root_account_id: Account.default.id)
+      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.message.created.react").at_least(:once)
+    end
+
+    it "logs inbox.message.created.legacy when react_inbox is OFF in root account" do
+      Account.default.disable_feature! :react_inbox
+      allow(InstStatsd::Statsd).to receive(:increment)
+
+      course_with_teacher(active_all: true)
+      student1 = student_in_course(active_all: true).user
+      conversation = @teacher.initiate_conversation([student1])
+      conversation.add_message("hello", generate_user_note: false, root_account_id: Account.default.id)
+      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.message.created.legacy").at_least(:once)
+    end
+
+    it "logs inbox.message.created.react when react_inbox is ON in site admin" do
+      Account.site_admin.enable_feature! :react_inbox
+      allow(InstStatsd::Statsd).to receive(:increment)
+
+      course_with_teacher(active_all: true)
+      student1 = student_in_course(active_all: true).user
+      conversation = @teacher.initiate_conversation([student1])
+      conversation.add_message("hello", generate_user_note: false, root_account_id: Account.default.id)
+      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.message.created.react").at_least(:once)
+    end
+
+    it "logs inbox.message.created.legacy when react_inbox is OFF in site admin" do
+      Account.site_admin.disable_feature! :react_inbox
+      allow(InstStatsd::Statsd).to receive(:increment)
+
+      course_with_teacher(active_all: true)
+      student1 = student_in_course(active_all: true).user
+      conversation = @teacher.initiate_conversation([student1])
+      conversation.add_message("hello", generate_user_note: false, root_account_id: Account.default.id)
+      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.message.created.legacy").at_least(:once)
+    end
+  end
+
   describe "reply_from" do
-    before :once do
+    before do
       course_with_teacher
     end
 
@@ -344,21 +461,132 @@ describe ConversationMessage do
       end.to raise_error(IncomingMail::Errors::UnknownAddress)
     end
 
+    it "ignores replies to conversations in hard concluded courses" do
+      student_in_course
+      convo = @teacher.initiate_conversation([@user])
+      convo.add_message("you cannot reply to this because it is concluded")
+      convo.conversation.update_attribute(:context, @course)
+      @course.update!(workflow_state: "completed")
+
+      last_message = convo.conversation.conversation_messages.last
+      expect do
+        last_message.reply_from({
+                                  purpose: "general",
+                                  user: @user,
+                                  subject: "this reply should return an error",
+                                  html: "body",
+                                  text: "body"
+                                })
+      end.to raise_error(IncomingMail::Errors::InvalidParticipant)
+    end
+
+    context "soft concluded course" do
+      before do
+        student_in_course
+        @course.start_at = 2.days.ago
+        @course.conclude_at = 1.day.ago
+        @course.save!
+
+        @convo = @teacher.initiate_conversation([@user])
+        @convo.add_message("you cannot reply to this because it is concluded")
+        @convo.conversation.update_attribute(:context, @course)
+        @last_message = @convo.conversation.conversation_messages.last
+      end
+
+      it "ignores replies from students in soft concluded courses with date restrictions" do
+        @course.restrict_enrollments_to_course_dates = true
+        @course.save!
+
+        expect do
+          @last_message.reply_from({
+                                     purpose: "general",
+                                     user: @user,
+                                     subject: "this reply should return an error",
+                                     html: "body",
+                                     text: "body"
+                                   })
+        end.to raise_error(IncomingMail::Errors::InvalidParticipant)
+      end
+
+      it "allows replies from students with ongoing section overrides" do
+        my_section = @course.course_sections.create!(name: "test section")
+        my_section.start_at = 1.day.ago
+        my_section.end_at = 5.days.from_now
+        my_section.restrict_enrollments_to_section_dates = true
+        my_section.save!
+        @course.save!
+
+        @course.enroll_student(@user,
+                               allow_multiple_enrollments: true,
+                               enrollment_state: "active",
+                               section: my_section)
+
+        email_reply = @last_message.reply_from({
+                                                 purpose: "general",
+                                                 user: @user,
+                                                 subject: "this reply should return an error",
+                                                 html: "body",
+                                                 text: "body"
+                                               })
+
+        expect(email_reply.body).to eq "body"
+      end
+
+      it "only section date restriction - allows replies from students with term role overrides" do
+        term = @course.enrollment_term
+        term.enrollment_dates_overrides.create!(
+          enrollment_type: "StudentEnrollment", start_at: 10.days.ago, end_at: 10.days.from_now, context: term.root_account
+        )
+        @course.restrict_enrollments_to_course_dates = false
+
+        my_section = @course.course_sections.create!(name: "test section")
+
+        @course.enroll_student(@student,
+                               allow_multiple_enrollments: true,
+                               enrollment_state: "active",
+                               section: my_section)
+
+        @course.enroll_teacher(@teacher,
+                               allow_multiple_enrollments: true,
+                               enrollment_state: "active",
+                               section: my_section)
+
+        # test the OR case by concluding the section
+        my_section.start_at = 5.days.ago
+        my_section.end_at = 4.days.ago
+        my_section.restrict_enrollments_to_section_dates = true
+        my_section.save!
+
+        email_reply = @last_message.reply_from({
+                                                 purpose: "general",
+                                                 user: @user,
+                                                 subject: "this reply should return an error",
+                                                 html: "body",
+                                                 text: "body"
+                                               })
+
+        expect(email_reply.body).to eq "body"
+      end
+    end
+
     it "replies only to the message author on conversations2 conversations" do
-      users = Array.new(3) { course_with_student(course: @course).user }
-      conversation = Conversation.initiate(users, false, context_type: "Course", context_id: @course.id)
-      conversation.add_message(users[0], "initial message", root_account_id: Account.default.id)
-      cm2 = conversation.add_message(users[1], "subsequent message", root_account_id: Account.default.id)
+      student1 = student_in_course.user
+      student2 = student_in_course.user
+      student3 = student_in_course.user
+
+      cp = student1.initiate_conversation([student1, student2, student3])
+      cp.add_message("initial message", root_account_id: Account.default.id, recipients: [student1])
+      cm2 = cp.add_message("subsequent message", root_account_id: Account.default.id, recipients: [student2])
       expect(cm2.conversation_message_participants.size).to eq 3
       cm3 = cm2.reply_from({
                              purpose: "general",
-                             user: users[2],
+                             user: student2,
                              subject: "an email reply",
                              html: "body",
                              text: "body"
                            })
       expect(cm3.conversation_message_participants.size).to eq 2
-      expect(cm3.conversation_message_participants.map(&:user_id).sort).to eq [users[1].id, users[2].id].sort
+      expect(cm3.conversation_message_participants.map(&:user_id).sort).to eq [student1.id, student2.id].sort
     end
 
     it "marks conversations as read for the replying author" do

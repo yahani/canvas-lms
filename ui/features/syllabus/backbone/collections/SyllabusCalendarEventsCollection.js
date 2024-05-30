@@ -16,8 +16,8 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 //
 
-import _ from 'underscore'
-import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection.coffee'
+import {each} from 'lodash'
+import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection'
 
 export default class SyllabusCalendarEventsCollection extends PaginatedCollection {
   initialize(context_codes, type = 'event') {
@@ -49,11 +49,11 @@ export default class SyllabusCalendarEventsCollection extends PaginatedCollectio
     const eventType = this.type
     switch (eventType) {
       case 'assignment':
-        normalize = function(ev) {
+        normalize = function (ev) {
           ev.related_id = ev.id
 
           let overridden = false
-          _.each(ev.assignment_overrides != null ? ev.assignment_overrides : [], override => {
+          each(ev.assignment_overrides != null ? ev.assignment_overrides : [], override => {
             if (!overridden) {
               ev.id = `${ev.id}_override_${override.id}`
               return (overridden = true)
@@ -64,7 +64,7 @@ export default class SyllabusCalendarEventsCollection extends PaginatedCollectio
         break
 
       case 'event':
-        normalize = function(ev) {
+        normalize = function (ev) {
           ev.related_id = ev.id = `${eventType}_${ev.id}`
           if (ev.parent_event_id) {
             ev.related_id = `${eventType}_${ev.parent_event_id}`
@@ -75,7 +75,7 @@ export default class SyllabusCalendarEventsCollection extends PaginatedCollectio
     }
 
     const result = []
-    _.each(super.parse(...args), ev => {
+    each(super.parse(...args), ev => {
       if (!ev.hidden) result.push(normalize(ev))
     })
     return result

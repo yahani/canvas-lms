@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2017 - present Instructure, Inc.
  *
@@ -16,18 +17,25 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import $ from 'jquery'
-import _ from 'underscore'
-import round from 'round'
+import round from '@canvas/round'
+import {escape as lodashEscape} from 'lodash'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import {scoreToGrade} from '@canvas/grading/GradingSchemeHelper'
-import {scoreToPercentage} from '@canvas/grading/GradeCalculationHelper'
-import htmlEscape from 'html-escape'
-import '@canvas/jquery/jquery.instructure_misc_helpers' // $.toSentence
+import {scoreToGrade} from '@instructure/grading-utils'
+import {scoreToPercentage, scoreToScaledPoints} from '@canvas/grading/GradeCalculationHelper'
+import htmlEscape from '@instructure/html-escape'
+import listFormatterPolyfill from '@canvas/util/listFormatter'
+import type Gradebook from '../../Gradebook'
+import type {Assignment} from '../../../../../../api.d'
+import type {DeprecatedGradingScheme} from '@canvas/grading/grading.d'
+import GradeFormatHelper from '@canvas/grading/GradeFormatHelper'
 
 const I18n = useI18nScope('gradebook')
 
-function getGradePercentage(score, pointsPossible) {
+const listFormatter = Intl.ListFormat
+  ? new Intl.ListFormat(ENV.LOCALE || navigator.language)
+  : listFormatterPolyfill
+
+function getGradePercentage(score: number, pointsPossible: number) {
   const grade = scoreToPercentage(score, pointsPossible)
   return round(grade, round.DEFAULT)
 }
@@ -37,33 +45,33 @@ function buildHiddenAssignmentsWarning() {
     icon: 'icon-off',
     warningText: I18n.t(
       "This grade differs from the student's view of the grade because some assignment grades are not yet posted"
-    )
+    ),
   }
 }
 
-function buildInvalidAssignmentGroupsWarning(invalidAssignmentGroups) {
-  const names = invalidAssignmentGroups.map(group => htmlEscape(group.name))
+function buildInvalidAssignmentGroupsWarning(invalidAssignmentGroups: {name: string}[]) {
+  const names: string[] = invalidAssignmentGroups.map(group => htmlEscape(group.name))
   const warningText = I18n.t(
     {
       one: 'Score does not include %{groups} because it has no points possible',
-      other: 'Score does not include %{groups} because they have no points possible'
+      other: 'Score does not include %{groups} because they have no points possible',
     },
     {
       count: names.length,
-      groups: $.toSentence(names)
+      groups: listFormatter.format(names),
     }
   )
 
   return {
     icon: 'icon-warning final-warning',
-    warningText
+    warningText,
   }
 }
 
 function buildNoPointsPossibleWarning() {
   return {
     icon: 'icon-warning final-warning',
-    warningText: I18n.t("Can't compute score until an assignment has points possible")
+    warningText: I18n.t("Can't compute score until an assignment has points possible"),
   }
 }
 
@@ -95,12 +103,14 @@ function render(options) {
 
   if (options.showPointsNotPercent) {
     grade = options.score
+  } else if (options.displayAsScaledPoints) {
+    grade = options.scaledPossible ? `${options.scaledScore} / ${options.scaledPossible}` : '-'
   } else {
     grade = options.possible ? options.percentage : '–'
   }
 
   if (options.letterGrade) {
-    const escapedGrade = _.escape(options.letterGrade)
+    const escapedGrade = lodashEscape(options.letterGrade)
 
     // xsslint safeString.identifier escapedGrade
     letterGrade = `<span class="letter-grade-points">${escapedGrade}</span>`
@@ -121,15 +131,26 @@ function render(options) {
   `
 }
 
+type Getters = {
+  getTotalPointsPossible(): ReturnType<Gradebook['getTotalPointsPossible']>
+  gradesAreWeighted: ReturnType<Gradebook['weightedGrades']>
+  getGradingStandard(): DeprecatedGradingScheme | null
+  listInvalidAssignmentGroups(): ReturnType<Gradebook['listInvalidAssignmentGroups']>
+  listHiddenAssignments(studentId: string): Assignment[]
+  shouldShowPoints(): boolean
+}
+
 export default class TotalGradeCellFormatter {
-  constructor(gradebook) {
+  options: Getters
+
+  constructor(gradebook: Gradebook) {
     this.options = {
       getTotalPointsPossible() {
         return gradebook.getTotalPointsPossible()
       },
       gradesAreWeighted: gradebook.weightedGrades(),
       getGradingStandard() {
-        return gradebook.options.grading_standard
+        return gradebook.getCourseGradingScheme()
       },
       listInvalidAssignmentGroups() {
         return gradebook.listInvalidAssignmentGroups()
@@ -139,7 +160,7 @@ export default class TotalGradeCellFormatter {
       },
       shouldShowPoints() {
         return gradebook.options.show_total_grade_as_points
-      }
+      },
     }
   }
 
@@ -155,8 +176,27 @@ export default class TotalGradeCellFormatter {
     possible = possible ? I18n.n(possible) : possible
 
     let letterGrade
-    if (grade.possible && this.options.getGradingStandard()) {
-      letterGrade = scoreToGrade(percentage, this.options.getGradingStandard())
+    const scheme = this.options.getGradingStandard()
+    if (grade.possible && scheme) {
+      letterGrade = GradeFormatHelper.replaceDashWithMinus(scoreToGrade(percentage, scheme.data))
+    }
+
+    let displayAsScaledPoints = false
+    let scaledScore = NaN
+    let scaledPossible = NaN
+
+    if (scheme) {
+      displayAsScaledPoints = scheme.pointsBased
+      const scalingFactor = scheme.scalingFactor
+
+      if (displayAsScaledPoints && grade.possible) {
+        scaledPossible = I18n.n(scalingFactor, {
+          precision: 1,
+        })
+        scaledScore = I18n.n(scoreToScaledPoints(grade.score, grade.possible, scalingFactor), {
+          precision: 1,
+        })
+      }
     }
 
     let warning
@@ -182,7 +222,10 @@ export default class TotalGradeCellFormatter {
       possible,
       score: I18n.n(round(grade.score, round.DEFAULT)),
       showPointsNotPercent: this.options.shouldShowPoints(),
-      warning
+      warning,
+      displayAsScaledPoints,
+      scaledScore,
+      scaledPossible,
     }
 
     return render(options)

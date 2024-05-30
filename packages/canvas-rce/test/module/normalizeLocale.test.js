@@ -25,8 +25,12 @@ describe('normalizeLocale', () => {
     assert.equal(normalizeLocale(undefined), 'en')
   })
 
-  it('maps old-style canvas locales to new-style', () => {
+  it('maps unknown region locale to the base locale', () => {
     assert.equal(normalizeLocale('he-IL'), 'he')
+  })
+
+  it('maps known substitutions', () => {
+    assert.equal(normalizeLocale('fa'), 'fa-IR')
   })
 
   it('reduces unrecognized custom locales to the base locale', () => {
@@ -34,7 +38,7 @@ describe('normalizeLocale', () => {
   })
 
   it("recognizes known custom locales and doesn't reduce them", () => {
-    assert.equal(normalizeLocale('en-GB-x-lbs'), 'en-GB-x-lbs')
+    assert.equal(normalizeLocale('en-GB-x-ukhe'), 'en-GB-x-ukhe')
   })
 
   it('otherwise just return en', () => {

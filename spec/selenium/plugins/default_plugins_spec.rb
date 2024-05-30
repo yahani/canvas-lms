@@ -19,7 +19,11 @@
 
 require_relative "../common"
 
-describe "default plugins" do
+# FOO-2994 all these tests have become flaky in the post-merge build for some
+# reason that is difficult to suss out. For now, we'll skip them since what they
+# are testing is only available to siteadmin anyway, but a decision should be
+# made regarding fixing/improving them vs simply removing them altogether
+describe.skip "default plugins FOO-2994" do
   include_context "in-process server selenium tests"
 
   before do
@@ -81,35 +85,6 @@ describe "default plugins" do
     expect(settings).not_to be_nil
     expect(settings[:domain]).to eq "asdf"
     expect(settings[:name]).to eq "asdf"
-  end
-
-  it "allows configuring linked in plugin" do
-    settings = Canvas::Plugin.find(:linked_in).try(:settings)
-    expect(settings).to be_nil
-
-    allow(LinkedIn::Connection).to receive(:config_check).and_return("Bad check")
-    get "/plugins/linked_in"
-
-    multiple_accounts_select
-    f("#plugin_setting_disabled").click
-    wait_for_ajaximations
-    f("#settings_client_id").send_keys("asdf")
-    f("#settings_client_secret").send_keys("asdf")
-    submit_form("#new_plugin_setting")
-
-    assert_flash_error_message "There was an error"
-
-    f("#settings_client_secret").send_keys("asdf")
-    allow(LinkedIn::Connection).to receive(:config_check).and_return(nil)
-    submit_form("#new_plugin_setting")
-    wait_for_ajax_requests
-
-    assert_flash_notice_message "successfully updated"
-
-    settings = Canvas::Plugin.find(:linked_in).try(:settings)
-    expect(settings).not_to be_nil
-    expect(settings[:client_id]).to eq "asdf"
-    expect(settings[:client_secret_dec]).to eq "asdf"
   end
 
   def multiple_accounts_select

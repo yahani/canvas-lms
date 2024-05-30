@@ -21,6 +21,8 @@ require_relative "../../common"
 require_relative "../../helpers/assignments_common"
 require_relative "../pages/speedgrader_page"
 
+# EVAL-2664 - These tests have become flaky with a ChunkLoadError: Loading chunk xxxxx failed
+# error. We have javascript tests for speed grader comments for now until the ChunkLoadError issue is resolved
 describe "speed grader" do
   include_context "in-process server selenium tests"
   include AssignmentsCommon
@@ -49,7 +51,7 @@ describe "speed grader" do
       driver.navigate.refresh
       alert_shown = alert_present?
       dismiss_alert
-      expect(alert_shown).to eq(true)
+      expect(alert_shown).to be(true)
     end
   end
 
@@ -131,7 +133,7 @@ describe "speed grader" do
       # add comment
       Speedgrader.add_comment_and_submit("grader comment")
       # make sure avatar shows up for user comment
-      expect(Speedgrader.avatar_comment).to have_attribute("style", "display: inline\;")
+      expect(Speedgrader.avatar_comment).to have_attribute("style", "")
     end
 
     context "Hide Student names checked" do
@@ -245,6 +247,7 @@ describe "speed grader" do
         expect do
           Speedgrader.click_next_student_btn
           wait_for_ajaximations
+          Speedgrader.proceed_draft_comment_modal
         end.to change {
           SubmissionComment.draft.count
         }.by(1)
@@ -254,6 +257,7 @@ describe "speed grader" do
         expect do
           Speedgrader.click_next_or_prev_student :previous
           wait_for_ajaximations
+          Speedgrader.proceed_draft_comment_modal
         end.to change {
           SubmissionComment.draft.count
         }.by(1)
@@ -282,7 +286,7 @@ describe "speed grader" do
     describe "notice on auto-saving a draft comment" do
       it "is displayed", priority: "1" do
         Speedgrader.click_next_student_btn
-
+        Speedgrader.proceed_draft_comment_modal
         expect(Speedgrader.comment_saved_alert).to be_displayed
       end
 
@@ -290,6 +294,7 @@ describe "speed grader" do
         Speedgrader.click_next_student_btn
         wait_for_ajaximations
 
+        Speedgrader.proceed_draft_comment_modal
         Speedgrader.close_saved_comment_alert
         expect(Speedgrader.comment_saved_alert).not_to be_displayed
       end
@@ -444,8 +449,11 @@ describe "speed grader" do
       add_user_to_group(@student_2, @testgroup[0])
 
       @group_comment_1 = "group comment from student 1"
-      @assignment.submit_homework(@student_1, submission_type: "online_url", url: "http://instructure.com",
-                                              comment: @group_comment_1, group_comment: true)
+      @assignment.submit_homework(@student_1,
+                                  submission_type: "online_url",
+                                  url: "http://instructure.com",
+                                  comment: @group_comment_1,
+                                  group_comment: true)
 
       @private_comment_1 = "private comment from student 1"
       @assignment.submit_homework(@student_1, comment: @private_comment_1)

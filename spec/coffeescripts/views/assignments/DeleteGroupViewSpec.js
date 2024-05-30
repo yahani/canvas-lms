@@ -16,27 +16,26 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Backbone from '@canvas/backbone'
 import AssignmentGroupCollection from '@canvas/assignments/backbone/collections/AssignmentGroupCollection'
-import AssignmentCollection from '@canvas/assignments/backbone/collections/AssignmentCollection.coffee'
-import AssignmentGroup from '@canvas/assignments/backbone/models/AssignmentGroup.coffee'
-import Assignment from '@canvas/assignments/backbone/models/Assignment.coffee'
-import DeleteGroupView from 'ui/features/assignment_index/backbone/views/DeleteGroupView.coffee'
+import AssignmentGroup from '@canvas/assignments/backbone/models/AssignmentGroup'
+import Assignment from '@canvas/assignments/backbone/models/Assignment'
+import DeleteGroupView from 'ui/features/assignment_index/backbone/views/DeleteGroupView'
 import $ from 'jquery'
+import 'jquery-migrate'
 import assertions from 'helpers/assertions'
-import 'helpers/jquery.simulate'
+import '@canvas/jquery/jquery.simulate'
 
 const group = (assignments = true, id) =>
   new AssignmentGroup({
     id,
     name: `something cool ${id}`,
-    assignments: assignments ? [new Assignment(), new Assignment()] : []
+    assignments: assignments ? [new Assignment(), new Assignment()] : [],
   })
-const assignmentGroups = function(assignments = true, multiple = true) {
+const assignmentGroups = function (assignments = true, multiple = true) {
   const groups = multiple ? [group(assignments, 1), group(assignments, 2)] : [group(assignments, 1)]
   return new AssignmentGroupCollection(groups)
 }
-const createView = function(assignments = true, multiple = true) {
+const createView = function (assignments = true, multiple = true) {
   const ags = assignmentGroups(assignments, multiple)
   const ag_group = ags.first()
   return new DeleteGroupView({model: ag_group})
@@ -47,9 +46,10 @@ QUnit.module('DeleteGroupView', {
   teardown() {
     $('#fixtures').empty()
     return $('form.dialogFormView').remove()
-  }
+  },
 })
 
+// eslint-disable-next-line qunit/resolve-async
 test('should be accessible', assert => {
   const view = createView(false, true)
   const done = assert.async()

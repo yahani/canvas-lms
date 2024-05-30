@@ -16,10 +16,13 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {act, render, waitFor} from '@testing-library/react'
+import {render, waitFor} from '@testing-library/react'
 import {ExpandableErrorAlert} from '../ExpandableErrorAlert'
 import React from 'react'
 import userEvent from '@testing-library/user-event'
+import injectGlobalAlertContainers from '@canvas/util/react/testing/injectGlobalAlertContainers'
+
+injectGlobalAlertContainers()
 
 describe('ExpandableErrorAlert', () => {
   it('displays child content', () => {
@@ -28,16 +31,16 @@ describe('ExpandableErrorAlert', () => {
     expect(getByText("I'm a child 👶")).toBeInTheDocument()
   })
 
-  it('toggles error details when error details button is clicked', () => {
+  it('toggles error details when error details button is clicked', async () => {
     const error = 'Something broke.'
     const {queryByText, getByText, getByRole} = render(<ExpandableErrorAlert error={error} />)
 
     expect(queryByText(error)).not.toBeInTheDocument()
 
-    act(() => userEvent.click(getByRole('button', {name: 'Error details'})))
+    await userEvent.click(getByRole('button', {name: 'Error details'}))
     expect(getByText(error)).toBeInTheDocument()
 
-    act(() => userEvent.click(getByRole('button', {name: 'Error details'})))
+    await userEvent.click(getByRole('button', {name: 'Error details'}))
     expect(queryByText(error)).not.toBeInTheDocument()
   })
 
@@ -65,11 +68,11 @@ describe('ExpandableErrorAlert', () => {
     expect(getByText('My error summary')).toBeInTheDocument()
   })
 
-  it('dismisses the live region alert when the primary alert is dismissed', () => {
+  it('dismisses the live region alert when the primary alert is dismissed', async () => {
     const {getByText, getByRole} = render(
       <>
         <div id="flash_screenreader_holder" role="alert" />
-        <ExpandableErrorAlert liveRegionText="My error summary" closeable>
+        <ExpandableErrorAlert liveRegionText="My error summary" closeable={true}>
           My error
         </ExpandableErrorAlert>
       </>
@@ -79,14 +82,14 @@ describe('ExpandableErrorAlert', () => {
     expect(error).toBeInTheDocument()
     expect(summary).toBeInTheDocument()
 
-    act(() => userEvent.click(getByRole('button', {name: 'Close'})))
+    await userEvent.click(getByRole('button', {name: 'Close'}))
     waitFor(() => {
       expect(error).not.toBeInTheDocument()
       expect(summary).not.toBeInTheDocument()
     })
   })
 
-  it('displays a functioning close button when closeable is true', () => {
+  it('displays a functioning close button when closeable is true', async () => {
     const {getByText, getByRole, queryByText, queryByRole, rerender} = render(
       <ExpandableErrorAlert>My error</ExpandableErrorAlert>
     )
@@ -94,13 +97,15 @@ describe('ExpandableErrorAlert', () => {
     expect(getByText('My error')).toBeInTheDocument()
     expect(queryByRole('button', {name: 'Close'})).not.toBeInTheDocument()
 
-    rerender(<ExpandableErrorAlert closeable>My error</ExpandableErrorAlert>)
+    rerender(<ExpandableErrorAlert closeable={true}>My error</ExpandableErrorAlert>)
 
     expect(getByText('My error')).toBeInTheDocument()
     const closeButton = getByRole('button', {name: 'Close'})
     expect(closeButton).toBeInTheDocument()
-    act(() => userEvent.click(closeButton))
+    await userEvent.click(closeButton)
 
-    expect(queryByText('My error')).not.toBeInTheDocument()
+    waitFor(() => {
+      expect(queryByText('My error')).not.toBeInTheDocument()
+    })
   })
 })

@@ -33,8 +33,20 @@ export const RubricAssociation = {
     _id: string.isRequired,
     hide_points: bool,
     hide_score_total: bool.isRequired,
-    use_for_grading: bool.isRequired
-  })
+    use_for_grading: bool.isRequired,
+  }),
+
+  mock: ({
+    _id = '1',
+    hide_points = false,
+    hide_score_total = false,
+    use_for_grading = false,
+  } = {}) => ({
+    _id,
+    hide_points,
+    hide_score_total,
+    use_for_grading,
+  }),
 }
 
 export const DefaultMocks = {
@@ -42,6 +54,6 @@ export const DefaultMocks = {
     _id: '1',
     hidePoints: false,
     hideScoreTotal: false,
-    useForGrading: false
-  })
+    useForGrading: false,
+  }),
 }

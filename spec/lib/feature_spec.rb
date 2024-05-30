@@ -127,6 +127,34 @@ describe Feature do
     end
   end
 
+  describe "Shadow features" do
+    it "is not shadow? by default" do
+      expect(Feature.definitions["SA"].shadow?).to be_falsey
+      expect(Feature.definitions["RA"].shadow?).to be_falsey
+      expect(Feature.definitions["A"].shadow?).to be_falsey
+      expect(Feature.definitions["C"].shadow?).to be_falsey
+      expect(Feature.definitions["U"].shadow?).to be_falsey
+    end
+
+    context "when shadowed" do
+      before do
+        Feature.definitions["SA"].instance_variable_set(:@shadow, true)
+        Feature.definitions["RA"].instance_variable_set(:@shadow, true)
+        Feature.definitions["A"].instance_variable_set(:@shadow, true)
+        Feature.definitions["C"].instance_variable_set(:@shadow, true)
+        Feature.definitions["U"].instance_variable_set(:@shadow, true)
+      end
+
+      it "is shadow?" do
+        expect(Feature.definitions["SA"].shadow?).to be_truthy
+        expect(Feature.definitions["RA"].shadow?).to be_truthy
+        expect(Feature.definitions["A"].shadow?).to be_truthy
+        expect(Feature.definitions["C"].shadow?).to be_truthy
+        expect(Feature.definitions["U"].shadow?).to be_truthy
+      end
+    end
+  end
+
   describe "RootAccount feature" do
     it "implies root_opt_in" do
       expect(Feature.definitions["RA"].root_opt_in).to be_truthy
@@ -241,23 +269,20 @@ describe "Feature.register" do
     end
 
     it "registers in a dev environment" do
-      allow(Rails.env).to receive(:test?).and_return(false)
-      allow(Rails.env).to receive(:development?).and_return(true)
+      allow(Rails.env).to receive_messages(test?: false, development?: true)
       Feature.register({ dev_feature: t_dev_feature_hash })
       expect(Feature.definitions["dev_feature"]).not_to be_nil
     end
 
     it "registers in a production test cluster" do
-      allow(Rails.env).to receive(:test?).and_return(false)
-      allow(Rails.env).to receive(:production?).and_return(true)
+      allow(Rails.env).to receive_messages(test?: false, production?: true)
       allow(ApplicationController).to receive(:test_cluster?).and_return(true)
       Feature.register({ dev_feature: t_dev_feature_hash })
       expect(Feature.definitions["dev_feature"]).not_to be_nil
     end
 
     it "does not register in production" do
-      allow(Rails.env).to receive(:test?).and_return(false)
-      allow(Rails.env).to receive(:production?).and_return(true)
+      allow(Rails.env).to receive_messages(test?: false, production?: true)
       Feature.register({ dev_feature: t_dev_feature_hash })
       expect(Feature.definitions["dev_feature"]).to eq Feature::DISABLED_FEATURE
     end
@@ -270,8 +295,7 @@ describe "Feature.register" do
     end
 
     it "registers as 'hidden' in production" do
-      allow(Rails.env).to receive(:test?).and_return(false)
-      allow(Rails.env).to receive(:production?).and_return(true)
+      allow(Rails.env).to receive_messages(test?: false, production?: true)
       Feature.register({ dev_feature: t_hidden_in_prod_feature_hash })
       expect(Feature.definitions["dev_feature"]).to be_hidden
     end

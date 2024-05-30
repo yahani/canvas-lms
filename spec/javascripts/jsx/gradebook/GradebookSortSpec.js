@@ -17,18 +17,33 @@
  */
 
 import {createGradebook} from 'ui/features/gradebook/react/default_gradebook/__tests__/GradebookSpecHelper'
-import round from 'round'
+import round from '@canvas/round'
 
 QUnit.module('sortByStudentColumn', {
   setup() {
     this.gradebook = createGradebook()
-  }
+  },
+})
+
+test('does not cause gradebook to forget about students that are loaded but not currently in view', function () {
+  this.gradebook.courseContent.students.setStudentIds(['1', '3', '4'])
+
+  this.gradebook.gridData.rows = [
+    {id: '3', sortable_name: 'Z'},
+    {id: '4', sortable_name: 'A'},
+  ]
+
+  this.gradebook.sortByStudentColumn('sortable_name', 'ascending')
+  const loadedStudentIds = this.gradebook.courseContent.students
+    .listStudents()
+    .map(student => student.id)
+  deepEqual(loadedStudentIds, ['1', '3', '4'])
 })
 
 test('sorts the gradebook rows', function () {
   this.gradebook.gridData.rows = [
     {id: '3', sortable_name: 'Z'},
-    {id: '4', sortable_name: 'A'}
+    {id: '4', sortable_name: 'A'},
   ]
   this.gradebook.sortByStudentColumn('sortable_name', 'ascending')
   const [firstRow, secondRow] = this.gradebook.gridData.rows
@@ -40,7 +55,7 @@ test('sorts the gradebook rows', function () {
 test('sorts the gradebook rows descending', function () {
   this.gradebook.gridData.rows = [
     {id: '3', sortable_name: 'A'},
-    {id: '4', sortable_name: 'Z'}
+    {id: '4', sortable_name: 'Z'},
   ]
   this.gradebook.sortByStudentColumn('sortable_name', 'descending')
   const [firstRow, secondRow] = this.gradebook.gridData.rows
@@ -52,7 +67,7 @@ test('sorts the gradebook rows descending', function () {
 test('sort gradebook rows by id when sortable names are the same', function () {
   this.gradebook.gridData.rows = [
     {id: '4', sortable_name: 'Same Name'},
-    {id: '3', sortable_name: 'Same Name'}
+    {id: '3', sortable_name: 'Same Name'},
   ]
   this.gradebook.sortByStudentColumn('sortable_name', 'ascending')
   const [firstRow, secondRow] = this.gradebook.gridData.rows
@@ -64,7 +79,7 @@ test('sort gradebook rows by id when sortable names are the same', function () {
 test('descending sort gradebook rows by id sortable names are the same and direction is descending', function () {
   this.gradebook.gridData.rows = [
     {id: '3', sortable_name: 'Same Name'},
-    {id: '4', sortable_name: 'Same Name'}
+    {id: '4', sortable_name: 'Same Name'},
   ]
   this.gradebook.sortByStudentColumn('someProperty', 'descending')
   const [firstRow, secondRow] = this.gradebook.gridData.rows
@@ -76,13 +91,13 @@ test('descending sort gradebook rows by id sortable names are the same and direc
 QUnit.module('sortByCustomColumn', {
   setup() {
     this.gradebook = createGradebook()
-  }
+  },
 })
 
 test('sorts the gradebook rows', function () {
   this.gradebook.gridData.rows = [
     {id: '3', custom_col_501: 'Z'},
-    {id: '4', custom_col_501: 'A'}
+    {id: '4', custom_col_501: 'A'},
   ]
   this.gradebook.sortByCustomColumn('custom_col_501', 'ascending')
   const [firstRow, secondRow] = this.gradebook.gridData.rows
@@ -94,7 +109,7 @@ test('sorts the gradebook rows', function () {
 test('sorts the gradebook rows descending', function () {
   this.gradebook.gridData.rows = [
     {id: '4', custom_col_501: 'A'},
-    {id: '3', custom_col_501: 'Z'}
+    {id: '3', custom_col_501: 'Z'},
   ]
   this.gradebook.sortByCustomColumn('custom_col_501', 'descending')
   const [firstRow, secondRow] = this.gradebook.gridData.rows
@@ -106,7 +121,7 @@ test('sorts the gradebook rows descending', function () {
 test('sort gradebook rows by sortable_name when setting key is the same', function () {
   this.gradebook.gridData.rows = [
     {id: '4', sortable_name: 'Jones, Adam', custom_col_501: '42'},
-    {id: '3', sortable_name: 'Ford, Betty', custom_col_501: '42'}
+    {id: '3', sortable_name: 'Ford, Betty', custom_col_501: '42'},
   ]
   this.gradebook.sortByCustomColumn('custom_col_501', 'ascending')
   const [firstRow, secondRow] = this.gradebook.gridData.rows
@@ -118,7 +133,7 @@ test('sort gradebook rows by sortable_name when setting key is the same', functi
 test('descending sort gradebook rows by sortable_name when setting key is the same and direction is descending', function () {
   this.gradebook.gridData.rows = [
     {id: '3', sortable_name: 'Ford, Betty', custom_col_501: '42'},
-    {id: '4', sortable_name: 'Jones, Adam', custom_col_501: '42'}
+    {id: '4', sortable_name: 'Jones, Adam', custom_col_501: '42'},
   ]
   this.gradebook.sortByCustomColumn('custom_col_501', 'descending')
   const [firstRow, secondRow] = this.gradebook.gridData.rows
@@ -130,7 +145,7 @@ test('descending sort gradebook rows by sortable_name when setting key is the sa
 test('sort gradebook rows by id when setting key and sortable name are the same', function () {
   this.gradebook.gridData.rows = [
     {id: '4', sortable_name: 'Same Name', custom_col_501: '42'},
-    {id: '3', sortable_name: 'Same Name', custom_col_501: '42'}
+    {id: '3', sortable_name: 'Same Name', custom_col_501: '42'},
   ]
   this.gradebook.sortByCustomColumn('custom_col_501', 'ascending')
   const [firstRow, secondRow] = this.gradebook.gridData.rows
@@ -142,7 +157,7 @@ test('sort gradebook rows by id when setting key and sortable name are the same'
 test('descending sort gradebook rows by id when setting key and sortable name are the same and direction is descending', function () {
   this.gradebook.gridData.rows = [
     {id: '3', sortable_name: 'Same Name', custom_col_501: '42'},
-    {id: '4', sortable_name: 'Same Name', custom_col_501: '42'}
+    {id: '4', sortable_name: 'Same Name', custom_col_501: '42'},
   ]
   this.gradebook.sortByCustomColumn('custom_col_501', 'descending')
   const [firstRow, secondRow] = this.gradebook.gridData.rows
@@ -162,7 +177,7 @@ QUnit.module('sortByAssignmentColumn', {
     sandbox.stub(this.gradebook, 'gradeSort')
     sandbox.stub(this.gradebook, 'missingSort')
     sandbox.stub(this.gradebook, 'lateSort')
-  }
+  },
 })
 
 test('sorts the gradebook rows', function () {
@@ -218,7 +233,7 @@ QUnit.module('sortByAssignmentGroupColumn', {
       .stub(this.gradebook, 'sortRowsBy')
       .callsFake(sortFn => sortFn(this.studentA, this.studentB))
     sandbox.stub(this.gradebook, 'gradeSort')
-  }
+  },
 })
 
 test('sorts the gradebook rows', function () {
@@ -262,7 +277,7 @@ QUnit.module('sortByTotalGradeColumn', {
       .stub(this.gradebook, 'sortRowsBy')
       .callsFake(sortFn => sortFn(this.studentA, this.studentB))
     sandbox.stub(this.gradebook, 'gradeSort')
-  }
+  },
 })
 
 test('sorts the gradebook rows', function () {
@@ -305,13 +320,13 @@ QUnit.module('Gradebook#sortGridRows', {
     this.server.respondWith('POST', options.settings_update_url, [
       200,
       {'Content-Type': 'application/json'},
-      '{}'
+      '{}',
     ])
   },
 
   teardown() {
     this.server.restore()
-  }
+  },
 })
 
 test('sorts by the student column by default', function () {
@@ -435,7 +450,7 @@ QUnit.module('Gradebook#getColumnSortSettingsViewOptionsMenuProps', {
   setup() {
     this.gradebook = createGradebook()
     sandbox.stub(this.gradebook, 'arrangeColumnsBy')
-  }
+  },
 })
 
 test('includes all required properties', function () {
@@ -586,7 +601,7 @@ QUnit.module('Gradebook#setSortRowsBySetting', hooks => {
     server.respondWith('POST', options.settings_update_url, [
       200,
       {'Content-Type': 'application/json'},
-      '{}'
+      '{}',
     ])
     gradebook = createGradebook(options)
   })
@@ -631,12 +646,12 @@ QUnit.module('Gradebook#sortRowsWithFunction', {
     this.gradebook = createGradebook()
     this.gradebook.gridData.rows = [
       {id: '3', sortable_name: 'Z Lastington', someProperty: false},
-      {id: '4', sortable_name: 'A Firstington', someProperty: true}
+      {id: '4', sortable_name: 'A Firstington', someProperty: true},
     ]
   },
   sortFn(row) {
     return row.someProperty
-  }
+  },
 })
 
 test('returns two objects in the rows collection', function () {
@@ -694,9 +709,9 @@ QUnit.module('Gradebook#missingSort', {
     this.gradebook = createGradebook()
     this.gradebook.gridData.rows = [
       {id: '3', sortable_name: 'Z Lastington', assignment_201: {missing: false}},
-      {id: '4', sortable_name: 'A Firstington', assignment_201: {missing: true}}
+      {id: '4', sortable_name: 'A Firstington', assignment_201: {missing: true}},
     ]
-  }
+  },
 })
 
 test('sorts by missing', function () {
@@ -712,7 +727,7 @@ test('relies on localeSort when rows have equal sorting criteria results', funct
     {id: '1', sortable_name: 'Z Last Graded', assignment_201: {missing: false}},
     {id: '3', sortable_name: 'Z Last Missing', assignment_201: {missing: true}},
     {id: '2', sortable_name: 'A First Graded', assignment_201: {missing: false}},
-    {id: '4', sortable_name: 'A First Missing', assignment_201: {missing: true}}
+    {id: '4', sortable_name: 'A First Missing', assignment_201: {missing: true}},
   ]
   this.gradebook.missingSort('assignment_201')
   const [firstRow, secondRow, thirdRow, fourthRow] = this.gradebook.gridData.rows
@@ -728,7 +743,7 @@ test('relies on id sorting when rows have equal sorting criteria results and sam
     {id: '2', sortable_name: 'Student Name', assignment_201: {missing: true}},
     {id: '3', sortable_name: 'Student Name', assignment_201: {missing: true}},
     {id: '4', sortable_name: 'Student Name', assignment_201: {missing: true}},
-    {id: '1', sortable_name: 'Student Name', assignment_201: {missing: true}}
+    {id: '1', sortable_name: 'Student Name', assignment_201: {missing: true}},
   ]
   this.gradebook.missingSort('assignment_201')
   const [firstRow, secondRow, thirdRow, fourthRow] = this.gradebook.gridData.rows
@@ -745,7 +760,7 @@ test('when no submission is found, it is missing', function () {
   // key for the assignment with a missing criteria key
   this.gradebook.gridData.rows = [
     {id: '3', sortable_name: 'Z Lastington', assignment_201: {missing: false}},
-    {id: '4', sortable_name: 'A Firstington', assignment_201: {}}
+    {id: '4', sortable_name: 'A Firstington', assignment_201: {}},
   ]
   this.gradebook.lateSort('assignment_201')
   const [firstRow, secondRow] = this.gradebook.gridData.rows
@@ -759,9 +774,9 @@ QUnit.module('Gradebook#lateSort', {
     this.gradebook = createGradebook()
     this.gradebook.gridData.rows = [
       {id: '3', sortable_name: 'Z Lastington', assignment_201: {late: false}},
-      {id: '4', sortable_name: 'A Firstington', assignment_201: {late: true}}
+      {id: '4', sortable_name: 'A Firstington', assignment_201: {late: true}},
     ]
-  }
+  },
 })
 
 test('sorts by late', function () {
@@ -777,7 +792,7 @@ test('relies on localeSort when rows have equal sorting criteria results', funct
     {id: '1', sortable_name: 'Z Last Not Late', assignment_201: {late: false}},
     {id: '3', sortable_name: 'Z Last Late', assignment_201: {late: true}},
     {id: '2', sortable_name: 'A First Not Late', assignment_201: {late: false}},
-    {id: '4', sortable_name: 'A First Late', assignment_201: {late: true}}
+    {id: '4', sortable_name: 'A First Late', assignment_201: {late: true}},
   ]
   this.gradebook.lateSort('assignment_201')
   const [firstRow, secondRow, thirdRow, fourthRow] = this.gradebook.gridData.rows
@@ -793,7 +808,7 @@ test('relies on id sort when rows have equal sorting criteria results and the sa
     {id: '4', sortable_name: 'Student Name', assignment_201: {late: true}},
     {id: '3', sortable_name: 'Student Name', assignment_201: {late: true}},
     {id: '2', sortable_name: 'Student Name', assignment_201: {late: true}},
-    {id: '1', sortable_name: 'Student Name', assignment_201: {late: true}}
+    {id: '1', sortable_name: 'Student Name', assignment_201: {late: true}},
   ]
   this.gradebook.lateSort('assignment_201')
   const [firstRow, secondRow, thirdRow, fourthRow] = this.gradebook.gridData.rows
@@ -810,7 +825,7 @@ test('when no submission is found, it is not late', function () {
   // key for the assignment with a missing criteria key (e.g. `late`)
   this.gradebook.gridData.rows = [
     {id: '3', sortable_name: 'Z Lastington', assignment_201: {}},
-    {id: '4', sortable_name: 'A Firstington', assignment_201: {late: true}}
+    {id: '4', sortable_name: 'A Firstington', assignment_201: {late: true}},
   ]
   this.gradebook.lateSort('assignment_201')
   const [firstRow, secondRow] = this.gradebook.gridData.rows
@@ -830,106 +845,27 @@ QUnit.module('Gradebook#compareAssignmentModulePositions - when neither record h
         module_ids: [],
         module_positions: [],
         assignment_group: {
-          position: 1
+          position: 1,
         },
-        position: 1
-      }
+        position: 1,
+      },
     }
     this.secondRecord = {
       object: {
         module_ids: [],
         module_positions: [],
         assignment_group: {
-          position: 1
+          position: 1,
         },
-        position: 2
-      }
+        position: 2,
+      },
     }
 
     this.comparisonResult = this.gradebook.compareAssignmentModulePositions(
       this.firstRecord,
       this.secondRecord
     )
-  }
-})
-
-QUnit.module('Gradebook#isInvalidSort', {
-  setup() {
-    this.gradebook = createGradebook()
-  }
-})
-
-test('returns false if sorting by any valid criterion', function () {
-  this.gradebook.setColumnOrder({sortType: 'name', direction: 'ascending'})
-
-  strictEqual(this.gradebook.isInvalidSort(), false)
-})
-
-test('returns true if sorting by module position but there are no modules in the course any more', function () {
-  this.gradebook.setColumnOrder({sortType: 'module_position', direction: 'ascending'})
-  this.gradebook.courseContent.contextModules = []
-
-  strictEqual(this.gradebook.isInvalidSort(), true)
-})
-
-test('returns false if sorting by module position and there are modules in the course', function () {
-  this.gradebook.setColumnOrder({sortType: 'module_position', direction: 'ascending'})
-  this.gradebook.courseContent.contextModules = [{id: '1', name: 'Module 1', position: 1}]
-
-  strictEqual(this.gradebook.isInvalidSort(), false)
-})
-
-test('returns true if sorting by custom but there is no custom column order stored', function () {
-  this.gradebook.gradebookColumnOrderSettings = {sortType: 'custom'}
-
-  strictEqual(this.gradebook.isInvalidSort(), true)
-})
-
-test('returns false if sorting by custom and there is a custom column order stored', function () {
-  this.gradebook.gradebookColumnOrderSettings = {sortType: 'custom', customOrder: [1, 2, 3]}
-
-  strictEqual(this.gradebook.isInvalidSort(), false)
-})
-
-QUnit.module('Gradebook#compareAssignmentNames', {
-  getRecord(name) {
-    return {
-      object: {
-        name
-      }
-    }
   },
-
-  setup() {
-    this.gradebook = createGradebook()
-
-    this.firstRecord = this.getRecord('alpha')
-    this.secondRecord = this.getRecord('omega')
-  }
-})
-
-test('returns -1 if the name field comes first alphabetically in the first record', function () {
-  strictEqual(this.gradebook.compareAssignmentNames(this.firstRecord, this.secondRecord), -1)
-})
-
-test('returns 0 if the name field is the same in both records', function () {
-  strictEqual(this.gradebook.compareAssignmentNames(this.firstRecord, this.firstRecord), 0)
-})
-
-test('returns 1 if the name field comes later alphabetically in the first record', function () {
-  strictEqual(this.gradebook.compareAssignmentNames(this.secondRecord, this.firstRecord), 1)
-})
-
-test('comparison is case-sensitive between alpha and Alpha', function () {
-  const thirdRecord = this.getRecord('Alpha')
-
-  strictEqual(this.gradebook.compareAssignmentNames(thirdRecord, this.firstRecord), 1)
-})
-
-test('comparison does not group uppercase letters together', function () {
-  const thirdRecord = this.getRecord('Omega')
-
-  strictEqual(this.gradebook.compareAssignmentNames(thirdRecord, this.secondRecord), 1)
 })
 
 QUnit.module('Gradebook#compareAssignmentModulePositions - when both records have module info', {
@@ -937,8 +873,8 @@ QUnit.module('Gradebook#compareAssignmentModulePositions - when both records hav
     return {
       object: {
         module_ids: [moduleId],
-        module_positions: [positionInModule]
-      }
+        module_positions: [positionInModule],
+      },
     }
   },
 
@@ -947,9 +883,9 @@ QUnit.module('Gradebook#compareAssignmentModulePositions - when both records hav
     this.gradebook.setContextModules([
       {id: '1', name: 'Module 1', position: 1},
       {id: '2', name: 'Another Module', position: 2},
-      {id: '3', name: 'Module 2', position: 3}
+      {id: '3', name: 'Module 2', position: 3},
     ])
-  }
+  },
 })
 
 test("returns a negative number if the position of the first record's module comes first", function () {
@@ -994,16 +930,16 @@ QUnit.module('Gradebook#compareAssignmentModulePositions - when only one record 
     this.firstRecord = {
       object: {
         module_ids: ['1'],
-        module_positions: [1]
-      }
+        module_positions: [1],
+      },
     }
     this.secondRecord = {
       object: {
         module_ids: [],
-        module_positions: []
-      }
+        module_positions: [],
+      },
     }
-  }
+  },
 })
 
 test('returns a negative number when the first record has module information but the second does not', function () {
@@ -1018,7 +954,7 @@ QUnit.module('Gradebook#gradeSort by "total_grade"', {
   setup() {
     this.studentA = {total_grade: {score: 10, possible: 20}}
     this.studentB = {total_grade: {score: 6, possible: 10}}
-  }
+  },
 })
 
 test('sorts by percent when not showing total grade as points', function () {
@@ -1062,7 +998,7 @@ QUnit.module('Gradebook#gradeSort by an assignment group', {
   setup() {
     this.studentA = {assignment_group_301: {score: 10, possible: 20}}
     this.studentB = {assignment_group_301: {score: 6, possible: 10}}
-  }
+  },
 })
 
 test('always sorts by percent', function () {
@@ -1110,11 +1046,11 @@ QUnit.module('Gradebook#gradeSort by an assignment', {
     this.studentA = {
       id: '1',
       sortable_name: 'A, Student',
-      assignment_201: {score: 10, possible: 20}
+      assignment_201: {score: 10, possible: 20},
     }
     this.studentB = {id: '2', sortable_name: 'B, Student', assignment_201: {score: 6, possible: 10}}
     this.gradebook = createGradebook()
-  }
+  },
 })
 
 test('sorts by score', function () {

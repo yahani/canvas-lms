@@ -50,9 +50,9 @@ RSpec.describe Mutations::UpdateDiscussionEntriesReadState do
 
   def run_mutation(opts = {}, current_user = @student)
     result = CanvasSchema.execute(
-      mutation_str(opts),
+      mutation_str(**opts),
       context: {
-        current_user: current_user,
+        current_user:,
         request: ActionDispatch::TestRequest.create
       }
     )
@@ -67,7 +67,7 @@ RSpec.describe Mutations::UpdateDiscussionEntriesReadState do
 
     result = run_mutation({ ids: @entries.map(&:id), read: false })
     expect(@topic.unread_count(@student)).to eq @entries.count
-    expect(result["errors"]).to be nil
+    expect(result["errors"]).to be_nil
     updated_entries = result.dig("data", "updateDiscussionEntriesReadState", "discussionEntries")
 
     updated_entries.each do |entry|

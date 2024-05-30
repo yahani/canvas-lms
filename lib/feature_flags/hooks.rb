@@ -66,6 +66,14 @@ module FeatureFlags
       root_account.settings&.dig(:provision, "lti").present?
     end
 
+    def self.docviewer_enable_iwork_visible_on_hook(context)
+      DocviewerIworkPredicate.new(context, Shard.current.database_server.config[:region]).call
+    end
+
+    def self.usage_metrics_allowed_hook(context)
+      UsageMetricsPredicate.new(context, Shard.current.database_server.config[:region]).call
+    end
+
     def self.analytics_2_after_state_change_hook(_user, context, _old_state, _new_state)
       # if we clear the nav cache before HAStore clears, it can be recached with stale FF data
       nav_cache = Lti::NavigationCache.new(context.root_account)
@@ -76,7 +84,7 @@ module FeatureFlags
     def self.k6_theme_hook(_user, _context, _from_state, transitions)
       transitions["on"] ||= {}
       transitions["on"]["message"] =
-        I18n.t("Enabling the Elementary Theme will change the font in the Canvas interface and simplify "\
+        I18n.t("Enabling the Elementary Theme will change the font in the Canvas interface and simplify " \
                "the Course Navigation Menu for all users in your course.")
       transitions["on"]["reload_page"] = true
       transitions["off"] ||= {}
@@ -97,6 +105,49 @@ module FeatureFlags
                                   "context_proficiencies",
                                   new_state == "on"
                                 )
+      end
+    end
+
+    def self.smart_search_after_state_change_hook(_user, context, old_state, new_state)
+      if %w[off allowed].include?(old_state) && %w[on allowed_on].include?(new_state)
+        if context.is_a?(Account) && !context.site_admin?
+          SmartSearch.delay(priority: Delayed::LOW_PRIORITY).index_account(context)
+        elsif context.is_a?(Course)
+          SmartSearch.delay(priority: Delayed::LOW_PRIORITY).index_course(context)
+        end
+      end
+    end
+
+    def self.differentiated_modules_setting_hook(_user, _context, _old_state, new_state)
+      # this is a temporary hook to allow us to check the flag's state when booting
+      # canvas. The setting will be checked in app/models/quiz_student_visibility and
+      # app/models/assignment_student_visibility.rb
+      Setting.set("differentiated_modules_setting", (new_state == "on") ? "true" : "false")
+    end
+
+    def self.archive_outcomes_after_change_hook(_user, context, _old_state, new_state)
+      # Get all root accounts that isn't the site admin account
+      root_accounts = Account.active.excluding(context).where(parent_account_id: nil)
+      # Filter out root accounts that aren't OS enabled
+      os_enabled_ras = root_accounts.select { |ra| OutcomesService::Service.enabled_in_context?(ra) }
+      os_enabled_ras.each do |account|
+        OutcomesService::Service.delay_if_production(priority: Delayed::LOW_PRIORITY,
+                                                     n_strand: [
+                                                       "outcomes_service_toggle_archive_outcomes_feature_flag",
+                                                       account.global_root_account_id
+                                                     ])
+                                .toggle_feature_flag(
+                                  account,
+                                  "archive_outcomes",
+                                  new_state == "on"
+                                )
+      end
+    end
+
+    def self.lti_registrations_discover_page_hook(_user, context, _from_state, transitions)
+      unless context.feature_enabled?(:lti_registrations_page)
+        transitions["on"] ||= {}
+        transitions["on"]["message"] = I18n.t("The LTI Extensions Discover page won't be accessible unless the LTI Registrations page is enabled")
       end
     end
   end

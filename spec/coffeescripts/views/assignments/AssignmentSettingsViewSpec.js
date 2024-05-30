@@ -17,28 +17,29 @@
  */
 
 import AssignmentGroupCollection from '@canvas/assignments/backbone/collections/AssignmentGroupCollection'
-import Course from '@canvas/courses/backbone/models/Course.coffee'
-import AssignmentGroup from '@canvas/assignments/backbone/models/AssignmentGroup.coffee'
-import AssignmentSettingsView from 'ui/features/assignment_index/backbone/views/AssignmentSettingsView.coffee'
-import AssignmentGroupWeightsView from 'ui/features/assignment_index/backbone/views/AssignmentGroupWeightsView.coffee'
+import Course from '@canvas/courses/backbone/models/Course'
+import AssignmentGroup from '@canvas/assignments/backbone/models/AssignmentGroup'
+import AssignmentSettingsView from 'ui/features/assignment_index/backbone/views/AssignmentSettingsView'
+import AssignmentGroupWeightsView from 'ui/features/assignment_index/backbone/views/AssignmentGroupWeightsView'
 import $ from 'jquery'
+import 'jquery-migrate'
 import fakeENV from 'helpers/fakeENV'
 import assertions from 'helpers/assertions'
-import 'helpers/jquery.simulate'
+import '@canvas/jquery/jquery.simulate'
 
 const group = (opts = {}) => new AssignmentGroup({group_weight: 50, ...opts})
 
 const assignmentGroups = () =>
   new AssignmentGroupCollection([group({name: 'G1'}), group({name: 'G2'})])
 
-const createView = function(opts = {}) {
+const createView = function (opts = {}) {
   const course = new Course({apply_assignment_group_weights: opts.weighted})
   course.urlRoot = '/courses/1' // without this it keeps throwing an error
   const view = new AssignmentSettingsView({
     model: course,
     assignmentGroups: opts.assignmentGroups || assignmentGroups(),
     weightsView: AssignmentGroupWeightsView,
-    userIsAdmin: opts.userIsAdmin
+    userIsAdmin: opts.userIsAdmin,
   })
   view.open()
   return view
@@ -51,9 +52,10 @@ QUnit.module('AssignmentSettingsView', {
   teardown() {
     fakeENV.teardown()
     $('.ui-dialog').remove()
-  }
+  },
 })
 
+// eslint-disable-next-line qunit/resolve-async
 test('should be accessible', assert => {
   const view = createView({weighted: true})
   const done = assert.async()
@@ -131,7 +133,7 @@ QUnit.module('AssignmentSettingsView with an assignment in a closed grading peri
   },
   teardown() {
     fakeENV.teardown()
-  }
+  },
 })
 
 test('disables the checkbox', () => {
@@ -139,12 +141,12 @@ test('disables the checkbox', () => {
   const groups = new AssignmentGroupCollection([group(), closed_group])
   const view = createView({
     weighted: true,
-    assignmentGroups: groups
+    assignmentGroups: groups,
   })
   ok(view.$('#apply_assignment_group_weights').hasClass('disabled'))
   ok(view.$('#ag_weights_wrapper').is(':visible'))
   ok(view.$('#apply_assignment_group_weights').prop('checked'))
-  view.$('#apply_assignment_group_weights').click()
+  view.$('#apply_assignment_group_weights').simulate('click')
   ok(view.$('#ag_weights_wrapper').is(':visible'))
   ok(view.$('#apply_assignment_group_weights').prop('checked'))
   view.remove()
@@ -156,7 +158,7 @@ test('does not disable the checkbox when the user is an admin', () => {
   const view = createView({
     weighted: true,
     assignmentGroups: groups,
-    userIsAdmin: true
+    userIsAdmin: true,
   })
   notOk(view.$('#apply_assignment_group_weights').hasClass('disabled'))
   ok(view.$('#ag_weights_wrapper').is(':visible'))
@@ -172,9 +174,9 @@ test('does not change the apply_assignment_group_weights flag', () => {
   const groups = new AssignmentGroupCollection([group(), closed_group])
   const view = createView({
     weighted: true,
-    assignmentGroups: groups
+    assignmentGroups: groups,
   })
-  view.$('#apply_assignment_group_weights').click()
+  view.$('#apply_assignment_group_weights').simulate('click')
   const attributes = view.getFormData()
   equal(attributes.apply_assignment_group_weights, '1')
   view.remove()
@@ -186,7 +188,7 @@ test('changes the apply_assignment_group_weights flag when the user is an admin'
   const view = createView({
     weighted: true,
     assignmentGroups: groups,
-    userIsAdmin: true
+    userIsAdmin: true,
   })
   view.$('#apply_assignment_group_weights').click()
   const attributes = view.getFormData()
@@ -197,12 +199,12 @@ test('changes the apply_assignment_group_weights flag when the user is an admin'
 test('disables the weight input fields in the table', () => {
   const closed_group = group({
     any_assignment_in_closed_grading_period: true,
-    group_weight: 35
+    group_weight: 35,
   })
   const groups = new AssignmentGroupCollection([group({group_weight: 25}), closed_group])
   const view = createView({
     weighted: true,
-    assignmentGroups: groups
+    assignmentGroups: groups,
   })
   ok(view.$('.ag-weights-tr:eq(0) .group_weight_value').attr('readonly'))
   ok(view.$('.ag-weights-tr:eq(1) .group_weight_value').attr('readonly'))
@@ -213,7 +215,7 @@ test('disables the Save and Cancel buttons', () => {
   const groups = new AssignmentGroupCollection([group(), closed_group])
   const view = createView({
     weighted: true,
-    assignmentGroups: groups
+    assignmentGroups: groups,
   })
   ok(view.$('#cancel-assignment-settings').hasClass('disabled'))
   ok(view.$('#update-assignment-settings').hasClass('disabled'))
@@ -225,7 +227,7 @@ test('disables the Save and Cancel button handlers', () => {
   const groups = new AssignmentGroupCollection([group(), closed_group])
   const view = createView({
     weighted: true,
-    assignmentGroups: groups
+    assignmentGroups: groups,
   })
   sandbox.spy(view, 'saveFormData')
   sandbox.spy(view, 'cancel')
@@ -241,7 +243,7 @@ test('does not allow NaN values to be saved', () => {
   const groups = new AssignmentGroupCollection([group(), closed_group])
   const view = createView({
     weighted: true,
-    assignmentGroups: groups
+    assignmentGroups: groups,
   })
   const weight_input = view.$el.find('.group_weight_value')[0]
   $(weight_input).val('weight for it')
@@ -253,12 +255,12 @@ test('does not allow NaN values to be saved', () => {
 test('calculates the total weight', () => {
   const closed_group = group({
     any_assignment_in_closed_grading_period: true,
-    group_weight: 35
+    group_weight: 35,
   })
   const groups = new AssignmentGroupCollection([group({group_weight: 25}), closed_group])
   const view = createView({
     weighted: true,
-    assignmentGroups: groups
+    assignmentGroups: groups,
   })
   equal(view.$('#percent_total').text(), '60%')
 })

@@ -23,8 +23,8 @@
 // returns an array of enrollments meant for display on /courses/:course_id/sections/:id.
 
 import {useScope as useI18nScope} from '@canvas/i18n'
-import _ from 'underscore'
-import toUnderscore from './str-underscore'
+import {map} from 'lodash'
+import {underscoreString} from '@canvas/convert-case'
 
 const I18n = useI18nScope('section')
 
@@ -51,7 +51,7 @@ const keys = {
     },
     get StudentEnrollment() {
       return I18n.t('enrolled_as_limited_student', 'enrolled as: Student with section-only access')
-    }
+    },
   },
   standard: {
     get TeacherEnrollment() {
@@ -68,27 +68,27 @@ const keys = {
     },
     get StudentEnrollment() {
       return I18n.t('enrolled_as_student', 'enrolled as: Student')
-    }
-  }
+    },
+  },
 }
 
 // #
 // begin returned function here
 // @param {array} array of enrollments returned from /courses/:course_id/enrollments
 export default data =>
-  _.map(data, enrollment => {
+  map(data, enrollment => {
     const scope = enrollment.limit_privileges_to_course_section ? 'limited' : 'standard'
     const customLimited = I18n.t('enrolled as: %{enrollment_type} with section-only access', {
-      enrollment_type: `${enrollment.role}`
+      enrollment_type: `${enrollment.role}`,
     })
     const customStandard = I18n.t('enrolled as: %{enrollment_type}', {
-      enrollment_type: `${enrollment.role}`
+      enrollment_type: `${enrollment.role}`,
     })
     const customLabel = scope === 'limited' ? customLimited : customStandard
 
     // add extra fields to enrollments
     enrollment.typeLabel = keys[scope][enrollment.role] || customLabel
-    enrollment.typeClass = toUnderscore(enrollment.type)
+    enrollment.typeClass = underscoreString(enrollment.type)
 
     return enrollment
   })

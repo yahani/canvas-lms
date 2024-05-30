@@ -47,7 +47,7 @@ describe AuthenticationProvider do
 
     it "enables canvas_authentication if deleting the last aac" do
       account.authentication_providers.destroy_all
-      expect(account.reload.canvas_authentication?).to eq true
+      expect(account.reload.canvas_authentication?).to be true
     end
   end
 
@@ -230,10 +230,11 @@ describe AuthenticationProvider do
                                        "sis_id" => "28",
                                        "sortable_name" => "Cutrer, Cody",
                                        "timezone" => "America/New_York"
-                                     }, purpose: :provisioning)
+                                     },
+                                     purpose: :provisioning)
       @user.reload
       expect(@user.short_name).to eq "Mr. Cutler"
-      expect(@user.communication_channels.email.active.pluck(:path)).to be_include("cody@school.edu")
+      expect(@user.communication_channels.email.active.pluck(:path)).to include("cody@school.edu")
       expect(@pseudonym.integration_id).to eq "abc123"
       expect(@user.locale).to eq "es"
       expect(@user.name).to eq "Cody Cutrer"
@@ -264,7 +265,7 @@ describe AuthenticationProvider do
                                        "timezone" => "America/New_York"
                                      })
       @user.reload
-      expect(@user.communication_channels.email.active.pluck(:path)).to be_include("cody@school.edu")
+      expect(@user.communication_channels.email.active.pluck(:path)).to include("cody@school.edu")
       expect(@pseudonym.integration_id).not_to eq "abc123"
       expect(@user.locale).to eq "es"
       expect(@user.name).to eq "Cody Cutrer"
@@ -274,19 +275,33 @@ describe AuthenticationProvider do
     end
 
     it "doesn't asplode with nil values" do
-      aac.apply_federated_attributes(@pseudonym, "email" => nil, "surname" => nil, "given_name" => nil)
+      aac.apply_federated_attributes(@pseudonym, { "email" => nil, "surname" => nil, "given_name" => nil })
       expect(@user.name).not_to be_blank
+    end
+
+    it "doesn't asplode with an empty email" do
+      aac.apply_federated_attributes(@pseudonym, { "email" => "" })
+      expect(@user.name).not_to be_blank
+    end
+
+    it "ignores empty sis_user_id or integration_id values" do
+      @pseudonym.update sis_user_id: "test", integration_id: "testfrd"
+      aac.apply_federated_attributes(@pseudonym,
+                                     { "sis_id" => "", "internal_id" => "" },
+                                     purpose: :provisioning)
+      expect(@pseudonym.sis_user_id).to eq "test"
+      expect(@pseudonym.integration_id).to eq "testfrd"
     end
 
     context "admin_roles" do
       it "ignores non-existent roles" do
-        aac.apply_federated_attributes(@pseudonym, "admin_roles" => "garbage")
+        aac.apply_federated_attributes(@pseudonym, { "admin_roles" => "garbage" })
         @user.reload
         expect(@user.account_users).not_to be_exists
       end
 
       it "provisions an admin" do
-        aac.apply_federated_attributes(@pseudonym, "admin_roles" => "AccountAdmin")
+        aac.apply_federated_attributes(@pseudonym, { "admin_roles" => "AccountAdmin" })
         @user.reload
         aus = @user.account_users.to_a
         expect(aus.length).to eq 1
@@ -296,14 +311,14 @@ describe AuthenticationProvider do
 
       it "doesn't provision an existing admin" do
         @user.account_users.create!(account: @pseudonym.account)
-        aac.apply_federated_attributes(@pseudonym, "admin_roles" => "AccountAdmin")
+        aac.apply_federated_attributes(@pseudonym, { "admin_roles" => "AccountAdmin" })
         @user.reload
         expect(@user.account_users.count).to eq 1
       end
 
       it "removes no-longer-extant roles" do
         @user.account_users.create!(account: @pseudonym.account)
-        aac.apply_federated_attributes(@pseudonym, "admin_roles" => "")
+        aac.apply_federated_attributes(@pseudonym, { "admin_roles" => "" })
         @user.reload
         expect(@user.account_users.active).not_to be_exists
       end
@@ -311,7 +326,7 @@ describe AuthenticationProvider do
       it "reactivates previously deleted roles" do
         au = @user.account_users.create!(account: @pseudonym.account)
         au.destroy
-        aac.apply_federated_attributes(@pseudonym, "admin_roles" => "AccountAdmin")
+        aac.apply_federated_attributes(@pseudonym, { "admin_roles" => "AccountAdmin" })
         @user.reload
         expect(au.reload).to be_active
       end
@@ -319,22 +334,42 @@ describe AuthenticationProvider do
 
     context "locale" do
       it "translates _ to -" do
-        aac.apply_federated_attributes(@pseudonym, "locale" => "en_GB")
+        aac.apply_federated_attributes(@pseudonym, { "locale" => "en_GB" })
         @user.reload
         expect(@user.locale).to eq "en-GB"
       end
 
       it "follows fallbacks" do
-        aac.apply_federated_attributes(@pseudonym, "locale" => "en-US")
+        aac.apply_federated_attributes(@pseudonym, { "locale" => "en-US" })
         @user.reload
         expect(@user.locale).to eq "en"
       end
 
       it "is case insensitive" do
-        aac.apply_federated_attributes(@pseudonym, "locale" => "en-gb")
+        aac.apply_federated_attributes(@pseudonym, { "locale" => "en-gb" })
         @user.reload
         expect(@user.locale).to eq "en-GB"
       end
+    end
+  end
+
+  context "otp_via_sms" do
+    let(:aac) do
+      account.authentication_providers.new(auth_type: "canvas")
+    end
+
+    it "defaults to true" do
+      expect(aac.otp_via_sms?).to be_truthy
+    end
+
+    it "can opt out" do
+      aac.update! settings: { otp_via_sms: false }
+      expect(aac.otp_via_sms?).to be_falsey
+    end
+
+    it "can opt back in" do
+      aac.update! settings: { otp_via_sms: true }
+      expect(aac.otp_via_sms?).to be_truthy
     end
   end
 end

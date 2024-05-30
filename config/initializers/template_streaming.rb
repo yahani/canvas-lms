@@ -96,7 +96,7 @@ module StreamingContentChecks
     val
   end
 end
-ActionView::StreamingFlow.prepend(StreamingContentChecks) unless ::Rails.env.production?
+ActionView::StreamingFlow.prepend(StreamingContentChecks) unless Rails.env.production?
 
 module SkipEmptyTemplateConcats
   def initialize(original_block)
@@ -107,7 +107,7 @@ end
 ActionView::StreamingBuffer.prepend(SkipEmptyTemplateConcats)
 
 module ActivateShardsOnRender
-  def render(view, *)
+  def render(view, *, **)
     if (active_shard = view.request&.env&.[]("canvas.active_shard"))
       active_shard.activate do
         super

@@ -21,8 +21,9 @@ import $ from 'jquery'
 import moment from 'moment'
 import natcompare from '@canvas/util/natcompare'
 import commonEventFactory from '@canvas/calendar/jquery/CommonEvent/index'
-import ValidatedFormView from '@canvas/forms/backbone/views/ValidatedFormView.coffee'
+import ValidatedFormView from '@canvas/forms/backbone/views/ValidatedFormView'
 import SisValidationHelper from '@canvas/sis/SisValidationHelper'
+import replaceTags from '@canvas/util/replaceTags'
 import editAssignmentTemplate from '../../jst/editAssignment.handlebars'
 import editAssignmentOverrideTemplate from '../../jst/editAssignmentOverride.handlebars'
 import wrapper from '@canvas/forms/jst/EmptyDialogFormWrapper.handlebars'
@@ -30,10 +31,13 @@ import genericSelectOptionsTemplate from '../../jst/genericSelectOptions.handleb
 import datePickerFormat from '@canvas/datetime/datePickerFormat'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 import withinMomentDates from '../../momentDateHelper'
-import '@canvas/datetime'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import * as tz from '@canvas/datetime'
+import fcUtil from '@canvas/calendar/jquery/fcUtil'
+import '@canvas/datetime/jquery'
+import '@canvas/jquery/jquery.instructure_forms'
 import '@canvas/jquery/jquery.instructure_misc_helpers'
 import '../../fcMomentHandlebarsHelpers'
+import {encodeQueryString} from '@canvas/query-string-encoding'
 
 const I18n = useI18nScope('calendar')
 
@@ -50,8 +54,8 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
       postToSISName: ENV.SIS_NAME,
       postToSIS:
         this.event.eventType === 'assignment' ? this.event.assignment.post_to_sis : undefined,
-      datePickerFormat: this.event.allDay ? 'medium_with_weekday' : 'full_with_weekday',
-      important_dates: this.event.important_dates
+      datePickerFormat: 'full_with_weekday',
+      important_dates: this.event.important_dates,
     })
     this.currentContextInfo = null
     if (this.event.override) {
@@ -72,7 +76,7 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
       this.$el.attr('method', 'PUT')
       return this.$el.attr(
         'action',
-        $.replaceTags(this.event.contextInfo.assignment_url, 'id', this.event.object.id)
+        replaceTags(this.event.contextInfo.assignment_url, 'id', this.event.object.id)
       )
     }
   }
@@ -83,6 +87,31 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
 
   contextInfoForCode(code) {
     return this.event.possibleContexts().find(context => context.asset_string === code)
+  }
+
+  disableDateField() {
+    this.$el.find('#assignment_due_at').val('')
+    this.$el.find('#assignment_due_at').prop('disabled', true)
+    this.$el.find('#assignment_override_due_at').val('')
+    this.$el.find('#assignment_override_due_at').prop('disabled', true)
+    this.$el.find('.ui-datepicker-trigger').prop('disabled', true)
+    this.$el.find('#edit_assignment_course_pacing_message').show()
+    this.$el.find('#assignment_override_course_pacing_message').show()
+    this.$el
+      .find('#assignment_override_course_pacing_link')
+      .attr('href', `/courses/${this.event.contextInfo.id}/course_pacing`)
+  }
+
+  enableDateField() {
+    if (this.event.endDate) {
+      this.$el.find('#assignment_due_at').val(this.event.endDate().format('ddd ll'))
+      this.$el.find('#assignment_override_due_at').val(this.event.endDate().format('ddd ll'))
+    }
+    this.$el.find('#assignment_due_at').prop('disabled', false)
+    this.$el.find('#assignment_override_due_at').prop('disabled', false)
+    this.$el.find('.ui-datepicker-trigger').prop('disabled', false)
+    this.$el.find('#edit_assignment_course_pacing_message').hide()
+    this.$el.find('#assignment_override_course_pacing_message').hide()
   }
 
   activate() {
@@ -110,7 +139,7 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
       params.assignment_group_id = data.assignment_group_id
     }
     params.return_to = window.location.href
-    pieces[0] += `?${$.param(params)}`
+    pieces[0] += `?${encodeQueryString(params)}`
     return (window.location.href = pieces.join('#'))
   }
 
@@ -124,15 +153,30 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
 
     if (propagate !== false) this.contextChangeCB(context)
 
+    if (this.event.contextInfo.course_pacing_enabled) this.disableDateField()
+    else this.enableDateField()
+
     // TODO: support adding a new assignment group from this select box
     const assignmentGroupsSelectOptionsInfo = {
-      collection: this.currentContextInfo.assignment_groups.sort(natcompare.byKey('name'))
+      collection: this.currentContextInfo.assignment_groups.sort(natcompare.byKey('name')),
     }
     this.$el
       .find('.assignment_group')
       .html(genericSelectOptionsTemplate(assignmentGroupsSelectOptionsInfo))
     // Only show important date checkbox if selected context is k5 subject
     this.$el.find('#important_dates').toggle(this.currentContextInfo.k5_course)
+    // Set default due time if a value is set
+    if (this.currentContextInfo.default_due_time) {
+      const currentDate = moment(this.$el.find('#assignment_due_at').val())
+      const [hour, minute, second] = this.currentContextInfo.default_due_time.split(':')
+      currentDate.set({hour, minute, second})
+      if (currentDate.isValid()) {
+        this.$el
+          .find('#assignment_due_at')
+          .val(tz.format(fcUtil.unwrap(currentDate), 'date.formats.full_with_weekday'))
+          .change()
+      }
+    }
 
     // Update the edit and more options links with the new context
     this.$el.attr('action', this.currentContextInfo.create_assignment_url)
@@ -173,7 +217,7 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
       data.assignment.important_dates = this.$el
         .find('#calendar_event_important_dates')
         .prop('checked')
-    } else {
+    } else if (data.assignment_override) {
       data.assignment_override.due_at = this.unfudgedDate(data.assignment_override.due_at)
     }
     return data
@@ -195,10 +239,12 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
   }
 
   submitOverride(event, data) {
-    this.event.start = data.due_at // fudged
-    data.due_at = this.unfudgedDate(data.due_at)
-    this.model = this.event
-    return this.submit(event)
+    if (data) {
+      this.event.start = data.due_at // fudged
+      data.due_at = this.unfudgedDate(data.due_at)
+      this.model = this.event
+      return this.submit(event)
+    } else return this.closeCB()
   }
 
   onSaveSuccess() {
@@ -206,10 +252,6 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
   }
 
   onSaveFail(xhr) {
-    let resp
-    if ((resp = JSON.parse(xhr.responseText))) {
-      showFlashAlert({message: resp.error, err: null, type: 'error'})
-    }
     this.closeCB()
     this.disableWhileLoadingOpts = {}
     return super.onSaveFail(xhr)
@@ -239,7 +281,7 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
       postToSIS: post_to_sis,
       maxNameLength: max_name_length,
       name: data.name,
-      maxNameLengthRequired: max_name_length_required
+      maxNameLengthRequired: max_name_length_required,
     })
 
     if (!data.name || $.trim(data.name.toString()).length === 0) {
@@ -248,9 +290,9 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
       errors['assignment[name]'] = [
         {
           message: I18n.t('Name is too long, must be under %{length} characters', {
-            length: max_name_length + 1
-          })
-        }
+            length: max_name_length + 1,
+          }),
+        },
       ]
     }
     return errors
@@ -274,7 +316,7 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
         showFlashAlert({
           message: rangeErrorMessage,
           err: null,
-          type: 'error'
+          type: 'error',
         })
       }
     }
@@ -286,7 +328,7 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
     const validationHelper = new SisValidationHelper({
       postToSIS: post_to_sis,
       dueDateRequired: ENV.DUE_DATE_REQUIRED_FOR_ACCOUNT,
-      dueDate: data.due_at
+      dueDate: data.due_at,
     })
 
     const error_tag = data.name != null ? 'assignment[due_at]' : 'assignment_override[due_at]'
@@ -300,25 +342,21 @@ export default class EditAssignmentDetailsRewrite extends ValidatedFormView {
     const $field = this.$el.find('.datetime_field')
     return $field.datetime_field({
       datepicker: {
-        dateFormat: datePickerFormat(
-          this.event.allDay
-            ? I18n.t('#date.formats.medium_with_weekday')
-            : I18n.t('#date.formats.full_with_weekday')
-        )
-      }
+        dateFormat: datePickerFormat(I18n.t('#date.formats.medium_with_weekday')),
+      },
     })
   }
 }
 EditAssignmentDetailsRewrite.prototype.defaults = {
   width: 440,
-  height: 384
+  height: 384,
 }
 
 EditAssignmentDetailsRewrite.prototype.events = {
   ...EditAssignmentDetailsRewrite.prototype.events,
   'click .save_assignment': 'submitAssignment',
   'click .more_options_link': 'moreOptions',
-  'change .context_id': 'contextChange'
+  'change .context_id': 'contextChange',
 }
 
 EditAssignmentDetailsRewrite.prototype.template = editAssignmentTemplate

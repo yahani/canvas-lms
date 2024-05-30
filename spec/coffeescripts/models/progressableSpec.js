@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import progressable from '@canvas/progress/backbone/models/progressable.coffee'
+import progressable from '@canvas/progress/backbone/models/progressable'
 import {Model} from '@canvas/backbone'
 
 const progressUrl = '/progress'
@@ -36,18 +36,18 @@ QUnit.module('progressable', {
     server.respondWith('GET', progressUrl, [
       200,
       {'Content-Type': 'application/json'},
-      '{"workflow_state": "completed"}'
+      '{"workflow_state": "completed"}',
     ])
     server.respondWith('GET', model.url, [
       200,
       {'Content-Type': 'application/json'},
-      '{"csv": "one,two,three"}'
+      '{"csv": "one,two,three"}',
     ])
   },
   teardown() {
     server.restore()
     clock.restore()
-  }
+  },
 })
 
 test('set progress_url', () => {
@@ -56,7 +56,9 @@ test('set progress_url', () => {
   model.on('progressResolved', spy)
   model.set({progress_url: progressUrl})
   server.respond() // respond to progress, which queues model fetch
+  clock.tick(1)
   server.respond() // respond to model fetch
+  clock.tick(1)
   ok(spy.calledTwice, 'complete and progressResolved handlers called')
   equal(model.progressModel.get('workflow_state'), 'completed')
   equal(model.get('csv'), 'one,two,three')
@@ -68,7 +70,9 @@ test('set progress.url', () => {
   model.on('progressResolved', spy)
   model.progressModel.set({url: progressUrl, workflow_state: 'queued'})
   server.respond() // respond to progress, which queues model fetch
+  clock.tick(1)
   server.respond() // respond to model fetch
+  clock.tick(1)
   ok(spy.calledTwice, 'complete and progressResolved handlers called')
   equal(model.progressModel.get('workflow_state'), 'completed')
   equal(model.get('csv'), 'one,two,three')

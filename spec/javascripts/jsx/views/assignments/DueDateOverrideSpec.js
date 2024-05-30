@@ -17,11 +17,12 @@
  */
 
 import $ from 'jquery'
-import DateValidator from '@canvas/datetime/DateValidator'
+import 'jquery-migrate'
+import DateValidator from '@canvas/grading/DateValidator'
 import DueDateOverrideView from '@canvas/due-dates'
 import fakeENV from 'helpers/fakeENV'
 import StudentGroupStore from '@canvas/due-dates/react/StudentGroupStore'
-import '@canvas/forms/jquery/jquery.instructure_forms' // errorBox
+import '@canvas/jquery/jquery.instructure_forms' // errorBox
 
 QUnit.module('DueDateOverride#validateTokenInput', {
   setup() {
@@ -36,7 +37,7 @@ QUnit.module('DueDateOverride#validateTokenInput', {
   },
   teardown() {
     this.fixtures.innerHTML = ''
-  }
+  },
 })
 
 test('rowKey can be prefixed with a zero', () => {
@@ -60,7 +61,7 @@ QUnit.module('DueDateOverride#validateGroupOverrides', {
   },
   teardown() {
     this.fixtures.innerHTML = ''
-  }
+  },
 })
 
 test('rowKey can be prefixed with a zero', () => {
@@ -89,7 +90,7 @@ QUnit.module('DueDateOverride#validateDatetimes', () => {
   test('skips overrides whose row key has already been validated', () => {
     const overrides = [
       {rowKey: '1', student_ids: [1]},
-      {rowKey: '1', student_ids: [1]}
+      {rowKey: '1', student_ids: [1]},
     ]
     const data = {assignment_overrides: overrides}
 
@@ -107,15 +108,15 @@ QUnit.module('DueDateOverride#validateDatetimes', () => {
     hooks.beforeEach(() => {
       const start_at = {
         date: new Date('Nov 10, 2018').toISOString(),
-        date_context: 'course'
+        date_context: 'course',
       }
       const end_at = {
         date: new Date('Nov 20, 2018').toISOString(),
-        date_context: 'course'
+        date_context: 'course',
       }
 
       fakeENV.setup({
-        VALID_DATE_RANGE: {start_at, end_at}
+        VALID_DATE_RANGE: {start_at, end_at},
       })
     })
 
@@ -150,7 +151,7 @@ QUnit.module('DueDateOverride#validateDatetimes', () => {
 
   QUnit.module('with course pacing', () => {
     test('shows notice when in a paced course', () => {
-      const view = new DueDateOverrideView({inPacedCourse: true})
+      const view = new DueDateOverrideView({inPacedCourse: true, isModuleItem: true})
       view.render()
       const el = view.$el
       ok(el[0].querySelector('[data-testid="CoursePacingNotice"]'))

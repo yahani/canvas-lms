@@ -55,7 +55,7 @@ describe Login::OAuth2Controller do
 
       expect_any_instantiation_of(aac).not_to receive(:get_token)
       Timecop.travel(15.minutes) do
-        get :create, params: { state: state }
+        get :create, params: { state: }
         expect(response).to redirect_to(login_url)
         expect(flash[:delegated_message]).to eq "It took too long to login. Please try again"
       end
@@ -66,7 +66,7 @@ describe Login::OAuth2Controller do
 
       get :create, params: { state: "" }
       expect(response).not_to be_successful
-      expect(session[:sentinel]).to eq true
+      expect(session[:sentinel]).to be true
     end
 
     it "works" do
@@ -159,6 +159,18 @@ describe Login::OAuth2Controller do
       @pseudonym.save!
       session[:sentinel] = true
       jwt = Canvas::Security.create_jwt(aac_id: aac.global_id, nonce: "bob")
+      get :create, params: { state: jwt }
+      expect(response).to redirect_to(login_url)
+    end
+
+    it "redirects to login any time an external timeout is noticed" do
+      session[:oauth2_nonce] = "fred"
+      expect_any_instantiation_of(aac).to receive(:get_token).and_raise(Canvas::TimeoutCutoff)
+      user_with_pseudonym(username: "user", active_all: 1)
+      @pseudonym.authentication_provider = aac
+      @pseudonym.save!
+      session[:sentinel] = true
+      jwt = Canvas::Security.create_jwt(aac_id: aac.global_id, nonce: "fred")
       get :create, params: { state: jwt }
       expect(response).to redirect_to(login_url)
     end

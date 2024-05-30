@@ -23,7 +23,7 @@ class UserMergeData < ActiveRecord::Base
   has_many :records, class_name: "UserMergeDataRecord", inverse_of: :merge_data, autosave: false
   has_many :items, class_name: "UserMergeDataItem", inverse_of: :merge_data, autosave: false
 
-  scope :active, -> { where.not(workflow_state: "deleted") }
+  scope :active, -> { where.not(workflow_state: %w[deleted failed]) }
   scope :splitable, -> { where("created_at > ?", split_time) }
 
   def self.split_time
@@ -31,7 +31,7 @@ class UserMergeData < ActiveRecord::Base
   end
 
   def add_more_data(objects, user: nil, workflow_state: nil, data: [])
-    data = build_more_data(objects, user: user, workflow_state: workflow_state, data: data)
+    data = build_more_data(objects, user:, workflow_state:, data:)
     bulk_insert_merge_data(data)
   end
 

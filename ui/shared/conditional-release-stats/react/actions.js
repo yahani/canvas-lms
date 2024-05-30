@@ -35,7 +35,7 @@ const actionDefs = [
   'LOAD_INITIAL_DATA_START',
   'LOAD_INITIAL_DATA_END',
   'LOAD_STUDENT_DETAILS_START',
-  'LOAD_STUDENT_DETAILS_END'
+  'LOAD_STUDENT_DETAILS_END',
 ]
 
 export const {actions, actionTypes} = createActions(actionDefs)
@@ -50,7 +50,7 @@ actions.closeSidebar = () => {
   }
 }
 
-actions.loadInitialData = assignment => {
+actions.loadInitialData = _assignment => {
   return (dispatch, getState) => {
     dispatch(actions.loadInitialDataStart())
 

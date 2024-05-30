@@ -25,7 +25,7 @@ describe CoursePaceHardEndDateCompressor do
     @course.root_account.enable_feature!(:course_paces)
     @course.enable_course_paces = true
     @course.save!
-    @course_pace = @course.course_paces.create! workflow_state: "active", end_date: "2021-09-10", hard_end_dates: true
+    @course_pace = @course.course_paces.create!(workflow_state: "active", end_date: "2021-09-10", hard_end_dates: true, published_at: Time.zone.now)
     @module = @course.context_modules.create!
   end
 
@@ -62,6 +62,18 @@ describe CoursePaceHardEndDateCompressor do
         end
         compressed = CoursePaceHardEndDateCompressor.compress(@course_pace, @course_pace.course_pace_module_items.order(:id))
         expect(compressed.pluck(:duration)).to eq([1, 1, 2])
+      end
+
+      it "respects course blackout dates" do
+        @course.blackout_dates.create!(event_title: "Blackout Test", start_date: "2021-09-01", end_date: "2021-09-01")
+        compressed = CoursePaceHardEndDateCompressor.compress(@course_pace, @course_pace.course_pace_module_items.order(:id))
+        expect(compressed.pluck(:duration)).to eq([4, 0, 2])
+      end
+
+      it "respects account blackout dates" do
+        @course.account.calendar_events.create!(title: "Blackout Test", start_at: "2021-09-01", end_at: "2021-09-01", blackout_date: true)
+        compressed = CoursePaceHardEndDateCompressor.compress(@course_pace, @course_pace.course_pace_module_items.order(:id))
+        expect(compressed.pluck(:duration)).to eq([4, 0, 2])
       end
 
       context "implicit end dates" do

@@ -43,7 +43,7 @@ describe Mutations::UpdateConversationParticipants do
       }
     GQL
     context = { current_user: user_executing, request: ActionDispatch::TestRequest.create }
-    CanvasSchema.execute(mutation_command, context: context)
+    CanvasSchema.execute(mutation_command, context:)
   end
 
   it "updates the requesting user's participation record" do
@@ -103,6 +103,7 @@ describe Mutations::UpdateConversationParticipants do
       let(:conv2) { conversation(sender, user_model).conversation }
 
       it "updates each view" do
+        allow(InstStatsd::Statsd).to receive(:count)
         query = <<~GQL
           conversationIds: [#{conv.id}, #{conv2.id}],
           starred: true
@@ -116,12 +117,115 @@ describe Mutations::UpdateConversationParticipants do
         expect(result["errors"]).to be_nil
         expect(result.dig("data", "updateConversationParticipants", "errors")).to be_nil
         updated_attrs = result.dig("data", "updateConversationParticipants", "conversationParticipants")
-        expect(updated_attrs.map { |i| i["label"] }).to match_array %w[starred starred]
+        expect(updated_attrs.pluck("label")).to match_array %w[starred starred]
 
         participant1 = participant1.reload
         expect(participant1.starred).to be_truthy
         participant2 = participant2.reload
         expect(participant2.starred).to be_truthy
+        expect(InstStatsd::Statsd).to have_received(:count).with("inbox.conversation.starred.react", 2)
+      end
+
+      it "unstars each conversation" do
+        allow(InstStatsd::Statsd).to receive(:count)
+        query = <<~GQL
+          conversationIds: [#{conv.id}, #{conv2.id}],
+          starred: false
+        GQL
+
+        participant1 = sender.all_conversations.find_by(conversation: conv)
+        participant2 = sender.all_conversations.find_by(conversation: conv2)
+
+        result = execute_with_input(query)
+        expect(result["errors"]).to be_nil
+        expect(result.dig("data", "updateConversationParticipants", "errors")).to be_nil
+        updated_attrs = result.dig("data", "updateConversationParticipants", "conversationParticipants")
+        expect(updated_attrs.pluck("label")).to match_array [nil, nil]
+
+        participant1 = participant1.reload
+        expect(participant1.starred).to be_falsey
+        participant2 = participant2.reload
+        expect(participant2.starred).to be_falsey
+        expect(InstStatsd::Statsd).to have_received(:count).with("inbox.conversation.unstarred.react", 2)
+      end
+
+      it "marks each conversation as unread" do
+        allow(InstStatsd::Statsd).to receive(:count)
+        allow(InstStatsd::Statsd).to receive(:increment)
+        query = <<~GQL
+          conversationIds: [#{conv.id}, #{conv2.id}],
+          workflowState: "unread"
+        GQL
+
+        result = execute_with_input(query)
+        expect(result["errors"]).to be_nil
+        expect(result.dig("data", "updateConversationParticipants", "errors")).to be_nil
+
+        expect(InstStatsd::Statsd).to have_received(:count).with("inbox.conversation.unread.react", 2)
+        expect(InstStatsd::Statsd).not_to have_received(:count).with("inbox.conversation.unread.legacy", 2)
+        expect(InstStatsd::Statsd).not_to have_received(:increment).with("inbox.conversation.unarchived.react")
+
+        updated_attrs = result.dig("data", "updateConversationParticipants", "conversationParticipants")
+        expect(updated_attrs.pluck("workflowState")).to match_array %w[unread unread]
+      end
+
+      it "archives each conversation" do
+        allow(InstStatsd::Statsd).to receive(:count)
+        allow(InstStatsd::Statsd).to receive(:increment)
+        query = <<~GQL
+          conversationIds: [#{conv.id}, #{conv2.id}],
+          workflowState: "archived"
+        GQL
+
+        result = execute_with_input(query)
+        expect(result["errors"]).to be_nil
+        expect(result.dig("data", "updateConversationParticipants", "errors")).to be_nil
+
+        expect(InstStatsd::Statsd).to have_received(:count).with("inbox.conversation.archived.react", 2)
+        expect(InstStatsd::Statsd).not_to have_received(:count).with("inbox.conversation.archived.legacy", 2)
+
+        updated_attrs = result.dig("data", "updateConversationParticipants", "conversationParticipants")
+        expect(updated_attrs.pluck("workflowState")).to match_array %w[archived archived]
+      end
+
+      it "unarchives each conversation by marking as read" do
+        allow(InstStatsd::Statsd).to receive(:increment)
+        sender.all_conversations.find_by(conversation: conv).update(workflow_state: "archived")
+        sender.all_conversations.find_by(conversation: conv2).update(workflow_state: "archived")
+        query = <<~GQL
+          conversationIds: [#{conv.id}, #{conv2.id}],
+          workflowState: "read"
+        GQL
+
+        result = execute_with_input(query)
+        expect(result["errors"]).to be_nil
+        expect(result.dig("data", "updateConversationParticipants", "errors")).to be_nil
+
+        expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.unarchived.react").twice
+        expect(InstStatsd::Statsd).not_to have_received(:increment).with("inbox.conversation.unarchived.legacy")
+
+        updated_attrs = result.dig("data", "updateConversationParticipants", "conversationParticipants")
+        expect(updated_attrs.pluck("workflowState")).to match_array %w[read read]
+      end
+
+      it "unarchives each conversation by marking as unread" do
+        allow(InstStatsd::Statsd).to receive(:increment)
+        sender.all_conversations.find_by(conversation: conv).update(workflow_state: "archived")
+        sender.all_conversations.find_by(conversation: conv2).update(workflow_state: "archived")
+        query = <<~GQL
+          conversationIds: [#{conv.id}, #{conv2.id}],
+          workflowState: "unread"
+        GQL
+
+        result = execute_with_input(query)
+        expect(result["errors"]).to be_nil
+        expect(result.dig("data", "updateConversationParticipants", "errors")).to be_nil
+
+        expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.unarchived.react").twice
+        expect(InstStatsd::Statsd).not_to have_received(:increment).with("inbox.conversation.unarchived.legacy")
+
+        updated_attrs = result.dig("data", "updateConversationParticipants", "conversationParticipants")
+        expect(updated_attrs.pluck("workflowState")).to match_array %w[unread unread]
       end
     end
 

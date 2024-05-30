@@ -18,14 +18,14 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/forms/jquery/jquery.instructure_forms'/* formSubmit */
+import '@canvas/jquery/jquery.instructure_forms' /* formSubmit */
 import 'jqueryui/progressbar'
 
 const I18n = useI18nScope('content_exports')
 
-$(document).ready(function(event) {
+$(document).ready(function (_event) {
   let state = 'nothing'
   let current_id = null
   const $quiz_selection = $('#quiz_selection'),
@@ -39,14 +39,14 @@ $(document).ready(function(event) {
           htmlEscape(I18n.t('messages.this_may_take_a_bit', 'this may take a bit...')) +
           '</div>'
       )
-      .attr('disabled', true)
+      .prop('disabled', true)
     $('.instruction').hide()
     $('.progress_bar_holder').slideDown()
     $('.export_progress').progressbar()
     state = 'nothing'
     let fakeTickCount = 0
-    var tick = function() {
-      if (state == 'nothing') {
+    const tick = function () {
+      if (state === 'nothing') {
         fakeTickCount++
         const progress = ($('.export_progress').progressbar('option', 'value') || 0) + 0.25
         if (fakeTickCount < 10) {
@@ -59,11 +59,11 @@ $(document).ready(function(event) {
         setTimeout(tick, 10000)
       }
     }
-    var checkup = function() {
+    const checkup = function () {
       let lastProgress = null
       let waitTime = 1500
       $.ajaxJSON(
-        location.href + '/' + current_id,
+        window.location.href + '/' + current_id,
         'GET',
         {},
         data => {
@@ -77,7 +77,7 @@ $(document).ready(function(event) {
             )
             $('.export_progress').progressbar('option', 'value', progress)
           }
-          if (content_export.workflow_state == 'exported') {
+          if (content_export.workflow_state === 'exported') {
             $exporter_form.hide()
             $('.export_progress').progressbar('option', 'value', 100)
             $('.progress_message').text(I18n.t('Your content has been exported.'))
@@ -88,7 +88,7 @@ $(document).ready(function(event) {
                 htmlEscape(I18n.t('New Export')) +
                 '</a></p>'
             )
-          } else if (content_export.workflow_state == 'failed') {
+          } else if (content_export.workflow_state === 'failed') {
             const code = 'content_export_' + content_export.id
             $('.progress_bar_holder').hide()
             $exporter_form.hide()
@@ -129,25 +129,25 @@ $(document).ready(function(event) {
         $('.export_messages').show()
       }
     },
-    error(data) {
+    error(_data) {
       $(this)
         .find('.submit_button')
-        .attr('disabled', false)
+        .prop('disabled', false)
         .text(I18n.t('buttons.process', 'Process Data'))
-    }
+    },
   })
 
-  $exporter_form.delegate('.copy_all', 'click', function() {
+  $exporter_form.on('click', '.copy_all', function () {
     $('.quiz_item').prop('checked', $(this).prop('checked'))
   })
 
-  $exporter_form.delegate('.quiz_item', 'click', function() {
+  $exporter_form.on('click', '.quiz_item', function () {
     if (!$(this).prop('checked')) {
       $('.copy_all').prop('checked', false)
     }
   })
 
-  $exporter_form.delegate('input[name=export_type]', 'click', function() {
+  $exporter_form.on('click', 'input[name=export_type]', function () {
     if ($(this).val() === 'qti') {
       $quiz_selection.show()
     } else {

@@ -86,12 +86,49 @@ describe Importers::ContextExternalToolImporter do
       {
         title: "LTI 1.3 Tool",
         url: "http://www.example.com",
-        settings: settings
+        lti_version: "1.3",
+        settings:
       }
     end
 
     it "sets the developer key id" do
       expect(subject.developer_key).to eq developer_key
+    end
+
+    it "sets the lti_version" do
+      expect(subject.lti_version).to eq "1.3"
+    end
+
+    context "when lti_version isn't present in hash" do
+      before do
+        tool_hash.delete :lti_version
+      end
+
+      context "but developer_key is present" do
+        it "sets the lti_version" do
+          expect(subject.lti_version).to eq "1.3"
+        end
+      end
+
+      context "but use_1_3 is present in settings" do
+        before do
+          settings[:use_1_3] = true
+        end
+
+        it "sets the lti_version" do
+          expect(subject.lti_version).to eq "1.3"
+        end
+      end
+
+      context "without developer_key" do
+        before do
+          settings.delete :client_id
+        end
+
+        it "defaults lti_version to 1.1" do
+          expect(subject.lti_version).to eq "1.1"
+        end
+      end
     end
 
     it "does not show LTI 1 warnings" do
@@ -283,15 +320,23 @@ describe Importers::ContextExternalToolImporter do
 
   context "searching for existing tools" do
     before :once do
-      @tool1 = Account.default.context_external_tools.create!(name: "tool", domain: "example.com",
-                                                              shared_secret: "secret", consumer_key: "test", privacy_level: "name_only")
+      @tool1 = Account.default.context_external_tools.create!(name: "tool",
+                                                              domain: "example.com",
+                                                              shared_secret: "secret",
+                                                              consumer_key: "test",
+                                                              privacy_level: "name_only")
       @tool1.settings[:selection_width] = 100
       @tool1.save!
-      @tool2 = Account.default.context_external_tools.create!(name: "tool", url: "http://notexample.com/whatever",
-                                                              shared_secret: "secret", consumer_key: "test", privacy_level: "name_only")
+      @tool2 = Account.default.context_external_tools.create!(name: "tool",
+                                                              url: "http://notexample.com/whatever",
+                                                              shared_secret: "secret",
+                                                              consumer_key: "test",
+                                                              privacy_level: "name_only")
       @migration = @course.content_migrations.new(migration_type: "canvas_cartridge_importer")
       @data = [
-        { migration_id: "1", title: "tool", url: "http://example.com/page",
+        { migration_id: "1",
+          title: "tool",
+          url: "http://example.com/page",
           custom_fields: { "ihasacustomfield" => "blah" } },
         { migration_id: "2", title: "tool", domain: "example.com", selection_width: "100" },
         { migration_id: "3", title: "tool", url: "http://notexample.com" },

@@ -16,9 +16,9 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import _ from 'underscore'
+import {groupBy} from 'lodash'
 import Folder from '../backbone/models/Folder'
-import File from '../backbone/models/File.coffee'
+import File from '../backbone/models/File'
 import ModuleFile from '../backbone/models/ModuleFile'
 
 /*
@@ -31,14 +31,14 @@ import ModuleFile from '../backbone/models/ModuleFile'
 export default function updateModelsUsageRights(apiData, models) {
   const affectedIds = apiData && apiData.file_ids
   // Seperate the models array into a file group and a folder group.
-  const {files, folders} = _.groupBy(models, item => {
+  const {files, folders} = groupBy(models, item => {
     if (item instanceof File) return 'files'
     if (item instanceof ModuleFile) return 'files'
     if (item instanceof Folder) return 'folders'
   })
   // We'll go ahead and update the files and remove the id from our list.
   if (files) {
-    files.map((file, index) => {
+    files.map(file => {
       const id = parseInt(file[file.idAttribute], 10)
       const idx = affectedIds.indexOf(id)
 
@@ -49,12 +49,14 @@ export default function updateModelsUsageRights(apiData, models) {
             license: apiData && apiData.license,
             use_justification: apiData && apiData.use_justification,
             own_copyright: apiData && apiData.own_copyright,
-            license_name: apiData && apiData.license_name
-          }
+            license_name: apiData && apiData.license_name,
+          },
         })
 
         return affectedIds.splice(idx, 1)
       }
+
+      return undefined
     })
   }
 

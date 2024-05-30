@@ -17,7 +17,7 @@
  */
 import I18n from '@canvas/i18n'
 import $ from 'jquery'
-import '@canvas/datetime'
+import '@canvas/datetime/jquery'
 import '@canvas/util/templateData' /* fillTemplateData */
 import 'jqueryui/datepicker'
 import moment from 'moment'
@@ -26,30 +26,31 @@ function makeDate(date) {
   return {
     day: date.getDate(),
     month: date.getMonth(),
-    year: date.getFullYear()
+    year: date.getFullYear(),
   }
 }
 
 export function changeMonth($month, change) {
   const monthNames = I18n.lookup('date.month_names')
-  const monthData = $month.data('calendar_objects')
-  var data = {}
-  var current = null
+  let data = {}
+  let month
+  let year
+  let current = null
   if (typeof change === 'string') {
-    var current = $.datepicker.oldParseDate('mm/dd/yy', change)
+    current = $.datepicker.oldParseDate('mm/dd/yy', change)
     if (current) {
       current.setDate(1)
     }
   }
   if (!current) {
-    var month = parseInt($month.find('.month_number').text(), 10)
-    var year = parseInt($month.find('.year_number').text(), 10)
-    var current = new Date(year, month + change - 1, 1)
+    month = parseInt($month.find('.month_number').text(), 10)
+    year = parseInt($month.find('.year_number').text(), 10)
+    current = new Date(year, month + change - 1, 1)
   }
-  var data = {
+  data = {
     month_name: monthNames[current.getMonth() + 1],
     month_number: current.getMonth() + 1,
-    year_number: current.getFullYear()
+    year_number: current.getFullYear(),
   }
   $month.fillTemplateData({data})
   const firstDayOfWeek = moment.localeData(ENV.MOMENT_LOCALE).firstDayOfWeek()
@@ -61,14 +62,14 @@ export function changeMonth($month, change) {
   date.setDate(date.getDate() - date.getDay() + firstDayOfWeek)
   const firstDayOfSquare = makeDate(date)
   let lastDayOfPreviousMonth = null
-  if (firstDayOfMonth.day != firstDayOfSquare.day) {
+  if (firstDayOfMonth.day !== firstDayOfSquare.day) {
     date.setDate(1)
     date.setMonth(date.getMonth() + 1)
     date.setDate(0)
     lastDayOfPreviousMonth = {
       day: date.getDate(),
       month: firstDayOfSquare.month,
-      year: firstDayOfSquare.year
+      year: firstDayOfSquare.year,
     }
     date.setDate(1)
     date.setMonth(date.getMonth() + 1)
@@ -78,7 +79,7 @@ export function changeMonth($month, change) {
   const lastDayOfMonth = {
     day: date.getDate(),
     month: firstDayOfMonth.month,
-    year: firstDayOfMonth.yearh
+    year: firstDayOfMonth.yearh,
   }
   date.setDate(date.getDate() + 1)
   date.setDate(date.getDate() + (6 - date.getDay()))
@@ -95,29 +96,25 @@ export function changeMonth($month, change) {
   $month.find('.calendar_event').remove()
   let idx = 0
   let day = firstDayOfSquare.day
-  var month = firstDayOfSquare.month
-  var year = firstDayOfSquare.year
-  while (day <= lastDayOfSquare.day || month != lastDayOfSquare.month) {
-    var $day = $days.eq(idx)
+  month = firstDayOfSquare.month
+  year = firstDayOfSquare.year
+  while (day <= lastDayOfSquare.day || month !== lastDayOfSquare.month) {
+    const $day = $days.eq(idx)
     if ($day.length > 0) {
       const classes = $day.attr('class').split(' ')
       const class_names = []
       for (let i = 0; i < classes.length; i++) {
-        if (classes[i].indexOf('date_') == 0) {
+        if (classes[i].indexOf('date_') === 0) {
+          // no-op
         } else {
           class_names.push(classes[i])
         }
       }
       $day.attr('class', class_names.join(' '))
     }
-    $day
-      .show()
-      .addClass('visible')
-      .parents('tr')
-      .show()
-      .addClass('visible')
-    var data = {
-      day_number: day
+    $day.show().addClass('visible').parents('tr').show().addClass('visible')
+    data = {
+      day_number: day,
     }
     const month_number = month < 9 ? `0${month + 1}` : month + 1
     const day_number = day < 10 ? `0${day}` : day
@@ -142,17 +139,17 @@ export function changeMonth($month, change) {
       $div = $day
     }
     $div.removeClass('current_month other_month next_month previous_month today')
-    if (month == firstDayOfMonth.month) {
+    if (month === firstDayOfMonth.month) {
       $div.addClass('current_month')
     } else {
       $div.addClass('other_month')
-      if (firstDayOfMonth.month == (month + 1) % 12) {
+      if (firstDayOfMonth.month === (month + 1) % 12) {
         $div.addClass('previous_month')
       } else {
         $div.addClass('next_month')
       }
     }
-    if (month == today.month && day == today.day && year == today.year) {
+    if (month === today.month && day === today.day && year === today.year) {
       $div.addClass('today')
     }
     day++
@@ -160,8 +157,8 @@ export function changeMonth($month, change) {
     if (
       (lastDayOfPreviousMonth &&
         day > lastDayOfPreviousMonth.day &&
-        month == lastDayOfPreviousMonth.month) ||
-      (day > lastDayOfMonth.day && month == lastDayOfMonth.month)
+        month === lastDayOfPreviousMonth.month) ||
+      (day > lastDayOfMonth.day && month === lastDayOfMonth.month)
     ) {
       month += 1
       if (month >= 12) {
@@ -172,14 +169,12 @@ export function changeMonth($month, change) {
     }
   }
   while (idx < $days.length) {
-    var $day = $days.eq(idx)
-    $day
-      .parents('tr')
-      .hide()
-      .removeClass('visible')
-    $day.hide().removeClass('visible')
+    const $day_ = $days.eq(idx)
+    $day_.parents('tr').hide().removeClass('visible')
+    $day_.hide().removeClass('visible')
     idx++
   }
   if (!$month.hasClass('mini_month')) {
+    // no-op
   }
 }

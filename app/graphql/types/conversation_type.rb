@@ -36,6 +36,10 @@ module Types
       audience = other_users.map(&:id)
       !object.replies_locked_for?(current_user, audience)
     end
+    field :is_private, Boolean, null: true
+    def is_private
+      object.private?
+    end
 
     field :conversation_messages_connection, Types::ConversationMessageType.connection_type, null: true do
       argument :participants, [ID], required: false, prepare: GraphQLHelpers.relay_or_legacy_ids_prepare_func("User")
@@ -44,7 +48,7 @@ module Types
     def conversation_messages_connection(participants: nil, created_before: nil)
       load_association(:conversation_messages).then do |messages|
         Loaders::AssociationLoader.for(ConversationMessage, :conversation_message_participants).load_many(messages).then do
-          messages = messages.select { |message| message.conversation_message_participants.pluck(:user_id, :workflow_state).include?([current_user.id, "active"]) }
+          messages = messages.select { |message| should_return_message?(message) }
           if participants
             messages = messages.select { |message| (participants - message.conversation_message_participants.pluck(:user_id).map(&:to_s)).empty? }
           end
@@ -58,6 +62,17 @@ module Types
       end
     end
 
+    field :conversation_messages_count, Int, null: false
+    def conversation_messages_count
+      scope = ConversationMessage
+              .where(conversation_id: object.id)
+              .joins(:conversation_message_participants)
+
+      scope.where(conversation_message_participants: { user_id: current_user.id, workflow_state: "active" })
+           .or(scope.where(conversation_message_participants: { user_id: current_user.id, workflow_state: nil }))
+           .select("distinct(conversation_messages.id)").count
+    end
+
     field :conversation_participants_connection, Types::ConversationParticipantType.connection_type, null: true
     def conversation_participants_connection
       load_association(:conversation_participants)
@@ -69,6 +84,18 @@ module Types
       load_association(:context).then do |context|
         context&.name
       end
+    end
+
+    field :context_asset_string, String, null: true
+    def context_asset_string
+      load_association(:context).then do |context|
+        context&.asset_string
+      end
+    end
+
+    def should_return_message?(message)
+      participants = message.conversation_message_participants.pluck(:user_id, :workflow_state)
+      participants.include?([current_user.id, "active"]) || participants.include?([current_user.id, nil])
     end
   end
 end

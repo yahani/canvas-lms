@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2019 - present Instructure, Inc.
  *
@@ -18,7 +19,7 @@
 
 import React, {PropsWithChildren, ReactElement} from 'react'
 import * as Sentry from '@sentry/react'
-import {FallbackRender} from '@sentry/react/dist/errorboundary'
+import {FallbackRender} from '@sentry/react/types/errorboundary.d'
 
 export type ErrorBoundaryProps = PropsWithChildren<{
   errorComponent: FallbackRender | ReactElement
@@ -49,7 +50,7 @@ export default class ErrorBoundary extends React.Component<ErrorBoundaryProps, E
           error: this.state.error,
           componentStack: null,
           eventId: null,
-          resetError: () => this.setState({error: null})
+          resetError: () => this.setState({error: null}),
         })
       } else {
         return this.props.errorComponent

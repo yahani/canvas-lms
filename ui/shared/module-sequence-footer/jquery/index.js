@@ -16,10 +16,10 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import $ from 'jquery'
+import {find} from 'lodash'
 import template from '../jst/ModuleSequenceFooter.handlebars'
-import _ from 'underscore'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
 import '@canvas/jquery/jquery.ajaxJSON'
 
 const I18n = useI18nScope('sequence_footer')
@@ -49,10 +49,10 @@ const I18n = useI18nScope('sequence_footer')
 //   }
 let msfInstanceCounter = 0
 
-$.fn.moduleSequenceFooter = function(options = {}) {
+$.fn.moduleSequenceFooter = function (options = {}) {
   // You must pass in a assetType and assetId or we throw an error.
   if (!options.assetType || !options.assetID) {
-    throw 'Option must be set with assetType and assetID'
+    throw new Error('Option must be set with assetType and assetID')
   }
 
   this.msfAnimation = enabled =>
@@ -78,7 +78,7 @@ $.fn.moduleSequenceFooter = function(options = {}) {
         template({
           instanceNumber: this.msfInstance.instanceNumber,
           previous: this.msfInstance.previous,
-          next: this.msfInstance.next
+          next: this.msfInstance.next,
         })
       )
       if (options && options.animation !== undefined) {
@@ -109,7 +109,7 @@ export default class ModuleSequenceFooter {
     Quiz: 'icon-quiz',
     ExternalTool: 'icon-link',
     ExternalUrl: 'icon-link',
-    'Lti::MessageHandler': 'icon-link'
+    'Lti::MessageHandler': 'icon-link',
   }
 
   // Sets up the class variables and generates a url. Fetch should be
@@ -152,7 +152,7 @@ export default class ModuleSequenceFooter {
         {
           asset_type: 'ModuleItem',
           asset_id: params.module_item_id,
-          frame_external_urls: true
+          frame_external_urls: true,
         },
         this.success,
         null,
@@ -165,7 +165,7 @@ export default class ModuleSequenceFooter {
         {
           asset_type: this.assetType,
           asset_id: this.assetID,
-          frame_external_urls: true
+          frame_external_urls: true,
         },
         this.success,
         null,
@@ -219,16 +219,16 @@ export default class ModuleSequenceFooter {
         this.iconClasses[this.item.prev.type]
       )}'></i> ${htmlEscape(this.item.prev.title)}`
       this.previous.tooltipText = I18n.t('prev_module_item_desc', 'Previous: *item*', {
-        wrapper: this.item.prev.title
+        wrapper: this.item.prev.title,
       })
     } else {
       // module id is different
-      const module = _.find(this.modules, m => m.id === this.item.prev.module_id)
+      const module = find(this.modules, m => m.id === this.item.prev.module_id)
       this.previous.tooltip = `<strong style='float:left'>${htmlEscape(
         I18n.t('prev_module', 'Previous Module:')
       )}</strong> <br> ${htmlEscape(module.name)}`
       this.previous.tooltipText = I18n.t('prev_module_desc', 'Previous Module: *module*', {
-        wrapper: module.name
+        wrapper: module.name,
       })
     }
   }
@@ -278,12 +278,12 @@ export default class ModuleSequenceFooter {
       this.next.tooltipText = I18n.t('Next: *item*', {wrapper: this.item.next.title})
     } else {
       // module id is different
-      const module = _.find(this.modules, m => m.id === this.item.next.module_id)
+      const module = find(this.modules, m => m.id === this.item.next.module_id)
       this.next.tooltip = `<strong style='float:left'>${htmlEscape(
         I18n.t('next_module', 'Next Module:')
       )}</strong> <br> ${htmlEscape(module.name)}`
       this.next.tooltipText = I18n.t('next_module_desc', 'Next Module: *module*', {
-        wrapper: module.name
+        wrapper: module.name,
       })
     }
   }

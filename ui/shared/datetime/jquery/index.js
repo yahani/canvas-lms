@@ -18,13 +18,13 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import tz from '@canvas/timezone'
-import htmlEscape from 'html-escape'
+import * as tz from '../index'
+import htmlEscape from '@instructure/html-escape'
 import * as dateFunctions from '../date-functions'
 import {changeTimezone} from '../changeTimezone'
-import DatetimeField from './InstrumentedDatetimeField'
+import DatetimeField from './DatetimeField'
 import renderDatepickerTime from '../react/components/render-datepicker-time'
-import '@canvas/keycodes'
+import '@canvas/jquery-keycodes'
 import 'jqueryui/datepicker'
 
 const I18n = useI18nScope('instructure_date_and_time')
@@ -123,7 +123,7 @@ $.fn.datepicker = function (options) {
       let numericHr = parseInt(hr || '0', 10)
       const numericMin = parseInt(min || '0', 10)
 
-      if (tz.hasMeridian()) {
+      if (tz.hasMeridiem()) {
         let isPM = numericHr > 12 // definitely PM if the hour value is past noon
         numericHr %= 12
 
@@ -151,7 +151,7 @@ $.fn.datepicker = function (options) {
     $input.val(formatter.format(inputdate)).change()
   }
   if (!$.fn.datepicker.timepicker_initialized) {
-    $(document).delegate('.ui-datepicker-ok', 'click', () => {
+    $(document).on('click', '.ui-datepicker-ok', () => {
       const cur = $.datepicker._curInst
       const inst = cur
       const sel = $(
@@ -167,7 +167,7 @@ $.fn.datepicker = function (options) {
       }
     })
     $(document)
-      .delegate('.ui-datepicker-time-hour', 'change keypress focus blur', function (event) {
+      .on('change keypress focus blur', '.ui-datepicker-time-hour', function (event) {
         const cur = $.datepicker._curInst
         if (cur) {
           const $this = $(this)
@@ -188,30 +188,30 @@ $.fn.datepicker = function (options) {
           cur.input.data('time-hour', val)
         }
       })
-      .delegate('.ui-datepicker-time-minute', 'change keypress focus blur', function () {
+      .on('change keypress focus blur', '.ui-datepicker-time-minute', function () {
         const cur = $.datepicker._curInst
         if (cur) {
           const val = $(this).val()
           cur.input.data('time-minute', val)
         }
       })
-      .delegate('.ui-datepicker-time-ampm', 'change keypress focus blur', function () {
+      .on('change keypress focus blur', '.ui-datepicker-time-ampm', function () {
         const cur = $.datepicker._curInst
         if (cur) {
           const val = $(this).val()
           cur.input.data('time-ampm', val)
         }
       })
-    $(document).delegate(
-      '.ui-datepicker-time-hour,.ui-datepicker-time-minute,.ui-datepicker-time-ampm',
+    $(document).on(
       'mousedown',
+      '.ui-datepicker-time-hour,.ui-datepicker-time-minute,.ui-datepicker-time-ampm',
       function () {
         $(this).focus()
       }
     )
-    $(document).delegate(
-      '.ui-datepicker-time-hour,.ui-datepicker-time-minute,.ui-datepicker-time-ampm',
+    $(document).on(
       'change keypress focus blur',
+      '.ui-datepicker-time-hour,.ui-datepicker-time-minute,.ui-datepicker-time-ampm',
       event => {
         if (event.keyCode && event.keyCode === 13) {
           const cur = $.datepicker._curInst
@@ -285,21 +285,20 @@ $.fn.timepicker = function () {
         const offset = $(this).offset()
         const height = $(this).outerHeight()
         const width = $(this).outerWidth()
-        const $picker = $('#time_picker')
+        $picker = $('#time_picker')
         $picker
           .css({
             left: -1000,
             height: 'auto',
-            width: 'auto'
+            width: 'auto',
           })
           .show()
-        const pickerOffset = $picker.offset()
         const pickerHeight = $picker.outerHeight()
         const pickerWidth = $picker.outerWidth()
         $picker
           .css({
             top: offset.top + height,
-            left: offset.left
+            left: offset.left,
           })
           .end()
         $('#time_picker .time_slot')
@@ -308,15 +307,15 @@ $.fn.timepicker = function () {
         $picker.data('attached_to', $(this)[0])
         const windowHeight = $(window).height()
         const windowWidth = $(window).width()
-        const scrollTop = $.windowScrollTop()
+        const scrollTop = window.scrollY
         if (offset.top + height - scrollTop + pickerHeight > windowHeight) {
           $picker.css({
-            top: offset.top - pickerHeight
+            top: offset.top - pickerHeight,
           })
         }
         if (offset.left + pickerWidth > windowWidth) {
           $picker.css({
-            left: offset.left + width - pickerWidth
+            left: offset.left + width - pickerWidth,
           })
         }
         $('#time_picker').hide().slideDown()
@@ -351,14 +350,15 @@ $.fn.timepicker = function () {
         }
         if ($current.length === 0) {
           idx = parseInt(time, 10) - 1
-          if (isNaN(idx)) {
+          if (Number.isNaN(Number(idx))) {
             idx = 0
           }
           $('#time_picker .time_slot').eq(idx).triggerHandler('mouseover')
           return
         }
-        if (event.keyString == 'ctrl+up') {
-          var $parent = $current.parent('.widget_group')
+        let $parent
+        if (event.keyString === 'ctrl+up') {
+          $parent = $current.parent('.widget_group')
           idx = $parent.children('.time_slot').index($current)
           if ($parent.hasClass('ampm_group')) {
             idx = min / 15
@@ -366,11 +366,11 @@ $.fn.timepicker = function () {
             idx = parseInt(hr, 10) - 1
           }
           $parent.prev('.widget_group').find('.time_slot').eq(idx).triggerHandler('mouseover')
-        } else if (event.keyString == 'ctrl+right') {
+        } else if (event.keyString === 'ctrl+right') {
           $current.next('.time_slot').triggerHandler('mouseover')
-        } else if (event.keyString == 'ctrl+left') {
+        } else if (event.keyString === 'ctrl+left') {
           $current.prev('.time_slot').triggerHandler('mouseover')
-        } else if (event.keyString == 'ctrl+down') {
+        } else if (event.keyString === 'ctrl+down') {
           $parent = $current.parent('.widget_group')
           idx = $parent.children('.time_slot').index($current)
           const $list = $parent.next('.widget_group').find('.time_slot')
@@ -378,7 +378,7 @@ $.fn.timepicker = function () {
           if ($parent.hasClass('hour_group')) {
             idx = min / 15
           } else if ($parent.hasClass('minute_group')) {
-            idx = ampm == 'am' ? 0 : 1
+            idx = ampm === 'am' ? 0 : 1
           }
           $list.eq(idx).triggerHandler('mouseover')
         }
@@ -390,7 +390,7 @@ $._initializeTimepicker = function () {
   const $picker = $(document.createElement('div'))
   $picker.attr('id', 'time_picker').css({
     position: 'absolute',
-    display: 'none'
+    display: 'none',
   })
   let pickerHtml = "<div class='widget_group hour_group'>"
   pickerHtml += "<div class='ui-widget ui-state-default time_slot'>01</div>"

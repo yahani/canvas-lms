@@ -16,23 +16,22 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Backbone from '@canvas/backbone'
-import NoQuizzesView from 'ui/features/quizzes_index/backbone/views/NoQuizzesView.js'
-import $ from 'jquery'
+import NoQuizzesView from 'ui/features/quizzes_index/backbone/views/NoQuizzesView'
 import assertions from 'helpers/assertions'
-import 'helpers/jquery.simulate'
+import '@canvas/jquery/jquery.simulate'
 
 QUnit.module('NoQuizzesView', {
   setup() {
     this.view = new NoQuizzesView()
-  }
+  },
 })
 
-test('it should be accessible', function(assert) {
+// eslint-disable-next-line qunit/resolve-async
+test('it should be accessible', function (assert) {
   const done = assert.async()
   assertions.isAccessible(this.view, done, {a11yReport: true})
 })
 
-test('it renders', function() {
+test('it renders', function () {
   ok(this.view.$el.hasClass('item-group-condensed'))
 })

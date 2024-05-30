@@ -37,10 +37,15 @@ describe UserMerge do
       expect { UserMerge.from(user2).into(fake_student) }.to raise_error("cannot merge a test student")
     end
 
+    it "fails if there is an existing active user merge data object for the same user pair" do
+      UserMerge.from(user2).into(user1)
+      expect { UserMerge.from(user2).into(user1) }.to raise_error(UserMerge::UnsafeMergeError)
+    end
+
     it "logs who did the user merge" do
       merger = user_model
       mergeme = UserMerge.from(user2)
-      mergeme.into(user1, merger: merger, source: "this spec")
+      mergeme.into(user1, merger:, source: "this spec")
       expect(mergeme.merge_data.items.where(item_type: "logs").take.item).to eq "{:merger_id=>#{merger.id}, :source=>\"this spec\"}"
     end
 
@@ -68,7 +73,7 @@ describe UserMerge do
       user2.reload
       expect(user2.pseudonyms).to be_empty
       user1.reload
-      expect(user1.pseudonyms.map(&:unique_id)).to be_include("sam@yahoo.com")
+      expect(user1.pseudonyms.map(&:unique_id)).to include("sam@yahoo.com")
     end
 
     it "moves lti_id to the new users" do
@@ -81,6 +86,7 @@ describe UserMerge do
       expect(user1.reload.past_lti_ids.take.user_lti_id).to eq old_lti
       expect(user1.past_lti_ids.take.user_lti_context_id).to eq old_lti_context
       user3 = user_model
+      Lti::Asset.opaque_identifier_for(user3)
       UserMerge.from(user1).into(user3)
       expect(user3.reload.past_lti_ids.where(context_id: course1).take.user_lti_id).to eq user_1_old_lti
       expect(user3.past_lti_ids.where(context_id: course2).take.user_lti_id).to eq old_lti
@@ -254,9 +260,9 @@ describe UserMerge do
         attachment_model context: user1
         submission = assignment.submit_homework user1, attachments: [@attachment]
         UserMerge.from(user2).into(user1)
-        expect(user2.reload.submissions.length).to eql(0)
-        expect(user1.reload.submissions.length).to eql(1)
-        expect(user1.submissions.map(&:id)).to be_include(submission.id)
+        expect(user2.reload.submissions.length).to be(0)
+        expect(user1.reload.submissions.length).to be(1)
+        expect(user1.submissions.map(&:id)).to include(submission.id)
       end
 
       it "ignores scored unsubmitted submission belonging to from user" do
@@ -283,10 +289,10 @@ describe UserMerge do
         assignment2.grade_student(user2, grader: @teacher, grade: 10)
         submission2 = Submission.where(user_id: user2, assignment_id: assignment2).graded.take
         UserMerge.from(user2).into(user1)
-        expect(user2.reload.submissions.length).to eql(0)
-        expect(user1.reload.submissions.length).to eql(2)
-        expect(user1.submissions.map(&:id)).to be_include(submission.id)
-        expect(user1.submissions.map(&:id)).not_to be_include(submission2.id)
+        expect(user2.reload.submissions.length).to be(0)
+        expect(user1.reload.submissions.length).to be(2)
+        expect(user1.submissions.map(&:id)).to include(submission.id)
+        expect(user1.submissions.map(&:id)).not_to include(submission2.id)
       end
     end
 
@@ -302,16 +308,16 @@ describe UserMerge do
       s3 = a2.find_or_create_submission(user2)
       s3.submission_type = "online_quiz"
       s3.save!
-      expect(user2.submissions.length).to eql(2)
-      expect(user1.submissions.length).to eql(1)
+      expect(user2.submissions.length).to be(2)
+      expect(user1.submissions.length).to be(1)
       UserMerge.from(user2).into(user1)
       user2.reload
       user1.reload
-      expect(user2.submissions.length).to eql(1)
+      expect(user2.submissions.length).to be(1)
       expect(user2.submissions.first.id).to eql(s2.id)
-      expect(user1.submissions.length).to eql(2)
-      expect(user1.submissions.map(&:id)).to be_include(s1.id)
-      expect(user1.submissions.map(&:id)).to be_include(s3.id)
+      expect(user1.submissions.length).to be(2)
+      expect(user1.submissions.map(&:id)).to include(s1.id)
+      expect(user1.submissions.map(&:id)).to include(s3.id)
     end
 
     it "does not move or delete submission when both users have submissions" do
@@ -382,8 +388,8 @@ describe UserMerge do
       expect(qs2.reload.submission_id).to eq sub.id
 
       expect(user1.quiz_submissions.length).to be(2)
-      expect(user1.quiz_submissions.map(&:id)).to be_include(qs2.id)
-      expect(user1.quiz_submissions.map(&:id)).to be_include(qs3.id)
+      expect(user1.quiz_submissions.map(&:id)).to include(qs2.id)
+      expect(user1.quiz_submissions.map(&:id)).to include(qs3.id)
     end
 
     it "moves ccs to the new user (but only if they don't already exist)" do
@@ -474,7 +480,7 @@ describe UserMerge do
       enrollment3 = course1.enroll_student(user1,
                                            enrollment_state: "invited",
                                            allow_multiple_enrollments: true,
-                                           section: section)
+                                           section:)
       enrollment4 = course1.enroll_teacher(user1)
 
       UserMerge.from(user1).into(user2)
@@ -584,16 +590,16 @@ describe UserMerge do
       add_linked_observer(user1, observer1)
       add_linked_observer(user1, observer2)
       add_linked_observer(user2, observer2)
-      expect(ObserverEnrollment.count).to eql 3
+      expect(ObserverEnrollment.count).to be 3
       Enrollment.where(user_id: observer2, associated_user_id: user1).update_all(workflow_state: "completed")
 
       UserMerge.from(user1).into(user2)
-      expect(user1.observee_enrollments.size).to eql 1 # deleted
+      expect(user1.observee_enrollments.size).to be 1 # deleted
       expect(user1.observee_enrollments.active_or_pending).to be_empty
-      expect(user2.observee_enrollments.size).to eql 2
-      expect(user2.observee_enrollments.active_or_pending.size).to eql 2
-      expect(observer1.observer_enrollments.active_or_pending.size).to eql 1
-      expect(observer2.observer_enrollments.active_or_pending.size).to eql 1
+      expect(user2.observee_enrollments.size).to be 2
+      expect(user2.observee_enrollments.active_or_pending.size).to be 2
+      expect(observer1.observer_enrollments.active_or_pending.size).to be 1
+      expect(observer2.observer_enrollments.active_or_pending.size).to be 1
     end
 
     it "moves and uniquify observers" do
@@ -602,6 +608,11 @@ describe UserMerge do
       add_linked_observer(user1, observer1)
       add_linked_observer(user1, observer2)
       add_linked_observer(user2, observer2)
+
+      # make sure active link from user 1 comes over even if user 2 has
+      # a destroyed link
+      link = add_linked_observer(user2, observer1)
+      link.destroy
 
       UserMerge.from(user1).into(user2)
       data = UserMergeData.where(user_id: user2).first
@@ -646,12 +657,12 @@ describe UserMerge do
       UserMerge.from(user1).into(user2)
       expect(c1.reload.user_id).to eql user2.id
       expect(c1.conversation.participants).not_to include(user1)
-      expect(user1.reload.unread_conversations_count).to eql 0
+      expect(user1.reload.unread_conversations_count).to be 0
 
       expect(c2.reload.user_id).to eql user2.id
       expect(c2.conversation.participants).not_to include(user1)
       expect(c2.conversation.private_hash).not_to eql old_private_hash
-      expect(user2.reload.unread_conversations_count).to eql 2
+      expect(user2.reload.unread_conversations_count).to be 2
     end
 
     it "points other user's observers to the new user" do
@@ -779,7 +790,7 @@ describe UserMerge do
                                        body: "hi again"
                                      })
 
-        expect(s1.versions.count).to eql(2)
+        expect(s1.versions.count).to be(2)
         s1.versions.each { |v| expect(v.model.user_id).to eql(user2.id) }
         expect(s_other.versions.first.model.user_id).to eql(other_user.id)
 
@@ -787,7 +798,7 @@ describe UserMerge do
         s1 = Submission.find(s1.id)
         s_other.reload
 
-        expect(s1.versions.count).to eql(2)
+        expect(s1.versions.count).to be(2)
         s1.versions.each { |v| expect(v.model.user_id).to eql(user1.id) }
         expect(s_other.versions.first.model.user_id).to eql(other_user.id)
       end
@@ -805,12 +816,12 @@ describe UserMerge do
 
         versions = SubmissionVersion.where(version_id: submission.versions)
 
-        expect(versions.count).to eql(2)
+        expect(versions.count).to be(2)
         versions.each { |v| expect(v.user_id).to eql(user2.id) }
         UserMerge.from(user2).into(user1)
 
         versions.reload
-        expect(versions.count).to eql(2)
+        expect(versions.count).to be(2)
         versions.each { |v| expect(v.user_id).to eql(user1.id) }
       end
     end
@@ -863,7 +874,8 @@ describe UserMerge do
     it "moves past_lti_id to the new user on other shard" do
       @shard1.activate do
         account = Account.create!
-        @user1 = user_with_pseudonym(username: "user1@example.com", active_all: 1, account: account)
+        @user1 = user_with_pseudonym(username: "user1@example.com", active_all: 1, account:)
+        Lti::Asset.opaque_identifier_for(@user1)
       end
       course = course_factory(active_all: true)
       user2 = user_with_pseudonym(username: "user2@example.com", active_all: 1)
@@ -879,26 +891,83 @@ describe UserMerge do
       ).to eq "fake_lti_id_from_old_merge"
     end
 
-    it "moves prefs over with old format" do
-      @shard1.activate do
-        @user2 = user_model
-        account = Account.create!
-        @shard_course = course_factory(account: account)
-        @user2.preferences[:custom_colors] = { "course_#{@course.id}" => "#254284" }
+    describe "move_lti_ids" do
+      before :once do
+        @shard1.activate do
+          account1 = Account.create!
+          @user1 = user_with_pseudonym(username: "user1@example.com", account: account1)
+          @lti_context_id_1 = Lti::Asset.opaque_identifier_for(@user1)
+          @lti_id_1 = @user1.lti_id
+          @uuid1 = @user1.uuid
+          course_with_student account: account1, user: @user1, active_all: true
+        end
+        @user2 = user_with_pseudonym
+        @lti_id_2 = @user2.lti_id
+        @uuid2 = @user2.uuid
       end
-      course = course_factory
-      user1 = user_model
-      @user2.preferences[:custom_colors]["course_#{course.global_id}"] = "#346543"
-      @user2.save!
-      UserMerge.from(@user2).into(user1)
-      expect(user1.reload.preferences[:custom_colors].keys).to eq ["course_#{@shard_course.global_id}", "course_#{course.id}"]
+
+      it "moves lti ids to the new user if possible" do
+        UserMerge.from(@user1).into(@user2)
+
+        expect(@user1.reload).to be_deleted
+        expect(@user1.lti_context_id).to be_nil
+        expect([@uuid1, @uuid2]).not_to include @user1.uuid
+
+        expect(@user2.reload.lti_context_id).to eq @lti_context_id_1
+        expect(@user2.lti_id).to eq @lti_id_1
+        expect(@user2.uuid).to eq @uuid1
+
+        merge_items = UserMergeData.active.find_by(user_id: @user2.id).items
+        expect(merge_items.find_by(item_type: "lti_id").item).to eq @lti_id_2
+        expect(merge_items.find_by(item_type: "uuid").item).to eq @uuid2
+      end
+
+      it "falls back on the old behavior if unique constraint check fails" do
+        # force a constraint violation by stubbing out the shadow record update
+        expect(@user1).to receive(:update_shadow_records_synchronously!).at_least(:once).and_return(nil)
+        allow(InstStatsd::Statsd).to receive(:increment)
+        expect { UserMerge.from(@user1).into(@user2) }.not_to raise_error
+        expect(InstStatsd::Statsd).to have_received(:increment).with("user_merge.move_lti_ids.unique_constraint_failure")
+        expect(@user1.reload).to be_deleted
+        expect(@user1.lti_context_id).to eq @lti_context_id_1
+        expect(@user2.past_lti_ids.shard(@shard1).where(user_lti_context_id: @lti_context_id_1)).to exist
+      end
+
+      it "doesn't move lti ids if the target user has enrollments" do
+        course_with_student(user: @user2, active_all: true)
+
+        UserMerge.from(@user1).into(@user2)
+
+        expect(@user1.reload.lti_context_id).to eq @lti_context_id_1
+        expect(@user1.lti_id).to eq @lti_id_1
+        expect(@user1.uuid).to eq @uuid1
+
+        expect(@user2.reload.lti_context_id).to be_nil
+        expect(@user2.lti_id).to eq @lti_id_2
+        expect(@user2.uuid).to eq @uuid2
+        expect(@user2.past_lti_ids.shard(@shard1).where(user_lti_context_id: @lti_context_id_1)).to exist
+
+        # ensure past lti ids aren't orphaned when another merge happens
+        user3 = user_with_pseudonym
+        uuid3 = user3.uuid
+        UserMerge.from(@user2).into(user3)
+        expect(user3.reload.uuid).to eq uuid3
+        expect(user3.past_lti_ids.shard(@shard1).where(user_lti_context_id: @lti_context_id_1)).to exist
+      end
+
+      it "doesn't move lti ids if the target user has an lti_context_id" do
+        lti_context_id_2 = Lti::Asset.opaque_identifier_for(@user2)
+        UserMerge.from(@user1).into(@user2)
+        expect(@user1.reload.lti_context_id).to eq @lti_context_id_1
+        expect(@user2.reload.lti_context_id).to eq lti_context_id_2
+      end
     end
 
-    it "moves prefs over with new format" do
+    it "moves prefs over" do
       @shard1.activate do
         @user2 = user_model
         account = Account.create!
-        @shard_course = course_factory(account: account)
+        @shard_course = course_factory(account:)
       end
       course = course_factory
       user1 = user_model
@@ -910,26 +979,11 @@ describe UserMerge do
       )
     end
 
-    it "moves nicknames with old format" do
+    it "moves nicknames" do
       @shard1.activate do
         @user2 = user_model
         account = Account.create!
-        @shard_course = course_factory(account: account)
-        @user2.preferences[:course_nicknames] = { @shard_course.id => "Marketing" }
-      end
-      course = course_factory
-      user1 = user_model
-      @user2.preferences[:course_nicknames][course.global_id] = "Math"
-      @user2.save!
-      UserMerge.from(@user2).into(user1)
-      expect(user1.reload.preferences[:course_nicknames].keys).to eq [@shard_course.global_id, course.id]
-    end
-
-    it "moves nicknames with new format" do
-      @shard1.activate do
-        @user2 = user_model
-        account = Account.create!
-        @shard_course = course_factory(account: account)
+        @shard_course = course_factory(account:)
         @user2.set_preference(:course_nicknames, @shard_course.id, "Marketing")
       end
       course = course_factory
@@ -946,14 +1000,16 @@ describe UserMerge do
       @shard1.activate do
         @user2 = user_model
         account = Account.create!
-        @shard_course = course_factory(account: account)
+        @shard_course = course_factory(account:)
         @shard_course.enroll_user(@user2)
         group = account.groups.create!
         @fav = Favorite.create!(user: @user2, context: @shard_course)
         @fav2 = Favorite.create!(user: @user2, context: group)
+        Favorite.create!(user: @user2, context: course_model(account:)).update!(context: nil)
       end
       user1 = user_model
       UserMerge.from(@user2).into(user1)
+      expect(user1.favorites.size).to eq 2
       expect(user1.favorites.where(context_type: "Course").take.context).to eq @shard_course
       expect(user1.favorites.where(context_type: "Group").count).to eq 1
     end
@@ -1009,7 +1065,7 @@ describe UserMerge do
       cc1 = @cc
       @shard1.activate do
         account = Account.create!
-        @user2 = user_with_pseudonym(username: "user2@example.com", active_all: 1, account: account)
+        @user2 = user_with_pseudonym(username: "user2@example.com", active_all: 1, account:)
         @p2 = @pseudonym
       end
 
@@ -1024,6 +1080,23 @@ describe UserMerge do
       expect(@user2.communication_channels.to_a.map(&:path).sort).to eq ["user1@example.com", "user2@example.com"]
       expect(@user2.all_pseudonyms).to eq [p1, @p2]
       expect(@user2.associated_shards).to eq [@shard1, Shard.default]
+    end
+
+    it "handles conflicting notification policies" do
+      user1 = user_with_pseudonym(username: "user1@example.com", active_all: 1)
+      p1 = @pseudonym
+      cc1 = @cc
+      notification_policy_model(notification: notification_model, communication_channel: cc1)
+
+      @shard1.activate { @user2 = user_model }
+
+      UserMerge.from(user1).into(@user2)
+
+      expect(user1).to be_deleted
+      expect(p1.reload.user).to eq @user2
+      expect(cc1.reload).to be_retired
+      @user2.reload
+      expect(@user2.communication_channels.to_a.map(&:path).sort).to eq ["user1@example.com"]
     end
 
     it "handles root_account_ids on ccs" do
@@ -1046,7 +1119,7 @@ describe UserMerge do
 
       @shard2.activate do
         account = Account.create!
-        @user2 = user_with_pseudonym(username: "user2@example.com", active_all: 1, account: account)
+        @user2 = user_with_pseudonym(username: "user2@example.com", active_all: 1, account:)
         @p3 = @pseudonym
         UserMerge.from(user1).into(@user2)
       end
@@ -1165,17 +1238,27 @@ describe UserMerge do
       # different shards (e.g. root_attachment and its copy) can cause
       # :boom: ... set high ids for things that get copied, so their
       # copies' ids don't collide
-      root_attachment = Attachment.create(id: 1_000_000, context: @course, filename: "unique_name1.txt",
+      root_attachment = Attachment.create(id: 1_000_000,
+                                          context: @course,
+                                          filename: "unique_name1.txt",
                                           uploaded_data: StringIO.new("root_attachment_data"))
       user1 = User.create!
       # should not copy because it's identical to @user2_attachment1
-      user1_attachment1 = Attachment.create!(user: user1, context: user1, filename: "shared_name1.txt",
+      user1_attachment1 = Attachment.create!(user: user1,
+                                             context: user1,
+                                             filename: "shared_name1.txt",
                                              uploaded_data: StringIO.new("shared_data"))
       # copy should have root_attachment directed to @user2_attachment2, and be renamed
-      user1_attachment2 = Attachment.create!(id: 1_000_001, user: user1, context: user1, filename: "shared_name2.txt",
+      user1_attachment2 = Attachment.create!(id: 1_000_001,
+                                             user: user1,
+                                             context: user1,
+                                             filename: "shared_name2.txt",
                                              uploaded_data: StringIO.new("shared_data2"))
       # should copy as a root_attachment (even though it isn't one currently)
-      user1_attachment3 = Attachment.create!(id: 1_000_002, user: user1, context: user1, filename: "unique_name2.txt",
+      user1_attachment3 = Attachment.create!(id: 1_000_002,
+                                             user: user1,
+                                             context: user1,
+                                             filename: "unique_name2.txt",
                                              uploaded_data: StringIO.new("root_attachment_data"))
       user1_attachment3.content_type = "text/plain"
       user1_attachment3.save!
@@ -1185,13 +1268,19 @@ describe UserMerge do
         new_account = Account.create!
         @user2 = user_with_pseudonym(account: new_account)
 
-        @user2_attachment1 = Attachment.create!(user: @user2, context: @user2, filename: "shared_name1.txt",
+        @user2_attachment1 = Attachment.create!(user: @user2,
+                                                context: @user2,
+                                                filename: "shared_name1.txt",
                                                 uploaded_data: StringIO.new("shared_data"))
 
-        @user2_attachment2 = Attachment.create!(user: @user2, context: @user2, filename: "unique_name3.txt",
+        @user2_attachment2 = Attachment.create!(user: @user2,
+                                                context: @user2,
+                                                filename: "unique_name3.txt",
                                                 uploaded_data: StringIO.new("shared_data2"))
 
-        @user2_attachment3 = Attachment.create!(user: @user2, context: @user2, filename: "shared_name2.txt",
+        @user2_attachment3 = Attachment.create!(user: @user2,
+                                                context: @user2,
+                                                filename: "shared_name2.txt",
                                                 uploaded_data: StringIO.new("unique_data"))
       end
 
@@ -1213,7 +1302,9 @@ describe UserMerge do
 
     it "marks cross-shard user submission attachments so they're still visible" do
       user1 = User.create!
-      user1_attachment = Attachment.create!(user: user1, context: user1, filename: "shared_name1.txt",
+      user1_attachment = Attachment.create!(user: user1,
+                                            context: user1,
+                                            filename: "shared_name1.txt",
                                             uploaded_data: StringIO.new("shared_data"))
       course_factory
       a1 = assignment_model(submission_types: "online_upload")

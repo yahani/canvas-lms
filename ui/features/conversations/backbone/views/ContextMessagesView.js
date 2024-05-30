@@ -15,6 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
+import $ from 'jquery'
 import CollectionView from '@canvas/backbone-collection-view'
 import ContextMessageView from './ContextMessageView'
 
@@ -23,7 +24,7 @@ export default class ContextMessagesView extends CollectionView {
     this.prototype.itemView = ContextMessageView
   }
 
-  initialize(options) {
+  initialize(_options) {
     super.initialize(...arguments)
     return this.collection.each(model => model.bind('removeView', this.handleChildViewRemoval))
   }

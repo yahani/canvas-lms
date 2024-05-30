@@ -19,30 +19,15 @@
 import {createStore, applyMiddleware} from 'redux'
 import rootReducer from '../reducers'
 import initialState from './initialState'
-import thunkMiddleware from 'redux-thunk'
+import {thunk} from 'redux-thunk'
 import {batch, batching} from 'redux-batch-middleware'
 
-export default function(props, state) {
+export default function (props, state) {
   const store = createStore(
     batching(rootReducer),
     state || initialState(props),
-    applyMiddleware(thunkMiddleware, batch)
+    applyMiddleware(thunk, batch)
   )
-
-  // We want the links accordion tabs to be the same when the sidebar tray
-  // is opened and closed, so we persist the index of the open accordion
-  // to session storage.
-  store.subscribe(() => {
-    try {
-      const accordionIndex = store.getState().ui.selectedAccordionIndex
-      if (accordionIndex !== window.sessionStorage.getItem('canvas_rce_links_accordion_index')) {
-        window.sessionStorage.setItem('canvas_rce_links_accordion_index', accordionIndex)
-      }
-    } catch (err) {
-      // If there is an error accessing session storage, just ignore it.
-      // We are likely in a test environment
-    }
-  })
 
   return store
 }

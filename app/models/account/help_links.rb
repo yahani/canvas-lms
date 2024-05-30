@@ -41,7 +41,7 @@ class Account::HelpLinks
         available_to: %w[user student teacher admin observer unenrolled],
         text: -> { I18n.t("#help_dialog.search_the_canvas_guides", "Search the Canvas Guides") },
         subtext: -> { I18n.t("#help_dialog.canvas_help_sub", "Find answers to common questions") },
-        url: Setting.get("help_dialog_canvas_guide_url", I18n.t(:"community.guides_home")),
+        url: I18n.t(:"community.guides_home"),
         type: "default",
         id: :search_the_canvas_guides,
         is_featured: true,
@@ -63,10 +63,10 @@ class Account::HelpLinks
         available_to: %w[user student teacher admin observer unenrolled],
         text: -> { I18n.t("#help_dialog.covid", "COVID-19 Canvas Resources") },
         subtext: -> { I18n.t("#help_dialog.covid_sub", "Tips for teaching and learning online") },
-        url: Setting.get("help_dialog_covid_url", I18n.t(:"community.contingency_covid")),
+        url: I18n.t(:"community.contingency_covid"),
         type: "default",
         id: :covid,
-        is_new: true,
+        is_new: false,
         is_featured: false,
         feature_headline: -> { "" }
       }.freeze
@@ -82,9 +82,9 @@ class Account::HelpLinks
   def filtered_links(links)
     show_feedback_link = Setting.get("show_feedback_link", "false") == "true"
     links.select do |link|
-      link[:id].to_s == "covid" ? Account.site_admin.feature_enabled?(:featured_help_links) : true
+      (link[:id].to_s == "covid") ? Account.site_admin.feature_enabled?(:featured_help_links) : true
     end.select do |link|
-      link[:id].to_s == "report_a_problem" || link[:id].to_s == "instructor_question" ? show_feedback_link : true
+      (link[:id].to_s == "report_a_problem" || link[:id].to_s == "instructor_question") ? show_feedback_link : true
     end
   end
 
@@ -111,6 +111,7 @@ class Account::HelpLinks
         link[:text] ||= default_link[:text]
         link[:subtext] ||= default_link[:subtext]
         link[:url] ||= default_link[:url]
+        link[:no_new_window] ||= default_link[:no_new_window]
         link[:is_featured] = default_link[:is_featured] unless link.key?(:is_featured)
         link[:is_new] = default_link[:is_new] unless link.key?(:is_new)
         link[:feature_headline] ||= default_link[:feature_headline]

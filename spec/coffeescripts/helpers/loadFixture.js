@@ -16,28 +16,29 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import jQuery from 'jquery'
+import $ from 'jquery'
+import 'jquery-migrate'
 
-const $fixtures = jQuery('#fixtures')
+const $fixtures = $('#fixtures')
 const fixtures = {}
 let fixtureId = 1
-export default function(fixture) {
+export default function (fixture) {
   const id = fixture + fixtureId++
   const path = `fixtures/${fixture}.html`
-  jQuery.ajax({
+  $.ajax({
     async: false,
     cache: false,
     dataType: 'html',
     url: path,
     success(html) {
-      return (fixtures[id] = jQuery('<div/>', {
+      return (fixtures[id] = $('<div/>', {
         html,
-        id
+        id,
       }).appendTo($fixtures))
     },
     error() {
       return console.error('Failed to load fixture', path)
-    }
+    },
   })
   return fixtures[id]
 }

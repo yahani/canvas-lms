@@ -18,17 +18,17 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import tz from '@canvas/timezone'
-import htmlEscape from 'html-escape'
+import * as tz from '@canvas/datetime'
+import htmlEscape from '@instructure/html-escape'
 import editPlannerNoteTemplate from '../../jst/editPlannerNote.handlebars'
 import datePickerFormat from '@canvas/datetime/datePickerFormat'
-import '@canvas/datetime'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import '@canvas/datetime/jquery'
+import '@canvas/jquery/jquery.instructure_forms'
 import '@canvas/jquery/jquery.instructure_misc_helpers'
 import 'date-js'
-import fcUtil from '@canvas/calendar/jquery/fcUtil.coffee'
+import fcUtil from '@canvas/calendar/jquery/fcUtil'
 import commonEventFactory from '@canvas/calendar/jquery/CommonEvent/index'
-import ValidatedFormView from '@canvas/forms/backbone/views/ValidatedFormView.coffee'
+import ValidatedFormView from '@canvas/forms/backbone/views/ValidatedFormView'
 import '../../fcMomentHandlebarsHelpers'
 
 const I18n = useI18nScope('calendar')
@@ -36,7 +36,7 @@ const I18n = useI18nScope('calendar')
 export default class EditPlannerNoteDetails extends ValidatedFormView {
   events = {
     ...EditPlannerNoteDetails.prototype.events,
-    'change .context_id': 'contextChange'
+    'change .context_id': 'contextChange',
   }
 
   template = editPlannerNoteTemplate
@@ -46,7 +46,7 @@ export default class EditPlannerNoteDetails extends ValidatedFormView {
       title: event.title,
       contexts: event.plannerNoteContexts(),
       date: event.startDate(),
-      details: htmlEscape(event.description)
+      details: htmlEscape(event.description),
     })
 
     this.event = event
@@ -97,7 +97,14 @@ export default class EditPlannerNoteDetails extends ValidatedFormView {
   }
 
   activate() {
-    return this.$el.find('select.context_id').change()
+    const availableContexts = this.event.plannerNoteContexts()?.map(context => context.name)
+    if (!this.event.contextInfo || !availableContexts?.includes(this.event.contextInfo.name)) {
+      this.setContext(availableContexts[0])
+      this.currentContextInfo =
+        this.event.possibleContexts().find(context => context.name === availableContexts[0]) || null
+      this.event.contextInfo = this.currentContextInfo
+      this.contextChangeCB(this.currentContextInfo.asset_string)
+    }
   }
 
   setContext(newContext) {
@@ -134,9 +141,9 @@ export default class EditPlannerNoteDetails extends ValidatedFormView {
     // set them up as appropriate variants of datetime_field
     $date.datetime_field({
       datepicker: {
-        dateFormat: datePickerFormat(I18n.t('#date.formats.default'))
+        dateFormat: datePickerFormat(I18n.t('#date.formats.default')),
       },
-      dateOnly: true
+      dateOnly: true,
     })
     $time.time_field()
 
@@ -155,7 +162,7 @@ export default class EditPlannerNoteDetails extends ValidatedFormView {
       details: data.details,
       id: this.event.object.id,
       type: 'planner_note',
-      context_code: data.context_code
+      context_code: data.context_code,
     }
     // check if input box was cleared for explicitly undated
     if (params.todo_date) {

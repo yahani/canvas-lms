@@ -17,7 +17,7 @@
  */
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import _ from 'underscore'
+import {debounce} from 'lodash'
 
 const I18n = useI18nScope('common_bundle')
 
@@ -32,11 +32,11 @@ export default function setupCSP(rootElement) {
         message: I18n.t(
           'Content on this page violates the security policy, contact your admin for assistance.'
         ),
-        type: 'error'
+        type: 'error',
       })
     }
 
-    const setupCSPForIframes = _.debounce(
+    const setupCSPForIframes = debounce(
       () =>
         Array.from(rootElement.querySelectorAll('iframe.attachment-html-iframe')).forEach(frame => {
           if (!frame.getAttribute('csp')) {
@@ -59,7 +59,7 @@ export default function setupCSP(rootElement) {
 
     cspMutationObserver.observe(rootElement, {
       childList: true,
-      subtree: true
+      subtree: true,
     })
   }
 }

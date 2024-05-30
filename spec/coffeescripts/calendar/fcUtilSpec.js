@@ -16,9 +16,9 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import fcUtil from '@canvas/calendar/jquery/fcUtil.coffee'
-import tz from '@canvas/timezone'
-import tzInTest from '@canvas/timezone/specHelpers'
+import fcUtil from '@canvas/calendar/jquery/fcUtil'
+import * as tz from '@canvas/datetime'
+import tzInTest from '@canvas/datetime/specHelpers'
 import timezone from 'timezone'
 import denver from 'timezone/America/Denver'
 
@@ -27,13 +27,13 @@ QUnit.module('Calendar', {
     tzInTest.configureAndRestoreLater({
       tz: timezone(denver, 'America/Denver'),
       tzData: {
-        'America/Denver': denver
-      }
+        'America/Denver': denver,
+      },
     })
   },
   teardown() {
     tzInTest.restore()
-  }
+  },
 })
 
 test('addMinuteDelta: works with no DST shift', () => {

@@ -24,11 +24,14 @@ import Adapter from 'enzyme-adapter-react-16'
 import {canvas} from '@instructure/ui-themes'
 import en_US from 'timezone/en_US'
 import './jsx/spec-support/specProtection'
-import {filterUselessConsoleMessages} from '@instructure/js-utils'
+import filterUselessConsoleMessages from '@instructure/filter-console-messages'
 import './jsx/spec-support/timezoneBackwardsCompatLayer'
 import {up as configureDateTime} from 'ui/boot/initializers/configureDateTime'
 import {up as configureDateTimeMomentParser} from 'ui/boot/initializers/configureDateTimeMomentParser'
-import 'translations/_core_en'
+import {useTranslations} from '@canvas/i18n'
+import CoreTranslations from 'translations/en.json'
+
+useTranslations('en', CoreTranslations)
 
 filterUselessConsoleMessages(console)
 configureDateTime()
@@ -50,9 +53,9 @@ if (!window.ENV) window.ENV = {}
 canvas.use({
   overrides: {
     transitions: {
-      duration: '0ms'
-    }
-  }
+      duration: '0ms',
+    },
+  },
 })
 
 const requireAll = context => {
@@ -66,22 +69,7 @@ const requireAll = context => {
   keys.map(context)
 }
 
-if (process.env.JSPEC_PATH) {
-  let isFile = false
-  try {
-    isFile = __webpack_modules__[require.resolveWeak(`../../${process.env.JSPEC_PATH}`)]
-  } catch (e) {
-    // ignore
-  }
-  if (isFile) {
-    // eslint-disable-next-line import/no-dynamic-require
-    require(`../../${process.env.JSPEC_PATH}`)
-  } else {
-    requireAll(
-      require.context(`../../${process.env.JSPEC_PATH}`, process.env.JSPEC_RECURSE !== '0', /\.js$/)
-    )
-  }
-} else {
+if (!process.env.JSPEC_PATH) {
   requireAll(
     require.context(
       CONTEXT_COFFEESCRIPT_SPEC,
@@ -96,9 +84,11 @@ if (process.env.JSPEC_PATH) {
       RESOURCE_EMBER_GRADEBOOK_SPEC
     )
   )
+
   requireAll(
     require.context(CONTEXT_JSX_SPEC, process.env.JSPEC_RECURSE !== '0', RESOURCE_JSX_SPEC)
   )
+
   // eslint-disable-next-line import/no-dynamic-require
   require(WEBPACK_PLUGIN_SPECS)
 }

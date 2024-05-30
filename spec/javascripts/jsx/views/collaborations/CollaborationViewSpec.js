@@ -17,8 +17,9 @@
  */
 
 import $ from 'jquery'
+import 'jquery-migrate'
 import fakeENV from 'helpers/fakeENV'
-import CollaborationView from 'ui/features/collaborations/backbone/views/CollaborationView.coffee'
+import CollaborationView from 'ui/features/collaborations/backbone/views/CollaborationView'
 
 let fixtures
 let view
@@ -61,7 +62,7 @@ QUnit.module('CollaborationsView screenreader only content', {
   teardown() {
     fakeENV.teardown()
     fixtures.empty()
-  }
+  },
 })
 
 test('shows beginning info alert and adds class to iframe', () => {

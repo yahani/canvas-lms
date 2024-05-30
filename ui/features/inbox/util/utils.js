@@ -15,6 +15,10 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
+import {User} from '../graphql/User'
+import {useScope as useI18nScope} from '@canvas/i18n'
+
+const I18n = useI18nScope('conversations_2')
 
 export const responsiveQuerySizes = ({mobile = false, tablet = false, desktop = false} = {}) => {
   const querySizes = {}
@@ -30,6 +34,12 @@ export const responsiveQuerySizes = ({mobile = false, tablet = false, desktop = 
   return querySizes
 }
 
+const DEFAULT_USER_PROPERTIES = {
+  _id: null,
+  name: I18n.t('DELETED USER'),
+  shortName: I18n.t('DELETED USER'),
+}
+
 // Takes in data from either a VIEWABLE_SUBMISSIONS_QUERY or CONVERSATIONS_QUERY
 // Outputs an inbox conversation wrapper
 export const inboxConversationsWrapper = (data, isSubmissionComments = false) => {
@@ -39,6 +49,8 @@ export const inboxConversationsWrapper = (data, isSubmissionComments = false) =>
       const inboxConversation = {}
       if (isSubmissionComments) {
         const newestSubmissionComment = conversation?.commentsConnection?.nodes[0]
+        inboxConversation.workflowState = conversation?.readState
+        inboxConversation.id = conversation?.id
         inboxConversation._id = conversation?._id
         inboxConversation.subject =
           newestSubmissionComment?.course.contextName +
@@ -51,24 +63,29 @@ export const inboxConversationsWrapper = (data, isSubmissionComments = false) =>
           isSubmissionComments
         )
         inboxConversation.messages = conversation?.commentsConnection.nodes
+        inboxConversation.count = conversation?.commentsConnection.nodes.length || 0
       } else {
+        inboxConversation.id = conversation?.id
         inboxConversation._id = conversation?.conversation?._id
-        inboxConversation.subject = conversation?.conversation?.subject
+        inboxConversation.subject = conversation?.conversation?.subject || ''
         inboxConversation.lastMessageCreatedAt =
-          conversation?.conversation.conversationMessagesConnection.nodes[0].createdAt
+          conversation?.conversation.conversationMessagesConnection.nodes[0]?.createdAt || ''
         inboxConversation.lastMessageContent =
-          conversation?.conversation.conversationMessagesConnection.nodes[0].body
+          conversation?.conversation.conversationMessagesConnection.nodes[0]?.body || ''
         inboxConversation.workflowState = conversation?.workflowState
         inboxConversation.label = conversation?.label
         inboxConversation.messages =
           conversation?.conversation?.conversationMessagesConnection.nodes
+        inboxConversation.count = conversation?.conversation?.conversationMessagesCount || 0
         inboxConversation.participants =
           conversation.conversation.conversationParticipantsConnection.nodes
         inboxConversation.participantString = getParticipantsString(
           inboxConversation?.participants,
           isSubmissionComments,
-          inboxConversation?.messages[inboxConversation.messages.length - 1].author.name
+          inboxConversation?.messages[inboxConversation.messages.length - 1]?.author?.shortName ||
+            DEFAULT_USER_PROPERTIES.name
         )
+        inboxConversation.isPrivate = conversation?.conversation?.isPrivate
       }
       inboxConversations.push(inboxConversation)
     })
@@ -94,7 +111,7 @@ export const inboxMessagesWrapper = (data, isSubmissionComments = false) => {
         inboxMessage._id = message?._id
         inboxMessage.contextName = message?.contextName
         inboxMessage.createdAt = message?.createdAt
-        inboxMessage.author = message?.author
+        inboxMessage.author = message?.author || User.mock(DEFAULT_USER_PROPERTIES)
         inboxMessage.recipients = []
         inboxMessage.body = message?.comment
         inboxMessage.attachmentsConnection = null
@@ -105,7 +122,7 @@ export const inboxMessagesWrapper = (data, isSubmissionComments = false) => {
         inboxMessage._id = message?._id
         inboxMessage.contextName = message?.contextName
         inboxMessage.createdAt = message?.createdAt
-        inboxMessage.author = message?.author
+        inboxMessage.author = message?.author || User.mock(DEFAULT_USER_PROPERTIES)
         inboxMessage.recipients = message?.recipients
         inboxMessage.body = message?.body
         inboxMessage.attachmentsConnection = message?.attachmentsConnection
@@ -122,8 +139,9 @@ export const inboxMessagesWrapper = (data, isSubmissionComments = false) => {
 const getSubmissionCommentsParticipantString = messages => {
   const uniqueParticipants = []
   messages.forEach(message => {
-    if (!uniqueParticipants.some(x => x._id === message.author._id)) {
-      uniqueParticipants.push({_id: message.author._id, authorName: message.author.name})
+    const messageAuthor = message.author || User.mock(DEFAULT_USER_PROPERTIES)
+    if (!uniqueParticipants.some(x => x._id === messageAuthor._id)) {
+      uniqueParticipants.push({_id: messageAuthor._id, authorName: messageAuthor.name})
     }
   })
   const uniqueParticipantNames = uniqueParticipants.map(participant => participant.authorName)
@@ -131,9 +149,11 @@ const getSubmissionCommentsParticipantString = messages => {
 }
 const getConversationParticipantString = (participants, conversationOwnerName) => {
   const participantString = participants
-    .filter(p => p.user.name !== conversationOwnerName)
+    .filter(p => p?.user?.shortName !== conversationOwnerName)
     .reduce((prev, curr) => {
-      return prev + ', ' + curr.user.name
+      if (!curr?.user?.shortName && DEFAULT_USER_PROPERTIES.name === conversationOwnerName)
+        return prev
+      return prev + ', ' + (curr?.user?.shortName || DEFAULT_USER_PROPERTIES.name)
     }, '')
   return conversationOwnerName + participantString
 }

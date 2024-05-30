@@ -17,13 +17,12 @@
 
 import $ from 'jquery'
 
-import _ from 'underscore'
 import {Collection} from '@canvas/backbone'
-import Section from '../models/Section.coffee'
-import Group from '../models/Group.coffee'
-import Outcome from '@canvas/grade-summary/backbone/models/Outcome.coffee'
-import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection.coffee'
-import WrappedCollection from './WrappedCollection.coffee'
+import Section from '../models/Section'
+import Group from '../models/Group'
+import Outcome from '@canvas/grade-summary/backbone/models/Outcome'
+import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection'
+import WrappedCollection from './WrappedCollection'
 import natcompare from '@canvas/util/natcompare'
 
 class GroupCollection extends PaginatedCollection {
@@ -56,14 +55,14 @@ export default class OutcomeSummaryCollection extends Collection {
     this.rawCollections = {
       groups: new GroupCollection([], {course_id: this.course_id}),
       links: new LinkCollection([], {course_id: this.course_id}),
-      rollups: new RollupCollection([], {course_id: this.course_id, user_id: this.user_id})
+      rollups: new RollupCollection([], {course_id: this.course_id, user_id: this.user_id}),
     }
     return (this.outcomeCache = new Collection())
   }
 
   fetch = () => {
     const dfd = $.Deferred()
-    const requests = _.values(this.rawCollections).map(collection => {
+    const requests = Object.values(this.rawCollections).map(collection => {
       collection.loadAll = true
       return collection.fetch()
     })
@@ -73,8 +72,7 @@ export default class OutcomeSummaryCollection extends Collection {
 
   rollups() {
     const studentRollups = this.rawCollections.rollups.at(0).get('scores')
-    const pairs = studentRollups.map(x => [x.links.outcome, x])
-    return _.object(pairs)
+    return Object.fromEntries(studentRollups.map(x => [x.links.outcome, x]))
   }
 
   populateGroupOutcomes() {

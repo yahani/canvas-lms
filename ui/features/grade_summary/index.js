@@ -28,6 +28,7 @@ import '@canvas/jquery/jquery.disableWhileLoading'
 // Ensure the gradebook summary code has had a chance to setup all its handlers
 GradeSummary.setup()
 
+let router
 class GradebookSummaryRouter extends Backbone.Router {
   initialize() {
     if (!ENV.student_outcome_gradebook_enabled) return
@@ -40,14 +41,14 @@ class GradebookSummaryRouter extends Backbone.Router {
       this.outcomeView = new IndividualStudentView({
         el: $('#outcomes'),
         course_id,
-        student_id: user_id
+        student_id: user_id,
       })
     } else {
       this.outcomes = new OutcomeSummaryCollection([], {course_id, user_id})
       this.outcomeView = new OutcomeSummaryView({
         el: $('#outcomes'),
         collection: this.outcomes,
-        toggles: $('.outcome-toggles')
+        toggles: $('.outcome-toggles'),
       })
     }
   }
@@ -74,12 +75,18 @@ class GradebookSummaryRouter extends Backbone.Router {
 }
 GradebookSummaryRouter.prototype.routes = {
   '': 'tab',
-  'tab-:route(/*path)': 'tab'
+  'tab-:route(/*path)': 'tab',
 }
 
-let router
 $(() => {
   GradeSummary.renderSelectMenuGroup()
+  GradeSummary.renderSubmissionCommentsTray()
+  if (ENV.student_grade_summary_upgrade || ENV.restrict_quantitative_data) {
+    GradeSummary.renderGradeSummaryTable()
+  }
+  if (ENV.can_clear_badge_counts) {
+    GradeSummary.renderClearBadgeCountsButton()
+  }
 
   router = new GradebookSummaryRouter()
   Backbone.history.start()

@@ -21,13 +21,13 @@ import {fireEvent, render} from '@testing-library/react'
 
 import {COURSE, BLACKOUT_DATES} from '../../../__tests__/fixtures'
 
-import CoursePaceDateInput, {CoursePacesDateInputProps} from '../course_pace_date_input'
+import CoursePaceDateInput, {type CoursePacesDateInputProps} from '../course_pace_date_input'
 import moment from 'moment'
 
 beforeAll(() => {
   window.ENV.VALID_DATE_RANGE = {
     end_at: {date: COURSE.end_at, date_context: 'course'},
-    start_at: {date: COURSE.start_at, date_context: 'course'}
+    start_at: {date: COURSE.start_at, date_context: 'course'},
   }
   window.ENV.CONTEXT_TIMEZONE = 'Asia/Tokyo'
 })
@@ -49,7 +49,7 @@ describe('CoursePacesDateSelector', () => {
     weekendsDisabled: true,
     blackoutDates: BLACKOUT_DATES,
     startDate: moment(COURSE.start_at),
-    endDate: moment(COURSE.start_at).add(7, 'days')
+    endDate: moment(COURSE.start_at).add(7, 'days'),
   }
 
   it('renders an editable selector for primary course paces', () => {
@@ -86,9 +86,9 @@ describe('CoursePacesDateSelector', () => {
     const blackoutDates = [
       {
         event_title: 'Student Break',
-        start_date: moment('September 2, 2021'),
-        end_date: moment('September 10, 2021')
-      }
+        start_date: moment('09-02-2021', 'MM-DD-YYYY'),
+        end_date: moment('09-10-2021', 'MM-DD-YYYY'),
+      },
     ]
     const {getByText} = render(
       <CoursePaceDateInput {...defaultProps} dateValue="2021-09-04" blackoutDates={blackoutDates} />

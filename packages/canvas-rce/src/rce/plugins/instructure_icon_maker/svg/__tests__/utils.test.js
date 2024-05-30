@@ -16,7 +16,9 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {splitTextIntoLines, convertFileToBase64, decode} from '../utils'
+import {splitTextIntoLines, decode} from '../utils'
+import {convertFileToBase64} from '../../../shared/fileUtils'
+import {MAX_TOTAL_TEXT_CHARS} from '../constants'
 
 describe('splitTextIntoLines()', () => {
   it('returns empty list if text is empty', () => {
@@ -43,7 +45,7 @@ describe('splitTextIntoLines()', () => {
       'amet, consectetur adipiscing',
       'elit, sed eiusmod tempor',
       'incidunt ut labore et',
-      'dolore magna aliqua.'
+      'dolore magna aliqua.',
     ])
   })
 
@@ -52,8 +54,60 @@ describe('splitTextIntoLines()', () => {
       'Incompreh-',
       'ensibility',
       'is a long',
-      'word!'
+      'word!',
     ])
+  })
+
+  it('does not count beginning or trailing whitespace when computing lines', () => {
+    const text = ' icon maker rocks !       '
+    const lines = splitTextIntoLines(text, MAX_TOTAL_TEXT_CHARS)
+    expect(lines).toStrictEqual(['icon maker rocks !'])
+  })
+
+  it('returns empty array when text is whitespace only', () => {
+    const text = ''
+    const lines = splitTextIntoLines(text, MAX_TOTAL_TEXT_CHARS)
+    expect(lines).toStrictEqual([])
+  })
+
+  describe('ignores consecutive', () => {
+    it('whitespaces', () => {
+      const text = 'icon  maker   rocks !'
+      const lines = splitTextIntoLines(text, MAX_TOTAL_TEXT_CHARS)
+      expect(lines).toStrictEqual(['icon maker rocks !'])
+    })
+
+    it('tabs', () => {
+      const text = 'icon\t\tmaker\t\t\trocks\t!'
+      const lines = splitTextIntoLines(text, MAX_TOTAL_TEXT_CHARS)
+      expect(lines).toStrictEqual(['icon maker rocks !'])
+    })
+
+    it('line breaks', () => {
+      const text = 'icon\n\nmaker\n\n\nrocks\n!'
+      const lines = splitTextIntoLines(text, MAX_TOTAL_TEXT_CHARS)
+      expect(lines).toStrictEqual(['icon maker rocks !'])
+    })
+  })
+
+  describe('beginning or trailing', () => {
+    it('whitespaces', () => {
+      const text = '  icon maker rocks ! '
+      const lines = splitTextIntoLines(text, MAX_TOTAL_TEXT_CHARS)
+      expect(lines).toStrictEqual(['icon maker rocks !'])
+    })
+
+    it('tabs', () => {
+      const text = '\ticon maker rocks !\t'
+      const lines = splitTextIntoLines(text, MAX_TOTAL_TEXT_CHARS)
+      expect(lines).toStrictEqual(['icon maker rocks !'])
+    })
+
+    it('line breaks', () => {
+      const text = '\nicon maker rocks !\n'
+      const lines = splitTextIntoLines(text, MAX_TOTAL_TEXT_CHARS)
+      expect(lines).toStrictEqual(['icon maker rocks !'])
+    })
   })
 })
 
@@ -61,7 +115,7 @@ describe('convertFileToBase64()', () => {
   it('executes readAsDataURL with correct arguments', async () => {
     const blob = new Blob()
     const readAsDataURLSpy = jest.spyOn(FileReader.prototype, 'readAsDataURL')
-    expect(await convertFileToBase64(blob)).toEqual('data:;base64,')
+    expect(await convertFileToBase64(blob)).toEqual('data:application/octet-stream;base64,')
     expect(readAsDataURLSpy).toHaveBeenCalledWith(blob)
   })
 })

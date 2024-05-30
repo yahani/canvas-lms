@@ -64,7 +64,7 @@ export default class MessageParticipantsDialog {
           text: I18n.t('buttons.cancel', 'Cancel'),
           click() {
             $(this).dialog('close')
-          }
+          },
         },
         {
           text: I18n.t('buttons.send_message', 'Send'),
@@ -72,12 +72,14 @@ export default class MessageParticipantsDialog {
           class: 'btn-primary',
           click() {
             $(this).submit()
-          }
-        }
+          },
+        },
       ],
       close() {
         $(this).remove()
-      }
+      },
+      modal: true,
+      zIndex: 1000,
     })
     return this.loadParticipants()
   }
@@ -105,7 +107,7 @@ export default class MessageParticipantsDialog {
         this.$participantList.html(
           recipientListTemplate({
             recipientType: this.group.participant_type,
-            recipients: data
+            recipients: data,
           })
         )
       } else {
@@ -126,10 +128,10 @@ export default class MessageParticipantsDialog {
     const data = this.$form.getFormData()
     if (!data['recipients[]'] || !data.body) return
 
-    if (data['recipients[]'].length > ENV.CALENDAR.MAX_GROUP_CONVERSATION_SIZE) {
-      data.group_conversation = true
-      data.bulk_message = true
-    }
+    // Setting bulk_message will always send individual messages regardless of group_conversation setting.
+    // We're still setting group_conversation because that is required when there's more than 100 recipients.
+    data.group_conversation = true
+    data.bulk_message = true
 
     if (this.group) {
       data.tags = this.group.context_codes
@@ -146,7 +148,7 @@ export default class MessageParticipantsDialog {
       this.messageFailed
     )
     return this.$form.disableWhileLoading(deferred, {
-      buttons: ['[data-text-while-loading] .ui-button-text']
+      buttons: ['[data-text-while-loading] .ui-button-text'],
     })
   }
 

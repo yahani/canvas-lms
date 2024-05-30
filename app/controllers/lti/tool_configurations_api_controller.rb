@@ -91,7 +91,7 @@ class Lti::ToolConfigurationsApiController < ApplicationController
     developer_key_redirect_uris
     tool_config = Lti::ToolConfiguration.create_tool_config_and_key!(account, tool_configuration_params)
     update_developer_key!(tool_config, developer_key_redirect_uris)
-    render json: Lti::ToolConfigurationSerializer.new(tool_config)
+    render json: Lti::ToolConfigurationSerializer.new(tool_config, include_warnings: true)
   end
 
   # @API Update Tool configuration
@@ -135,7 +135,7 @@ class Lti::ToolConfigurationsApiController < ApplicationController
     )
     update_developer_key!(tool_config)
 
-    render json: Lti::ToolConfigurationSerializer.new(tool_config)
+    render json: Lti::ToolConfigurationSerializer.new(tool_config, include_warnings: true)
   end
 
   # @API Show Tool configuration
@@ -143,7 +143,15 @@ class Lti::ToolConfigurationsApiController < ApplicationController
   #
   # @returns ToolConfiguration
   def show
-    render json: Lti::ToolConfigurationSerializer.new(developer_key.tool_configuration)
+    if developer_key.lti_registration.present?
+      render json: ({
+        tool_configuration: {
+          settings: developer_key.lti_registration.canvas_configuration
+        }
+      })
+    else
+      render json: Lti::ToolConfigurationSerializer.new(developer_key.tool_configuration)
+    end
   end
 
   # @API Show Tool configuration

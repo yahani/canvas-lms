@@ -28,12 +28,7 @@ const buttonDisabled = (trigger, expectedBoolean) =>
 const checkSelection = (id, selection) => equal(id, find(selection).val())
 
 const checkSelectedText = (text, selection) =>
-  equal(
-    text,
-    find(selection)
-      .find('option:selected')
-      .text()
-  )
+  equal(text, find(selection).find('option:selected').text())
 
 const checkText = (selector, expectedText) =>
   equal(Ember.$.trim(find(`.assignmentsPanel ${selector}`).text()), expectedText)
@@ -54,7 +49,7 @@ QUnit.module('screenreader_gradebook student/assignment navigation: on page load
   },
   teardown() {
     return Ember.run(App, 'destroy')
-  }
+  },
 })
 
 test('Previous Student button is disabled', () =>
@@ -94,7 +89,7 @@ QUnit.module('screenreader_gradebook student/assignment navigation: with first i
   },
   teardown() {
     return Ember.run(App, 'destroy')
-  }
+  },
 })
 
 test('Previous buttons are disabled', () => {
@@ -105,7 +100,7 @@ test('Previous buttons are disabled', () => {
 })
 
 // compares & checks before/after objects
-test('clicking Next Student button displays next student', function() {
+test('clicking Next Student button displays next student', function () {
   const before = this.controller.get('selectedStudent')
   checkSelection(before.id, '#student_select')
   return click('.student_navigation .next_object:first').then(() => {
@@ -118,7 +113,7 @@ test('clicking Next Student button displays next student', function() {
 })
 
 // compares & checks before/after objects
-test('clicking Next Assignment button displays next assignment', function() {
+test('clicking Next Assignment button displays next assignment', function () {
   const before = this.controller.get('selectedAssignment')
   checkSelection(before.id, '#assignment_select')
   return click('.assignment_navigation .next_object').then(() => {
@@ -160,7 +155,7 @@ QUnit.module('screenreader_gradebook student/assignment navigation: with second 
   },
   teardown() {
     return Ember.run(App, 'destroy')
-  }
+  },
 })
 
 test('Previous/Next Student buttons are both active', () => {
@@ -190,7 +185,7 @@ QUnit.module('screenreader_gradebook student/assignment navigation: with last it
   },
   teardown() {
     return Ember.run(App, 'destroy')
-  }
+  },
 })
 
 test('Previous Student button is active', () =>
@@ -206,7 +201,7 @@ test('Next Assignment button is disabled', () =>
   buttonDisabled('.assignment_navigation .next_object', true))
 
 // compares & checks before/after objects
-test('clicking Previous Student button displays previous student', function() {
+test('clicking Previous Student button displays previous student', function () {
   const before = this.controller.get('selectedStudent')
   checkSelection(before.id, '#student_select')
   return click('.student_navigation .previous_object:first').then(() => {
@@ -219,7 +214,7 @@ test('clicking Previous Student button displays previous student', function() {
 })
 
 // compares & checks before/after objects
-test('clicking Previous Assignment button displays previous assignment', function() {
+test('clicking Previous Assignment button displays previous assignment', function () {
   const before = this.controller.get('selectedAssignment')
   checkSelection(before.id, '#assignment_select')
   return click('.assignment_navigation .previous_object').then(() => {
@@ -262,21 +257,25 @@ QUnit.module('screenreader_gradebook assignment navigation: display update', {
   },
   teardown() {
     return Ember.run(App, 'destroy')
-  }
+  },
 })
 
-test('screenreader_gradebook assignment selection: grade for field updates', function() {
+test('screenreader_gradebook assignment selection: grade for field updates', function () {
   const assignment_name_selector = "label[for='student_and_assignment_grade']"
 
   const selectedAssigName = this.controller.get('selectedAssignment.name')
-  checkText(assignment_name_selector, `Grade for: ${selectedAssigName}`)
+  const selectedStudentName = this.controller.get('selectedStudent.name')
+  checkText(assignment_name_selector, `Grade for ${selectedStudentName} - ${selectedAssigName}`)
 
   Ember.run(() =>
     this.controller.set('selectedAssignment', this.controller.get('assignments').objectAt(2))
   )
 
   const newSelectedAssigName = this.controller.get('selectedAssignment.name')
-  return checkText(assignment_name_selector, `Grade for: ${newSelectedAssigName}`)
+  return checkText(
+    assignment_name_selector,
+    `Grade for ${selectedStudentName} - ${newSelectedAssigName}`
+  )
 })
 
 QUnit.module('screenreader_gradebook assignment navigation: assignment sorting', {
@@ -296,10 +295,10 @@ QUnit.module('screenreader_gradebook assignment navigation: assignment sorting',
       )
     )
     return Ember.run(App, 'destroy')
-  }
+  },
 })
 
-test('alphabetical', function() {
+test('alphabetical', function () {
   const before = this.controller.get('assignments.firstObject')
   Ember.run(() =>
     this.controller.set(
@@ -316,7 +315,7 @@ test('alphabetical', function() {
   )
 })
 
-test('due date', function() {
+test('due date', function () {
   const before = this.controller.get('assignments.firstObject')
   Ember.run(() =>
     this.controller.set(
@@ -333,7 +332,7 @@ test('due date', function() {
   )
 })
 
-test('changing sorting option with selectedAssignment', function() {
+test('changing sorting option with selectedAssignment', function () {
   // SORT BY: alphabetical
   Ember.run(() =>
     this.controller.set(
@@ -400,10 +399,10 @@ QUnit.module('screenreader_gradebook student navigation: section selection', {
   },
   teardown() {
     return Ember.run(App, 'destroy')
-  }
+  },
 })
 
-test('prev/next still work', function() {
+test('prev/next still work', function () {
   buttonDisabled('.student_navigation .previous_object:first', true)
   buttonDisabled('.student_navigation .next_object:first', false)
 
@@ -415,6 +414,7 @@ test('prev/next still work', function() {
     studentSectionAssertions(first, index, 0)
 
     // second in section
+    // eslint-disable-next-line promise/catch-or-return
     click('.student_navigation .next_object:first').then(() => {
       const second = this.controller.get('selectedStudent')
       index = this.controller.get('studentIndex')
@@ -430,7 +430,7 @@ test('prev/next still work', function() {
   })
 })
 
-test('resets selectedStudent when student is not in both sections', function() {
+test('resets selectedStudent when student is not in both sections', function () {
   return click('.student_navigation .next_object:first').then(() => {
     const firstStudent = this.controller.get('selectedStudent')
 
@@ -449,7 +449,7 @@ test('resets selectedStudent when student is not in both sections', function() {
   })
 })
 
-test('maintains selectedStudent when student is in both sections and updates navigation points', function() {
+test('maintains selectedStudent when student is in both sections and updates navigation points', function () {
   Ember.run(() =>
     // requires a fixture for a student with enrollment in 2 sections
     // and a previous/next option for all sections
@@ -507,18 +507,21 @@ QUnit.module(
     },
     teardown() {
       return Ember.run(App, 'destroy')
-    }
+    },
   }
 )
 
-QUnit.skip('aria-announcer', function() {
+// unskip in EVAL-2505
+QUnit.skip('aria-announcer', function () {
   equal(Ember.$.trim(find('.aria-announcer').text()), '')
 
+  // eslint-disable-next-line promise/catch-or-return
   click('.student_navigation .next_object:first').then(() => {
     const expected = this.controller.get('selectedStudent.name')
     equal(Ember.$.trim(find('.aria-announcer').text()), expected)
   })
 
+  // eslint-disable-next-line promise/catch-or-return
   click('.assignment_navigation .next_object').then(() => {
     const expected = this.controller.get('selectedAssignment.name')
     equal(Ember.$.trim(find('.aria-announcer').text()), expected)

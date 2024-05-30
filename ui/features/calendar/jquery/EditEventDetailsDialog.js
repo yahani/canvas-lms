@@ -17,8 +17,8 @@
  */
 
 import $ from 'jquery'
+import {some, filter} from 'lodash'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import _ from 'underscore'
 import EditCalendarEventDetails from './EditCalendarEventDetails'
 import EditAssignmentDetails from '../backbone/views/EditAssignmentDetails'
 import EditApptCalendarEventDialog from './EditApptCalendarEventDialog'
@@ -37,8 +37,19 @@ const dialog = $('<div id="edit_event"><div /></div>')
     autoOpen: false,
     width: 'auto',
     resizable: false,
-    title: I18n.t('titles.edit_event', 'Edit Event')
+    title: I18n.t('titles.edit_event', 'Edit Event'),
+    closeOnEscape: false,
+    open: () =>
+      document.addEventListener('keydown', EditEventDetailsDialog.prototype.handleKeyDown),
+    close: () =>
+      document.removeEventListener('keydown', EditEventDetailsDialog.prototype.handleKeyDown),
+    modal: true,
+    zIndex: 1000,
   })
+  // these classes were added in dialog.js with the jquery 1.9.2 upgrade
+  // they're not needed for this dialog and cause styling issues
+  .removeClass('ui-dialog-content')
+  .removeClass('ui-widget-content')
 
 export default class EditEventDetailsDialog {
   constructor(event, useScheduler) {
@@ -59,7 +70,7 @@ export default class EditEventDetailsDialog {
     tabs
       .tabs()
       .bind('tabsselect', (event, ui) =>
-        $(ui.panel).closest('.tab_holder').data('form-widget').activate()
+        $(ui.panel).closest('.tab_holder').data('form-widget')?.activate()
       )
 
     // note: tabs should be removed in descending order, so numbers don't shift
@@ -70,7 +81,6 @@ export default class EditEventDetailsDialog {
       tabs.tabs('remove', 3)
       tabs.tabs('remove', 2)
       tabs.tabs('remove', 1)
-      this.calendarEventForm.activate()
     } else if (this.event.eventType.match(/assignment/)) {
       tabs.tabs('select', 1)
       if (this.canManageAppointments()) tabs.tabs('remove', 4)
@@ -115,13 +125,11 @@ export default class EditEventDetailsDialog {
 
       // don't even show the assignments tab if the user doesn't have
       // permission to create them
-      const can_create_assignments = _.some(
+      const can_create_assignments = some(
         this.event.allPossibleContexts,
         c => c.can_create_assignments
       )
       if (!can_create_assignments) tabs.tabs('remove', 1)
-
-      this.calendarEventForm.activate()
     }
   }
 
@@ -137,6 +145,19 @@ export default class EditEventDetailsDialog {
     dialog.dialog('close')
   }
 
+  handleKeyDown(e) {
+    if (e.key !== 'Escape') return
+
+    if (
+      e.target.getAttribute('aria-expanded') === 'true' ||
+      $('#custom-repeating-event-modal').length > 0
+    ) {
+      e.preventDefault()
+    } else {
+      dialog.dialog('close')
+    }
+  }
+
   dialogClose = () => {
     if (this.oldFocus != null) {
       this.oldFocus.focus()
@@ -147,7 +168,7 @@ export default class EditEventDetailsDialog {
   canManageAppointments = () => {
     if (
       ENV.CALENDAR.SHOW_SCHEDULER &&
-      _.some(this.event.allPossibleContexts, c => c.can_create_appointment_groups) &&
+      some(this.event.allPossibleContexts, c => c.can_create_appointment_groups) &&
       (this.event.eventType.match(/appointment/) || this.event.eventType.match(/generic/))
     ) {
       return true
@@ -164,14 +185,13 @@ export default class EditEventDetailsDialog {
       dialog.children().replaceWith(html)
 
       if (this.event.isNewEvent() || this.event.eventType === 'calendar_event') {
-        formHolder = dialog.find('#edit_calendar_event_form_holder')
+        formHolder = document.getElementById('edit_calendar_event_form_holder')
         this.calendarEventForm = new EditCalendarEventDetails(
           formHolder,
           this.event,
           this.contextChange.bind(this),
           this.closeCB
         )
-        formHolder.data('form-widget', this.calendarEventForm)
       }
 
       if (this.event.isNewEvent() || this.event.eventType.match(/assignment/)) {
@@ -209,12 +229,12 @@ export default class EditEventDetailsDialog {
       if (this.event.isNewEvent() && this.canManageAppointments()) {
         const group = {
           context_codes: [],
-          sub_context_codes: []
+          sub_context_codes: [],
         }
         this.appointmentGroupDetailsForm = new EditAppointmentGroupDetails(
           $('#edit_appointment_group_form_holder'),
           group,
-          _.filter(this.event.allPossibleContexts, c => c.can_create_appointment_groups),
+          filter(this.event.allPossibleContexts, c => c.can_create_appointment_groups),
           this.closeCB,
           this.event,
           this.useScheduler

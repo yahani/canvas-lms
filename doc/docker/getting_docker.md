@@ -1,5 +1,7 @@
 # Getting Docker Setup
 
+_*Instructure employees should use the `inst` CLI. Go [here](./../../inst-cli/doc/docker/developing_with_docker.md) for more info.*_
+
 **Note:** this works through the details of how to set docker up manually. If
 you just want to set up a Canvas development environment with a minimum of
 effort, run:
@@ -18,22 +20,16 @@ Docker has lots of info getting up and running [here](https://www.docker.com/pro
 Make sure you have the following installed:
 
 * Docker Desktop
-* Mutagen
-* Mutagen-Compose
+* Docker Compose
 
 ### Via Homebrew
 
 ```
 brew install --cask docker
+brew install docker-compose
 ```
 Once the install has completed, launch Docker Desktop to finalize the setup.
 Navigate to Docker Desktop preferences → Resources and set the Memory to at least 8GB.
-
-Now install Mutagen and Mutagen-Compose
-
-```
-brew install mutagen-io/mutagen/mutagen mutagen-io/mutagen/mutagen-compose
-```
 
 ## Linux
 

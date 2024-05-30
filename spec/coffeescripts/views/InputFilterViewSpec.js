@@ -18,8 +18,9 @@
 
 import Backbone from '@canvas/backbone'
 import $ from 'jquery'
-import InputFilterView from 'backbone-input-filter-view'
-import 'helpers/jquery.simulate'
+import 'jquery-migrate'
+import InputFilterView from '@canvas/backbone-input-filter-view'
+import '@canvas/jquery/jquery.simulate'
 
 let view
 let clock = null
@@ -32,7 +33,7 @@ QUnit.module('InputFilterView', {
   teardown() {
     clock.restore()
     view.remove()
-  }
+  },
 })
 
 function createAndRenderView(options = {}) {
@@ -100,7 +101,7 @@ test('gets modelAttribute from input name', () => {
   createAndRenderView()
   const input = $('<input name="couch">').appendTo($('#fixtures'))
   view = new InputFilterView({
-    el: input[0]
+    el: input[0],
   })
   equal(view.modelAttribute, 'couch')
 })

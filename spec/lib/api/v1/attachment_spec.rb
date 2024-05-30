@@ -31,8 +31,8 @@ describe Api::V1::Attachment do
   describe "#attachment_json" do
     let(:course) { Course.create! }
     let(:attachment) { attachment_model(content_type: "application/pdf", context: student) }
-    let(:student) { course_with_user("StudentEnrollment", course: course, active_all: true).user }
-    let(:teacher) { course_with_user("TeacherEnrollment", course: course, active_all: true).user }
+    let(:student) { course_with_user("StudentEnrollment", course:, active_all: true).user }
+    let(:teacher) { course_with_user("TeacherEnrollment", course:, active_all: true).user }
 
     before do
       allow(Canvadocs).to receive(:enabled?).and_return(true)
@@ -276,6 +276,26 @@ describe Api::V1::Attachment do
 
       before do
         allow(InstFS).to receive(:enabled?).and_return(true)
+      end
+
+      it "sends the precreated_attachment_id as a string" do
+        student = course_with_user("StudentEnrollment", course: context, active_all: true).user
+        user_session(student)
+        additional_opts = {
+          precreate_attachment: true
+        }
+        expect(InstFS).to receive(:upload_preflight_json)
+          .with hash_including(
+            {
+              additional_capture_params: include(
+                {
+                  precreated_attachment_id: String
+                }
+              )
+            }
+          )
+
+        api_attachment_preflight(context, request, opts.merge(additional_opts))
       end
 
       context "with the category param set" do

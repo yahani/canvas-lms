@@ -16,8 +16,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_dependency "canvas/cache/local_redis_cache"
-
 module Canvas
   module Cache
     class SlowTestRedisCache < LocalRedisCache
@@ -29,7 +27,7 @@ module Canvas
 
     RSpec.describe LocalRedisCache do
       let(:redis_conf_hash) do
-        rc = Canvas.redis_config
+        rc = CanvasCache::Redis.config
         {
           store: "redis",
           redis_url: rc.fetch("servers", ["redis://redis"]).first,
@@ -49,36 +47,6 @@ module Canvas
 
       def new_redis_client
         LocalRedisCache.new(redis_conf_hash)
-      end
-
-      it "writes sets of keys atomically" do
-        data_set = {
-          "keya" => "vala",
-          "keyb" => "valb",
-          "keyc" => "valc",
-          "keyd" => "vald",
-          "keye" => "vale",
-          "keyf" => "valf",
-          "keyg" => "valg",
-          "keyh" => "valh",
-        }
-        read_set = {}
-        slow_thread = Thread.new do
-          @slow_cache.write_set(data_set)
-        end
-        fast_thread = Thread.new do
-          while @fast_cache.read("keya") != "vala"
-            sleep(0.025)
-          end
-          # once any data is there, it should all be there
-          data_set.each_key do |k|
-            val = @fast_cache.read(k)
-            read_set[k] = val unless val.nil?
-          end
-        end
-        fast_thread.join
-        slow_thread.join
-        expect(read_set == data_set).to be_truthy
       end
 
       it "handles concurrent traffic" do

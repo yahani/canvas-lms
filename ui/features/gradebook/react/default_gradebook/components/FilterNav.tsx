@@ -16,41 +16,39 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, {useState} from 'react'
-import {Button, CloseButton} from '@instructure/ui-buttons'
+import React, {useState, useCallback, useRef, type SetStateAction} from 'react'
+import {Link} from '@instructure/ui-link'
 import {AccessibleContent} from '@instructure/ui-a11y-content'
 import uuid from 'uuid'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import {IconFilterSolid, IconFilterLine} from '@instructure/ui-icons'
-import {TextInput} from '@instructure/ui-text-input'
-import {View, ContextView} from '@instructure/ui-view'
 import {Flex} from '@instructure/ui-flex'
 import {Tag} from '@instructure/ui-tag'
-import {Tray} from '@instructure/ui-tray'
-import {Text} from '@instructure/ui-text'
-import {Heading} from '@instructure/ui-heading'
-import FilterNavFilter from './FilterNavFilter'
-import type {
-  AssignmentGroup,
-  Filter,
-  GradingPeriod,
-  Module,
-  Section,
-  StudentGroupCategoryMap
-} from '../gradebook.d'
-import {getLabelForFilterCondition, doFilterConditionsMatch} from '../Gradebook.utils'
+import {Alert} from '@instructure/ui-alerts'
+import {Tooltip} from '@instructure/ui-tooltip'
+import type {CamelizedGradingPeriod} from '@canvas/grading/grading.d'
+import type {Filter, FilterPreset} from '../gradebook.d'
+import type {AssignmentGroup, Module, Section, StudentGroupCategoryMap} from '../../../../../api.d'
+import {doFiltersMatch, getLabelForFilter, isFilterNotEmpty} from '../Gradebook.utils'
 import useStore from '../stores/index'
+import FilterDropdown from './FilterDropdown'
+import FilterNavDateModal from './FilterDateModal'
+import FilterTray from './FilterTray'
+import {useFilterDropdownData} from './FilterNav.utils'
+import type {GradeStatus} from '@canvas/grading/accountGradingStatus'
+import {IconArrowOpenDownLine} from '@instructure/ui-icons'
+import {View} from '@instructure/ui-view'
+import {FilterNavPopover} from './FilterNavPopover'
 
 const I18n = useI18nScope('gradebook')
-
-const {Item: FlexItem} = Flex as any
 
 export type FilterNavProps = {
   modules: Module[]
   assignmentGroups: AssignmentGroup[]
   sections: Section[]
-  gradingPeriods: GradingPeriod[]
+  gradingPeriods: CamelizedGradingPeriod[]
   studentGroupCategories: StudentGroupCategoryMap
+  customStatuses: GradeStatus[]
+  multiselectGradebookFiltersEnabled: boolean
 }
 
 export default function FilterNav({
@@ -58,222 +56,279 @@ export default function FilterNav({
   gradingPeriods,
   modules,
   sections,
-  studentGroupCategories
+  studentGroupCategories,
+  customStatuses,
+  multiselectGradebookFiltersEnabled,
 }: FilterNavProps) {
   const [isTrayOpen, setIsTrayOpen] = useState(false)
-  const [stagedFilterName, setStagedFilterName] = useState('')
-  const filters = useStore(state => state.filters)
-  const stagedFilterConditions = useStore(state => state.stagedFilterConditions)
-  const saveStagedFilter = useStore(state => state.saveStagedFilter)
-  const updateFilter = useStore(state => state.updateFilter)
-  const deleteFilter = useStore(state => state.deleteFilter)
-  const applyConditions = useStore(state => state.applyConditions)
-  const appliedFilterConditions = useStore(state => state.appliedFilterConditions)
-  const updateStagedFilter = useStore(state => state.updateStagedFilter)
-  const deleteStagedFilter = useStore(state => state.deleteStagedFilter)
+  const [isDateModalOpen, setIsDateModalOpen] = useState(false)
+  const [announcement, setAnnouncement] = useState('')
+  const filterPresets = useStore(state => state.filterPresets)
+  const applyFilters = useStore(state => state.applyFilters)
+  const addFilters = useStore(state => state.addFilters)
+  const appliedFilters = useStore(state => state.appliedFilters)
+  const applyFiltersButtonRef = useRef<HTMLButtonElement>(null)
+  const filterTagRef = useRef<(HTMLElement | null)[]>([])
+  const [isFilterNavPopoverOpen, setIsFilterNavPopoverOpen] = useState<boolean>(false)
+  const [openFilterKey, setOpenFilterKey] = useState<string | null>(null)
+  const {setState} = useStore
+  const handleClearFilters = () => {
+    setAnnouncement(I18n.t('All Filters Have Been Cleared'))
+    applyFilters([])
+    applyFiltersButtonRef.current?.focus()
+  }
 
-  const filterComponents = appliedFilterConditions
-    .filter(c => c.value)
-    .map(condition => {
-      const label = getLabelForFilterCondition(
-        condition,
-        assignmentGroups,
-        gradingPeriods,
-        modules,
-        sections,
-        studentGroupCategories
-      )
-      return (
-        <Tag
-          data-testid="staged-filter-condition-tag"
-          key={`staged-condition-${condition.id}`}
-          text={<AccessibleContent alt={I18n.t('Remove condition')}>{label}</AccessibleContent>}
-          dismissible
-          onClick={() =>
-            useStore.setState({
-              appliedFilterConditions: appliedFilterConditions.filter(c => c.id !== condition.id)
-            })
-          }
-          margin="0 xx-small 0 0"
-        />
-      )
+  const getFilterKey = (filter: Filter) => {
+    const submissionStateFilterValues = [
+      'has-ungraded-submissions',
+      'has-submissions',
+      'has-no-submissions',
+      'has-unposted-grades',
+    ]
+
+    switch (filter.type) {
+      case 'section':
+        return 'sections'
+      case 'assignment-group':
+        return 'assignment-groups'
+      case 'module':
+        return 'modules'
+      case 'grading-period':
+        return 'grading-periods'
+      case 'student-group':
+        return 'student-groups'
+      case 'start-date':
+        return 'start-date'
+      case 'end-date':
+        return 'end-date'
+      case 'submissions':
+        return submissionStateFilterValues.includes(filter.value ?? '') ? 'submissions' : 'status'
+      default:
+        return ''
+    }
+  }
+
+  const onToggleFilterPreset = useCallback(
+    (filterPreset: FilterPreset) => {
+      if (doFiltersMatch(appliedFilters, filterPreset.filters)) {
+        applyFilters([])
+      } else {
+        applyFilters(filterPreset.filters)
+      }
+    },
+    [appliedFilters, applyFilters]
+  )
+
+  const {dataMap, filterItems} = useFilterDropdownData({
+    appliedFilters,
+    assignmentGroups,
+    filterPresets,
+    gradingPeriods,
+    modules,
+    sections,
+    studentGroupCategories,
+    onToggleFilterPreset,
+    customStatuses,
+    multiselectGradebookFiltersEnabled,
+    onToggleDateModal: () => setIsDateModalOpen(true),
+  })
+  let activeFilters = appliedFilters.filter(isFilterNotEmpty)
+  const filterCounts: Record<string, number> = {}
+  if (multiselectGradebookFiltersEnabled) {
+    // remove duplicate type filters and count number for each filter type
+    activeFilters = activeFilters.filter(filter => {
+      const type = getFilterKey(filter)
+      filterCounts[type] = (filterCounts[type] || 0) + 1
+      return filterCounts[type] === 1
     })
+  }
+  const activeFilterComponents = activeFilters.map((filter, i) => {
+    let label = getLabelForFilter(
+      filter,
+      assignmentGroups,
+      gradingPeriods,
+      modules,
+      sections,
+      studentGroupCategories,
+      customStatuses
+    )
 
-  const handleSaveStagedFilter = async () => {
-    await saveStagedFilter(stagedFilterName)
-    setStagedFilterName('')
+    const filterKey = getFilterKey(filter)
+    const selectedFilterItem = filterItems[filterKey]
+    const menuItems = selectedFilterItem?.items ?? []
+    const menuGroups = selectedFilterItem?.itemGroups ?? []
+    const numFiltersSelected = filterCounts[filterKey] || 0
+    if (multiselectGradebookFiltersEnabled && numFiltersSelected > 1) {
+      label = `${selectedFilterItem?.name} (${numFiltersSelected})`
+    }
+
+    const handleDeleteFilterClick = () => {
+      setAnnouncement(I18n.t('Removed %{filterName} Filter', {filterName: label}))
+      if (multiselectGradebookFiltersEnabled) {
+        setState({
+          appliedFilters: appliedFilters.filter(c => getFilterKey(c) !== filterKey),
+        })
+      } else {
+        setState({
+          appliedFilters: appliedFilters.filter(c => c.id !== filter.id),
+        })
+      }
+      setIsFilterNavPopoverOpen(false)
+      setOpenFilterKey('')
+    }
+
+    const handleSelectFilterClick = () => {
+      if (filter.type === 'start-date' || filter.type === 'end-date') {
+        setIsDateModalOpen(true)
+        return
+      }
+      setAnnouncement(I18n.t('Added %{filterName} Filter', {filterName: label}))
+    }
+    const handlePopoverClick = () => {
+      if (openFilterKey !== filterKey) {
+        setIsFilterNavPopoverOpen(true)
+        setOpenFilterKey(filterKey)
+        return
+      }
+      setIsFilterNavPopoverOpen(false)
+      setOpenFilterKey('')
+    }
+
+    return multiselectGradebookFiltersEnabled ? (
+      <FilterNavPopover
+        key={`staged-filter-popover-${filter.id}`}
+        data-testid={`applied-filter-popover-${label}`}
+        renderTrigger={
+          <Tag
+            data-testid={`applied-filter-${label}`}
+            key={`staged-filter-${filter.id}`}
+            elementRef={(e: Element | null) => {
+              filterTagRef.current[i] = e as HTMLElement
+            }}
+            text={
+              <AccessibleContent alt={I18n.t('%{filterName} Filter Options', {filterName: label})}>
+                <Tooltip renderTip={label} positionTarget={filterTagRef.current[i]}>
+                  {label}
+                </Tooltip>
+                <View as="span" margin="0 0 0 small">
+                  <IconArrowOpenDownLine />
+                </View>
+              </AccessibleContent>
+            }
+            onClick={handlePopoverClick}
+            margin="0 small 0 0"
+          />
+        }
+        isOpen={isFilterNavPopoverOpen && openFilterKey === filterKey}
+        filterType={filter.type}
+        menuGroups={menuGroups}
+        menuItems={menuItems}
+        handleHideFilter={handlePopoverClick}
+        handleRemoveFilter={handleDeleteFilterClick}
+        handleSelectFilter={handleSelectFilterClick}
+      />
+    ) : (
+      <Tag
+        data-testid={`applied-filter-${label}`}
+        key={`staged-filter-${filter.id}`}
+        elementRef={(e: Element | null) => {
+          filterTagRef.current[i] = e as HTMLElement
+        }}
+        text={
+          <AccessibleContent alt={I18n.t('Remove %{filterName} Filter', {filterName: label})}>
+            <Tooltip renderTip={label} positionTarget={filterTagRef.current[i]}>
+              {label}
+            </Tooltip>
+          </AccessibleContent>
+        }
+        dismissible={true}
+        onClick={handleDeleteFilterClick}
+        margin="0 xx-small 0 0"
+      />
+    )
+  })
+
+  const startDate = appliedFilters.find((c: Filter) => c.type === 'start-date')?.value || null
+
+  const endDate = appliedFilters.find((c: Filter) => c.type === 'end-date')?.value || null
+
+  const changeAnnouncement = (filterAnnouncement: SetStateAction<string>) => {
+    setAnnouncement(filterAnnouncement)
   }
 
   return (
     <Flex justifyItems="space-between" padding="0 0 small 0">
-      <FlexItem>
-        <Flex>
-          <FlexItem padding="0 x-small 0 0">
-            <IconFilterLine /> <Text weight="bold">{I18n.t('Applied Filters:')}</Text>
-          </FlexItem>
-          <FlexItem>
-            {filterComponents.length > 0 && filterComponents}
-            {!filterComponents.length && (
-              <Text color="secondary" weight="bold">
-                {I18n.t('None')}
-              </Text>
-            )}
-          </FlexItem>
-        </Flex>
-      </FlexItem>
-      <FlexItem>
-        <Button renderIcon={IconFilterSolid} color="secondary" onClick={() => setIsTrayOpen(true)}>
-          {I18n.t('Filters')}
-        </Button>
-      </FlexItem>
-      <Tray
-        placement="end"
-        label="Tray Example"
-        open={isTrayOpen}
-        onDismiss={() => setIsTrayOpen(false)}
-        size="regular"
-        shouldCloseOnDocumentClick
+      <Alert
+        screenReaderOnly={true}
+        liveRegionPoliteness="assertive"
+        liveRegion={() => document.getElementById('flash_screenreader_holder') as HTMLElement}
       >
-        <View as="div" padding="medium">
-          <Flex>
-            <FlexItem shouldGrow shouldShrink>
-              <Heading level="h3" as="h3" margin="0 0 x-small">
-                {I18n.t('Gradebook Filters')}
-              </Heading>
-            </FlexItem>
-            <FlexItem>
-              <CloseButton
-                placement="end"
-                offset="small"
-                screenReaderLabel="Close"
-                onClick={() => setIsTrayOpen(false)}
-              />
-            </FlexItem>
-          </Flex>
-
-          {filters.length === 0 && !stagedFilterConditions.length && (
-            <Flex as="div" margin="small">
-              <FlexItem display="inline-block" width="100px" height="128px">
-                <img
-                  src="/images/tutorial-tray-images/Panda_People.svg"
-                  alt={I18n.t('Friendly panda')}
-                  style={{
-                    width: '100px',
-                    height: '128px'
-                  }}
-                />
-              </FlexItem>
-              <FlexItem shouldShrink>
-                <ContextView
-                  padding="x-small small"
-                  margin="small"
-                  placement="end top"
-                  shadow="resting"
-                >
-                  {I18n.t(
-                    'Did you know you can now create detailed filters and save them for future use?'
-                  )}
-                </ContextView>
-              </FlexItem>
-            </Flex>
-          )}
-
-          {filters.map(filter => (
-            <FilterNavFilter
-              assignmentGroups={assignmentGroups}
-              filter={filter}
-              isApplied={doFilterConditionsMatch(appliedFilterConditions, filter.conditions)}
-              gradingPeriods={gradingPeriods}
-              key={filter.id}
-              modules={modules}
-              onChange={updateFilter}
-              applyConditions={applyConditions}
-              onDelete={() => deleteFilter(filter)}
-              sections={sections}
-              studentGroupCategories={studentGroupCategories}
+        {announcement}
+      </Alert>
+      <Flex.Item>
+        <Flex>
+          <Flex.Item padding="0 small 0 0">
+            <FilterDropdown
+              onOpenTray={() => setIsTrayOpen(true)}
+              dataMap={dataMap}
+              filterItems={filterItems}
+              changeAnnouncement={changeAnnouncement}
+              applyFiltersButtonRef={applyFiltersButtonRef}
+              multiselectGradebookFiltersEnabled={multiselectGradebookFiltersEnabled}
             />
-          ))}
+          </Flex.Item>
+          <Flex.Item data-testid="filter-tags">
+            {activeFilterComponents.length > 0 && activeFilterComponents}
+          </Flex.Item>
+        </Flex>
+      </Flex.Item>
 
-          <View
-            as="div"
-            background="primary"
-            padding="small none none none"
-            borderWidth="small none none none"
+      <Flex.Item>
+        {activeFilterComponents.length > 0 && (
+          <Link
+            isWithinText={false}
+            as="button"
+            margin="0"
+            onClick={handleClearFilters}
+            data-testid="clear-all-filters"
           >
-            {stagedFilterConditions.length > 0 ? (
-              <>
-                <FilterNavFilter
-                  assignmentGroups={assignmentGroups}
-                  filter={{
-                    name: '',
-                    conditions: stagedFilterConditions,
-                    created_at: new Date().toISOString()
-                  }}
-                  isApplied={doFilterConditionsMatch(
-                    appliedFilterConditions,
-                    stagedFilterConditions
-                  )}
-                  gradingPeriods={gradingPeriods}
-                  key="staged"
-                  modules={modules}
-                  applyConditions={applyConditions}
-                  onChange={(filter: Filter) => updateStagedFilter(filter.conditions)}
-                  onDelete={deleteStagedFilter}
-                  sections={sections}
-                  studentGroupCategories={studentGroupCategories}
-                />
-                <View as="div" padding="small" background="secondary" borderRadius="medium">
-                  <Flex alignItems="end">
-                    <FlexItem shouldGrow>
-                      <TextInput
-                        width="100%"
-                        renderLabel={I18n.t('Save these conditions as a filter')}
-                        placeholder={I18n.t('Give this filter a name')}
-                        value={stagedFilterName}
-                        onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-                          setStagedFilterName(event.target.value)
-                        }
-                      />
-                    </FlexItem>
-                    <FlexItem margin="0 0 0 small">
-                      <Button
-                        color="secondary"
-                        data-testid="save-filter-button"
-                        margin="small 0 0 0"
-                        onClick={handleSaveStagedFilter}
-                        interaction={stagedFilterName.trim().length > 0 ? 'enabled' : 'disabled'}
-                      >
-                        {I18n.t('Save')}
-                      </Button>
-                    </FlexItem>
-                  </Flex>
-                </View>
-              </>
-            ) : (
-              <Button
-                renderIcon={IconFilterLine}
-                color="secondary"
-                onClick={() =>
-                  useStore.setState({
-                    stagedFilterConditions: [
-                      {
-                        id: uuid(),
-                        type: undefined,
-                        value: undefined,
-                        created_at: new Date().toISOString()
-                      }
-                    ]
-                  })
-                }
-                margin="small 0 0 0"
-                data-testid="new-filter-button"
-              >
-                {I18n.t('Create New Filter')}
-              </Button>
-            )}
-          </View>
-        </View>
-      </Tray>
+            {I18n.t('Clear All Filters')}
+          </Link>
+        )}
+      </Flex.Item>
+
+      <FilterTray
+        isTrayOpen={isTrayOpen}
+        setIsTrayOpen={setIsTrayOpen}
+        filterPresets={filterPresets}
+        assignmentGroups={assignmentGroups}
+        gradingPeriods={gradingPeriods}
+        studentGroupCategories={studentGroupCategories}
+        modules={modules}
+        sections={sections}
+      />
+
+      <FilterNavDateModal
+        startDate={startDate}
+        endDate={endDate}
+        isOpen={isDateModalOpen}
+        onCloseDateModal={() => setIsDateModalOpen(false)}
+        onSelectDates={(startDateValue: string | null, endDateValue: string | null) => {
+          const startDateCondition: Filter = {
+            id: uuid.v4(),
+            type: 'start-date',
+            value: startDateValue,
+            created_at: new Date().toISOString(),
+          }
+          const endDateCondition: Filter = {
+            id: uuid.v4(),
+            type: 'end-date',
+            value: endDateValue,
+            created_at: new Date().toISOString(),
+          }
+          addFilters([startDateCondition, endDateCondition])
+        }}
+      />
     </Flex>
   )
 }

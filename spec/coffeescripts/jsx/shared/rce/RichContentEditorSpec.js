@@ -16,8 +16,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+import $ from 'jquery'
+import 'jquery-migrate'
 import RichContentEditor from '@canvas/rce/RichContentEditor'
-import * as RceCommandShim from '@canvas/rce/RceCommandShim'
+import * as RceCommandShim from '@canvas/rce-command-shim'
 import RCELoader from '@canvas/rce/serviceRCELoader'
 import Sidebar from '@canvas/rce/Sidebar'
 import fakeENV from 'helpers/fakeENV'
@@ -29,19 +31,19 @@ QUnit.module('RichContentEditor - helper function:')
 test('ensureID gives the element an id when it is missing', () => {
   const $el = $('<div/>')
   RichContentEditor.ensureID($el)
-  ok($el.attr('id') != null)
+  notEqual($el.attr('id'), null)
 })
 
 test('ensureID gives the element an id when it is blank', () => {
   const $el = $('<div id/>')
   RichContentEditor.ensureID($el)
-  ok($el.attr('id') !== '')
+  notEqual($el.attr('id'), '')
 })
 
 test("ensureID doesn't overwrite an existing id", () => {
   const $el = $('<div id="test"/>')
   RichContentEditor.ensureID($el)
-  ok($el.attr('id') === 'test')
+  equal($el.attr('id'), 'test')
 })
 
 test('freshNode returns the given element if the id is missing', () => {
@@ -77,7 +79,7 @@ QUnit.module('RichContentEditor - preloading', {
   teardown() {
     fakeENV.teardown()
     editorUtils.resetRCE()
-  }
+  },
 })
 
 test('loads via RCELoader.preload when service enabled', () => {
@@ -100,13 +102,10 @@ QUnit.module('RichContentEditor - loading editor', {
     fixtures.teardown()
     RCELoader.loadOnTarget.restore()
     editorUtils.resetRCE()
-  }
+  },
 })
-test('calls RCELoader.loadOnTarget with target and options', function() {
-  sinon
-    .stub(RichContentEditor, 'freshNode')
-    .withArgs(this.$target)
-    .returns(this.$target)
+test('calls RCELoader.loadOnTarget with target and options', function () {
+  sinon.stub(RichContentEditor, 'freshNode').withArgs(this.$target).returns(this.$target)
   const options = {}
   RichContentEditor.loadNewEditor(this.$target, options)
   ok(RCELoader.loadOnTarget.calledWith(this.$target, sinon.match(options)))
@@ -118,19 +117,39 @@ test('skips instantiation when called with empty target', () => {
   ok(RCELoader.loadOnTarget.notCalled)
 })
 
-test('hides resize handle when called', function() {
+test('hides resize handle when called', function () {
   const $resize = fixtures.create('<div class="mce-resizehandle"></div>')
   RichContentEditor.loadNewEditor(this.$target, {})
   equal($resize.attr('aria-hidden'), 'true')
 })
 
-test('onFocus calls options.onFocus if exists', function() {
+test('onFocus calls options.onFocus if exists', function () {
   const options = {onFocus: sinon.spy()}
   RichContentEditor.loadNewEditor(this.$target, options)
   const {onFocus} = RCELoader.loadOnTarget.firstCall.args[1]
   const editor = {}
   onFocus(editor)
   ok(options.onFocus.calledWith(editor))
+})
+
+test('throws error or establishParentNode escapes targetId to prevent xss', () => {
+  let errorThrown = false
+
+  try {
+    const $target = fixtures.create(
+      '<div class="reply-textarea" id="x\'><img src=x onerror=\'alert(`${document.domain}:${document.cookie}`)\' />">XSS</div>' // eslint-disable-line no-template-curly-in-string
+    )
+    RichContentEditor.loadNewEditor($target, {manageParent: true})
+  } catch (error) {
+    errorThrown = true
+  }
+
+  if (errorThrown) {
+    equal(errorThrown, true)
+  } else {
+    const successfulXSSImg = $('img')
+    equal(successfulXSSImg.length, 0)
+  }
 })
 
 QUnit.module('RichContentEditor - callOnRCE', {
@@ -145,15 +164,12 @@ QUnit.module('RichContentEditor - callOnRCE', {
     fixtures.teardown()
     RceCommandShim.send.restore()
     editorUtils.resetRCE()
-  }
+  },
 })
 
-test('with flag enabled freshens node before passing to RceCommandShim', function() {
+test('with flag enabled freshens node before passing to RceCommandShim', function () {
   const $freshTarget = $(this.$target) // new jquery obj of same node
-  sinon
-    .stub(RichContentEditor, 'freshNode')
-    .withArgs(this.$target)
-    .returns($freshTarget)
+  sinon.stub(RichContentEditor, 'freshNode').withArgs(this.$target).returns($freshTarget)
   equal(RichContentEditor.callOnRCE(this.$target, 'methodName', 'methodArg'), 'methodResult')
   ok(RceCommandShim.send.calledWith($freshTarget, 'methodName', 'methodArg'))
   RichContentEditor.freshNode.restore()

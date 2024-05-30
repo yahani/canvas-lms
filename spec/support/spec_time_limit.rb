@@ -44,9 +44,7 @@ module SpecTimeLimit
   class << self
     def enforce(example)
       type, timeout = timeout_for(example)
-      Timeout.timeout(timeout, Error, Error.message_for(type, timeout)) do
-        example.run
-      end
+      Timeout.timeout(timeout, Error, Error.message_for(type, timeout), &example)
       # no error handling needed, since rspec will catch the error and
       # perform set_exception(spec_time_limit_error) on the example
     end
@@ -88,8 +86,8 @@ module SpecTimeLimit
 
     def commit_files
       @commit_files ||=
-        (`git diff-tree --no-commit-id --name-only -r HEAD | grep -E '_spec\.rb$'`
-        ).split("\n")
+        `git diff-tree --no-commit-id --name-only -r HEAD | grep -E '_spec\.rb$'`
+        .split("\n")
     end
   end
 end

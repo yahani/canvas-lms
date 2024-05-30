@@ -56,9 +56,15 @@ export default function (props = {}) {
     newPageLinkExpanded,
     searchString,
     sortBy,
-    all_files
+    all_files,
+    canvasOrigin,
+    canvasUrl,
   } = props
   /* eslint-enable prefer-const */
+
+  if (!canvasOrigin) {
+    canvasOrigin = canvasUrl
+  }
 
   // normalize contextType (including in props)
   contextType = normalizeContextType(contextType)
@@ -80,7 +86,8 @@ export default function (props = {}) {
     source = new RceApiSource({
       jwt,
       refreshToken,
-      host
+      host,
+      canvasOrigin,
     })
   }
 
@@ -92,7 +99,7 @@ export default function (props = {}) {
       discussions: source.initializeCollection('discussions', props),
       modules: source.initializeCollection('modules', props),
       quizzes: source.initializeCollection('quizzes', props),
-      wikiPages: source.initializeCollection('wikiPages', props)
+      wikiPages: source.initializeCollection('wikiPages', props),
     }
   }
 
@@ -129,7 +136,7 @@ export default function (props = {}) {
     }
   }
   const ui = {
-    selectedAccordionIndex: getAccordionIndex()
+    selectedAccordionIndex: getAccordionIndex(),
   }
 
   return {
@@ -150,6 +157,6 @@ export default function (props = {}) {
     newPageLinkExpanded,
     searchString,
     sortBy,
-    all_files
+    all_files,
   }
 }

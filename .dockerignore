@@ -26,15 +26,13 @@ gems/plugins/*/.git
 !/log/parallel-runtime-rspec.log
 node_modules/
 packages/*/node_modules/
-packages/canvas-planner/lib
 public/dist/
 public/doc/
 public/javascripts/translations/
-!public/javascripts/translations/_core_en.js
+!public/javascripts/translations/en.json
 tmp/*
 vendor/bundle/
 vendor/*/.git
 Dockerfile
 *.Dockerfile
-Gemfile.lock
 mkmf.log

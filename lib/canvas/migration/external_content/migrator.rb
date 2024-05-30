@@ -33,11 +33,13 @@ module Canvas::Migration::ExternalContent
 
       # tells the services to begin exporting
       # should return the info we need to go retrieve the exported data later (e.g. a status url)
-      def begin_exports(course, opts = {})
+      def begin_exports(course, content_export = nil, opts = {})
         pending_exports = {}
         pending_exports.merge!(Lti::ContentMigrationService.begin_exports(course, opts)) if Lti::ContentMigrationService.enabled?
         registered_services.each do |key, service|
           next unless service.applies_to_course?(course)
+
+          next if key == "quizzes_next_export" && should_load_new_quizzes_export?(content_export)
 
           begin
             if (export = service.begin_export(course, opts))
@@ -87,7 +89,7 @@ module Canvas::Migration::ExternalContent
 
           if export_completed?(pending_export, key)
             service_data = retrieve_export_data(pending_export, key)
-            exported_content[key] = Canvas::Migration::ExternalContent::Translator.new(content_export: content_export).translate_data(service_data, :export) if service_data
+            exported_content[key] = Canvas::Migration::ExternalContent::Translator.new(content_export:).translate_data(service_data, :export) if service_data
             true
           end
         end
@@ -134,14 +136,6 @@ module Canvas::Migration::ExternalContent
         ensure_imports_completed(pending_imports)
       end
 
-      private def import_service_for(key)
-        if Lti::ContentMigrationService::KEY_REGEX.match?(key)
-          Lti::ContentMigrationService.importer_for(key)
-        else
-          registered_services[key]
-        end
-      end
-
       def ensure_imports_completed(pending_imports)
         # keep pinging until they're all finished
         retry_block_for_each(pending_imports.keys) do |key|
@@ -152,6 +146,20 @@ module Canvas::Migration::ExternalContent
             registered_services[key].import_completed?(import_data)
           end
         end
+      end
+
+      private
+
+      def import_service_for(key)
+        if Lti::ContentMigrationService::KEY_REGEX.match?(key)
+          Lti::ContentMigrationService.importer_for(key)
+        else
+          registered_services[key]
+        end
+      end
+
+      def should_load_new_quizzes_export?(content_export)
+        content_export&.contains_new_quizzes? && content_export.common_cartridge?
       end
     end
   end

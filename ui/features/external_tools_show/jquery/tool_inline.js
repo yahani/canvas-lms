@@ -17,7 +17,7 @@
  */
 
 import $ from 'jquery'
-import {trackEvent} from '@canvas/google-analytics'
+import '@canvas/jquery/jquery.ajaxJSON'
 import '@canvas/module-sequence-footer'
 import MarkAsDone from '@canvas/util/jquery/markAsDone'
 import ToolLaunchResizer from '@canvas/lti/jquery/tool_launch_resizer'
@@ -25,7 +25,15 @@ import {monitorLtiMessages} from '@canvas/lti/jquery/messages'
 import ready from '@instructure/ready'
 
 ready(() => {
-  const $toolForm = $('#tool_form')
+  const formSubmissionDelay = window.ENV.INTEROP_8200_DELAY_FORM_SUBMIT
+
+  let toolFormId = '#tool_form'
+  let toolIframeId = '#tool_content'
+  if (typeof ENV.LTI_TOOL_FORM_ID === 'string') {
+    toolFormId = `#tool_form_${ENV.LTI_TOOL_FORM_ID}`
+    toolIframeId = `#tool_content_${ENV.LTI_TOOL_FORM_ID}`
+  }
+  const $toolForm = $(toolFormId)
 
   const launchToolManually = function () {
     const $button = $toolForm.find('button')
@@ -33,16 +41,26 @@ ready(() => {
     $toolForm.show()
 
     // Firefox remembers disabled state after page reloads
-    $button.attr('disabled', false)
+    $button.prop('disabled', false)
     setTimeout(() => {
       // LTI links have a time component in the signature and will
       // expire after a few minutes.
-      $button.attr('disabled', true).text($button.data('expired_message'))
+      $button.prop('disabled', true).text($button.data('expired_message'))
     }, 60 * 2.5 * 1000)
 
-    $toolForm.submit(function () {
-      $(this).find('.load_tab,.tab_loaded').toggle()
-    })
+    if (formSubmissionDelay) {
+      setTimeout(
+        () =>
+          $toolForm.submit(function () {
+            $(this).find('.load_tab,.tab_loaded').toggle()
+          }),
+        formSubmissionDelay
+      )
+    } else {
+      $toolForm.submit(function () {
+        $(this).find('.load_tab,.tab_loaded').toggle()
+      })
+    }
   }
 
   const launchToolInNewTab = function () {
@@ -57,23 +75,22 @@ ready(() => {
       break
     case 'self':
       $toolForm.removeAttr('target')
-      try {
+      if (formSubmissionDelay) {
+        setTimeout(() => $toolForm.submit(), formSubmissionDelay)
+      } else {
         $toolForm.submit()
-        // eslint-disable-next-line no-empty
-      } catch (e) {}
+      }
       break
     default:
       // Firefox throws an error when submitting insecure content
-      try {
+      if (formSubmissionDelay) {
+        setTimeout(() => $toolForm.submit(), formSubmissionDelay)
+      } else {
         $toolForm.submit()
-        // eslint-disable-next-line no-empty
-      } catch (e) {}
+      }
 
-      $('#tool_content').bind('load', () => {
-        if (
-          document.location.protocol !== 'https:' ||
-          $('#tool_form')[0].action.indexOf('https:') > -1
-        ) {
+      $(toolIframeId).bind('load', () => {
+        if (document.location.protocol !== 'https:' || $toolForm[0].action.indexOf('https:') > -1) {
           $('#insecure_content_msg').hide()
           $toolForm.hide()
         }
@@ -86,12 +103,6 @@ ready(() => {
       }, 3 * 1000)
       break
   }
-
-  // Google analytics tracking code
-  const toolName = $toolForm.data('tool-id') || 'unknown'
-  const toolPath = $toolForm.data('tool-path')
-  const messageType = $toolForm.data('message-type') || 'tool_launch'
-  trackEvent(messageType, toolName, toolPath)
 
   // Iframe resize handler
   const $tool_content_wrapper = $('.tool_content_wrapper')
@@ -117,7 +128,8 @@ ready(() => {
   const is_full_screen = $('body').hasClass('ic-full-screen-lti-tool')
 
   if (!is_full_screen) {
-    canvas_chrome_height = $tool_content_wrapper.offset().top + $('#footer').outerHeight(true)
+    const footerHeight = $('#footer').outerHeight(true) || 0
+    canvas_chrome_height = $tool_content_wrapper.offset().top + footerHeight
   }
 
   if ($tool_content_wrapper.length) {
@@ -146,11 +158,12 @@ ready(() => {
 
             toolResizer.resize_tool_content_wrapper(tool_height, $tool_content_wrapper, true)
           } else {
+            // module item navigation from PLAT-1687
+            const sequenceFooterHeight = $('#sequence_footer').outerHeight(true) || 0
             toolResizer.resize_tool_content_wrapper(
               $window.height() -
                 canvas_chrome_height -
-                // module item navigation from PLAT-1687
-                $('#sequence_footer').outerHeight(true)
+                sequenceFooterHeight
             )
           }
         }
@@ -162,7 +175,7 @@ ready(() => {
     $('#module_sequence_footer').moduleSequenceFooter({
       assetType: 'Lti',
       assetID: ENV.LTI.SEQUENCE.ASSET_ID,
-      courseID: ENV.LTI.SEQUENCE.COURSE_ID
+      courseID: ENV.LTI.SEQUENCE.COURSE_ID,
     })
   }
 

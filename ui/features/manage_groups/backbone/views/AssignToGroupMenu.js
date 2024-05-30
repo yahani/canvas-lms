@@ -16,7 +16,7 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import PopoverMenuView from './PopoverMenuView'
-import GroupCategoryCloneView from './GroupCategoryCloneView.coffee'
+import GroupCategoryCloneView from './GroupCategoryCloneView'
 import template from '../../jst/assignToGroupMenu.handlebars'
 import $ from 'jquery'
 import groupHasSubmissions from '../../groupHasSubmissions'
@@ -29,12 +29,13 @@ export default class AssignToGroupMenu extends PopoverMenuView {
     this.prototype.events = {
       ...PopoverMenuView.prototype.events,
       'click .set-group': 'setGroup',
-      'focusin .focus-bound': 'boundFocused'
+      'focusin .focus-bound': 'boundFocused',
     }
 
     this.prototype.tagName = 'div'
 
-    this.prototype.className = 'assign-to-group-menu ui-tooltip popover content-top horizontal'
+    this.prototype.className =
+      'assign-to-group-menu ui-tooltip popover right content-top horizontal'
 
     this.prototype.template = template
   }
@@ -52,7 +53,7 @@ export default class AssignToGroupMenu extends PopoverMenuView {
     if (groupHasSubmissions(this.collection.get(newGroupId))) {
       this.cloneCategoryView = new GroupCategoryCloneView({
         model: this.model.collection.category,
-        openedFromCaution: true
+        openedFromCaution: true,
       })
       this.cloneCategoryView.open()
       return this.cloneCategoryView.on('close', () => {
@@ -81,7 +82,7 @@ export default class AssignToGroupMenu extends PopoverMenuView {
     return {
       groups: this.collection.toJSON(),
       noGroups: !hasGroups,
-      allFull: hasGroups && this.collection.models.every(g => g.isFull())
+      allFull: hasGroups && this.collection.models.every(g => g.isFull()),
     }
   }
 
@@ -93,10 +94,7 @@ export default class AssignToGroupMenu extends PopoverMenuView {
     const noGroupsToJoin =
       this.collection.length <= 0 || this.collection.models.every(g => g.isFull())
     const toFocus = noGroupsToJoin ? '.popover-content p' : 'li a' // focus text if no groups, focus first group if groups
-    return this.$el
-      .find(toFocus)
-      .first()
-      .focus()
+    return this.$el.find(toFocus).first().focus()
   }
 
   boundFocused() {

@@ -186,8 +186,7 @@ describe Login::SamlController do
     @pseudonym.save!
 
     saml_response = SAML2::Response.new
-    allow(saml_response).to receive(:errors).and_return([])
-    allow(saml_response).to receive(:issuer).and_return(double(id: "such a lie"))
+    allow(saml_response).to receive_messages(errors: [], issuer: double(id: "such a lie"))
     allow(SAML2::Bindings::HTTP_POST).to receive(:decode).and_return(
       [saml_response, nil]
     )
@@ -200,7 +199,7 @@ describe Login::SamlController do
 
   it "doesn't allow deleted users" do
     account = account_with_saml
-    user_with_pseudonym(active_all: 1, account: account)
+    user_with_pseudonym(active_all: 1, account:)
     @user.update!(workflow_state: "deleted")
 
     response = SAML2::Response.new
@@ -235,9 +234,7 @@ describe Login::SamlController do
     @pseudonym.save!
 
     saml_response = SAML2::Response.new
-    allow(saml_response).to receive(:errors).and_return([])
-    allow(saml_response).to receive(:issuer).and_return(nil)
-    allow(saml_response).to receive(:assertions).and_return([double(issuer: double(id: "such a lie"))])
+    allow(saml_response).to receive_messages(errors: [], issuer: nil, assertions: [double(issuer: double(id: "such a lie"))])
     allow(SAML2::Bindings::HTTP_POST).to receive(:decode).and_return(
       [saml_response, nil]
     )
@@ -324,9 +321,39 @@ describe Login::SamlController do
     expect(p.user.short_name).to eq "Cody Cutrer"
   end
 
+  it "skips JIT user provisioning for suspended pseudonyms" do
+    account = account_with_saml
+    user = user_with_pseudonym(active_all: 1, account:)
+    user.pseudonyms.last.update!(workflow_state: "suspended")
+
+    ap = account.authentication_providers.first
+    ap.update_attribute(:jit_provisioning, true)
+    ap.federated_attributes = { "sis_user_id" => "urn:oid" }
+    ap.save!
+
+    response = SAML2::Response.new
+    response.issuer = SAML2::NameID.new("saml_entity")
+    response.assertions << (assertion = SAML2::Assertion.new)
+    assertion.subject = SAML2::Subject.new
+    assertion.subject.name_id = SAML2::NameID.new(@pseudonym.unique_id)
+    assertion.statements << SAML2::AttributeStatement.new(
+      [SAML2::Attribute.create("urn:oid", "some_unique_id")]
+    )
+    allow(SAML2::Bindings::HTTP_POST).to receive(:decode).and_return(
+      [response, nil]
+    )
+    allow_any_instance_of(SAML2::Entity).to receive(:valid_response?)
+    allow(LoadAccount).to receive(:default_domain_root_account).and_return(account)
+
+    post :create, params: { SAMLResponse: "foo" }
+    expect(response).to redirect_to(login_url)
+    expect(flash[:delegated_message]).to_not be_nil
+    expect(session[:saml_unique_id]).to be_nil
+  end
+
   it "updates federated attributes" do
     account = account_with_saml
-    user_with_pseudonym(active_all: 1, account: account)
+    user_with_pseudonym(active_all: 1, account:)
 
     ap = account.authentication_providers.first
     ap.federated_attributes = { "display_name" => "eduPersonNickname" }
@@ -380,7 +407,7 @@ describe Login::SamlController do
   context "with relay state" do
     before do
       account = account_with_saml
-      user_with_pseudonym(active_all: 1, account: account)
+      user_with_pseudonym(active_all: 1, account:)
       allow_any_instance_of(SAML2::Entity).to receive(:valid_response?)
       allow(LoadAccount).to receive(:default_domain_root_account).and_return(account)
       session[:return_to] = "/courses/1"
@@ -556,15 +583,14 @@ describe Login::SamlController do
 
       it "redirects to login screen with message if no AAC found" do
         saml_response = SAML2::Response.new
-        allow(saml_response).to receive(:errors).and_return([])
-        allow(saml_response).to receive(:issuer).and_return(double(id: "hahahahahahaha"))
+        allow(saml_response).to receive_messages(errors: [], issuer: double(id: "hahahahahahaha"))
         allow(SAML2::Bindings::HTTP_POST).to receive(:decode).and_return(
           [saml_response, nil]
         )
 
         session[:sentinel] = true
         post_create
-        expect(session[:sentinel]).to eq true
+        expect(session[:sentinel]).to be true
 
         expect(response).to redirect_to(login_url)
         expect(flash[:delegated_message]).to eq "Canvas is not configured to receive logins from hahahahahahaha."
@@ -596,7 +622,7 @@ describe Login::SamlController do
 
       it "reject unknown specified AAC" do
         get_new("0")
-        expect(response.status).to eq 404
+        expect(response).to have_http_status :not_found
       end
     end
 
@@ -610,7 +636,7 @@ describe Login::SamlController do
         it "returns bad request if a SAMLResponse or SAMLRequest parameter is not provided" do
           expect(controller).not_to receive(:logout_user_action)
           get :destroy
-          expect(response.status).to eq 400
+          expect(response).to have_http_status :bad_request
         end
 
         it "finds the correct AAC" do
@@ -650,7 +676,7 @@ describe Login::SamlController do
           logout_request.issuer = SAML2::NameID.new(@aac3.idp_entity_id)
           expect(SAML2::Bindings::HTTPRedirect).to receive(:decode).and_return(logout_request)
           get :destroy, params: { SAMLRequest: "foo" }
-          expect(response.status).to eq 400
+          expect(response).to have_http_status :bad_request
         end
 
         it "returns bad request if SAMLRequest parameter doesn't match an AAC" do
@@ -660,7 +686,7 @@ describe Login::SamlController do
 
           controller.request.env["canvas.domain_root_account"] = @account
           get :destroy, params: { SAMLRequest: "foo" }
-          expect(response.status).to eq 400
+          expect(response).to have_http_status :bad_request
         end
       end
     end
@@ -677,7 +703,7 @@ describe Login::SamlController do
       expect(controller).not_to receive(:logout_user_action)
       controller.request.env["canvas.domain_root_account"] = @account
       get :destroy, params: { SAMLResponse: "foo", RelayState: "/courses" }
-      expect(response.status).to eq 400
+      expect(response).to have_http_status :bad_request
     end
 
     it "renders an error if the IdP fails the request" do
@@ -718,7 +744,7 @@ describe Login::SamlController do
       end
       get :destroy, params: { SAMLRequest: saml_request }
 
-      expect(response.status).to eq 400
+      expect(response).to have_http_status :bad_request
     end
 
     it "accepts an HTTP-POST message" do
@@ -739,7 +765,7 @@ describe Login::SamlController do
       expect_any_instance_of(SAML2::LogoutRequest).to receive(:validate_signature).and_return([])
       post :destroy, params: post_params
 
-      expect(response.status).to eq 302
+      expect(response).to have_http_status :found
       expect(response.location).to match(%r{^https://idp.school.edu/logout})
     end
   end

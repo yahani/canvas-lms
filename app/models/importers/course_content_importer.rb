@@ -17,20 +17,14 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_dependency "importers"
-
 module Importers
   class CourseContentImporter < Importer
     self.item_class = Course
-    Importers.register_content_importer(self)
 
     def self.process_migration_files(data, migration)
       data["all_files_export"] ||= {}
       data["all_files_export"]["file_path"] ||= data["all_files_zip"]
       return unless data["all_files_export"]["file_path"] && File.exist?(data["all_files_export"]["file_path"])
-
-      migration.attachment_path_id_lookup ||= {}
-      migration.attachment_path_id_lookup_lower ||= {}
 
       params = migration.migration_settings[:migration_ids_to_import]
       valid_paths = []
@@ -61,9 +55,9 @@ module Importers
         unzip_opts = {
           course: migration.context,
           filename: data["all_files_export"]["file_path"],
-          valid_paths: valid_paths,
-          callback: callback,
-          logger: logger,
+          valid_paths:,
+          callback:,
+          logger:,
           rename_files: migration.migration_settings[:files_import_allow_rename],
           migration_id_map: migration.attachment_path_id_lookup,
         }
@@ -97,12 +91,13 @@ module Importers
         migration.check_cross_institution
         logger.debug "migration is cross-institution; external references will not be used" if migration.cross_institution?
 
-        (data["web_link_categories"] || []).map { |c| c["links"] }.flatten.each do |link|
+        (data["web_link_categories"] || []).pluck("links").flatten.each do |link|
           course.external_url_hash[link["link_id"]] = link
         end
         ActiveRecord::Base.skip_touch_context
 
         unless migration.for_course_copy?
+          migration.find_source_course_for_import if migration.canvas_import?
           Importers::ContextModuleImporter.select_all_linked_module_items(data, migration)
           Importers::GradingStandardImporter.select_course_grading_standard(data, migration)
           # These only need to be processed once
@@ -120,10 +115,12 @@ module Importers
               migration.add_error(error_message, error_report_id: er)
             end
           end
-          if migration.canvas_import?
-            migration.update_import_progress(30)
-            Importers::MediaTrackImporter.process_migration(data[:media_tracks], migration)
-          end
+        end
+
+        if (!migration.for_course_copy? || Account.site_admin.feature_enabled?(:media_links_use_attachment_id)) &&
+           (migration.canvas_import? || migration.for_master_course_import?)
+          migration.update_import_progress(30)
+          Importers::MediaTrackImporter.process_migration(data[:media_tracks], migration)
         end
 
         migration.update_import_progress(35)
@@ -175,7 +172,9 @@ module Importers
         Importers::WikiPageImporter.process_migration_course_outline(data, migration)
         Importers::CalendarEventImporter.process_migration(data, migration)
         Importers::LtiResourceLinkImporter.process_migration(data, migration)
-        Importers::CoursePaceImporter.process_migration(data, migration)
+
+        # FIXME: Eventually remove feature flag checking
+        Importers::CoursePaceImporter.process_migration(data, migration) if course.account.feature_enabled?(:course_paces)
 
         everything_selected = !migration.copy_options || migration.is_set?(migration.copy_options[:everything])
 
@@ -184,6 +183,11 @@ module Importers
           Importers::LatePolicyImporter.process_migration(data, migration) unless migration.should_skip_import? "LatePolicy"
         end
         migration.update_import_progress(90)
+
+        if (migration.migration_settings[:import_blueprint_settings] || (migration.copy_options && migration.copy_options[:all_blueprint_settings])) &&
+           (course.account.grants_any_right?(migration.user, :manage_courses, :manage_courses_admin) && course.account.grants_right?(migration.user, :manage_master_courses))
+          Importers::BlueprintSettingsImporter.process_migration(data, migration)
+        end
 
         # be very explicit about draft state courses, but be liberal toward legacy courses
         if course.wiki.has_no_front_page &&
@@ -214,7 +218,7 @@ module Importers
         end
         migration.update_import_progress(97)
 
-        insert_into_module(course, migration)
+        insert_into_module(course, migration, data)
         migration.update_import_progress(98)
 
         move_to_assignment_group(course, migration)
@@ -228,6 +232,7 @@ module Importers
         imported_asset_hash = {}
         migration.imported_migration_items_hash.each { |k, assets| imported_asset_hash[k] = assets.values.map(&:id).join(",") if assets.present? }
         migration.migration_settings[:imported_assets] = imported_asset_hash
+        migration.migration_settings[:attachment_path_id_lookup] = migration.attachment_path_id_lookup
         migration.workflow_state = :imported unless post_processing?(migration)
         migration.save
 
@@ -249,21 +254,35 @@ module Importers
 
       migration.trigger_live_events!
       Auditors::Course.record_copied(migration.source_course, course, migration.user, source: migration.initiated_source)
+      InstStatsd::Statsd.increment("content_migrations.import_success")
+      duration = Time.now - migration.created_at
+      InstStatsd::Statsd.timing("content_migrations.import_duration", duration, tags: { migration_type: migration.migration_type })
       migration.imported_migration_items
+    rescue Exception # rubocop:disable Lint/RescueException
+      InstStatsd::Statsd.increment("content_migrations.import_failure")
+      raise
     ensure
       ActiveRecord::Base.skip_touch_context(false)
     end
 
-    def self.insert_into_module(course, migration)
+    def self.insert_into_module(course, migration, data)
       module_id = migration.migration_settings[:insert_into_module_id]
       return unless module_id.present?
 
       mod = course.context_modules.find_by(id: module_id)
       return unless mod
 
+      items = (data[:modules] || []).pluck(:items).flatten! || []
+      items.each do |hash|
+        Importers::ContextModuleImporter.add_module_item_from_migration(mod, hash, 0, migration.context, {}, migration)
+      end
+
       imported_items = migration.imported_migration_items_for_insert_type
       return unless imported_items.any?
 
+      # get rid of assignments relating to quizzes lest they create 2 quizzes in the module
+      quiz_assignments = imported_items.filter { |item| item.is_a? Quizzes::Quiz }.pluck(:assignment_id)
+      imported_items.filter! { |item| !(item.is_a?(Assignment) && quiz_assignments.include?(item.id)) }
       start_pos = migration.migration_settings[:insert_into_module_position]
       start_pos = start_pos.to_i unless start_pos.nil? # 0 = start; nil = end
       mod.insert_items(imported_items, start_pos)
@@ -368,7 +387,7 @@ module Importers
               date = event.send(field)
               next unless date
 
-              event.send("#{field}=", shift_date(date, shift_options))
+              event.send(:"#{field}=", shift_date(date, shift_options))
             end
             event.save_without_broadcasting
           end
@@ -382,6 +401,7 @@ module Importers
         migration.imported_migration_items_by_class(WikiPage).each do |event|
           event.reload
           event.todo_date = shift_date(event.todo_date, shift_options)
+          event.publish_at = shift_date(event.publish_at, shift_options)
           event.save_without_broadcasting
         end
 
@@ -401,7 +421,7 @@ module Importers
       assignments = migration.imported_migration_items_by_class(Assignment).select(&:needs_update_cached_due_dates)
       if assignments.any?
         Assignment.clear_cache_keys(assignments, :availability)
-        DueDateCacher.recompute_course(migration.context, assignments: assignments, update_grades: true, executing_user: migration.user)
+        SubmissionLifecycleManager.recompute_course(migration.context, assignments:, update_grades: true, executing_user: migration.user, skip_late_policy_applicator: !!migration.date_shift_options)
       end
       quizzes = migration.imported_migration_items_by_class(Quizzes::Quiz).select(&:should_clear_availability_cache)
       Quizzes::Quiz.clear_cache_keys(quizzes, :availability) if quizzes.any?
@@ -458,6 +478,8 @@ module Importers
         atts -= [:restrict_enrollments_to_course_dates]
       end
 
+      atts -= [:is_public_to_auth_users, :is_public] if migration.should_skip_import? "visibility_settings"
+
       course.settings_will_change! unless atts.empty?
 
       # superhax to force new wiki front page if home view changed (or is master course sync)
@@ -479,7 +501,7 @@ module Importers
       end
 
       settings.slice(*atts.map(&:to_s)).each do |key, val|
-        course.send("#{key}=", val)
+        course.send(:"#{key}=", val)
       end
       if settings.key?(:grading_standard_enabled)
         if settings[:grading_standard_enabled]
@@ -522,13 +544,21 @@ module Importers
         Announcement.lock_from_course(course)
       end
 
+      if settings.key?(:time_zone)
+        course.time_zone = settings[:time_zone]
+      end
+
       if settings.key?(:default_post_policy)
         post_manually = Canvas::Plugin.value_to_boolean(settings.dig(:default_post_policy, :post_manually))
-        course.default_post_policy.update!(post_manually: post_manually)
+        course.default_post_policy.update!(post_manually:)
       end
 
       if settings.key?(:allow_final_grade_override) && course.account.feature_enabled?(:final_grades_override)
         course.allow_final_grade_override = settings[:allow_final_grade_override]
+      end
+
+      if settings.key?(:enable_course_paces) && course.account.feature_enabled?(:course_paces)
+        course.enable_course_paces = settings[:enable_course_paces]
       end
     end
 
@@ -580,7 +610,7 @@ module Importers
 
         old_full_diff = old_end_date - old_start_date
         old_event_diff = old_date - old_start_date
-        old_event_percent = old_full_diff > 0 ? old_event_diff.to_f / old_full_diff.to_f : 0
+        old_event_percent = (old_full_diff > 0) ? old_event_diff.to_f / old_full_diff.to_f : 0
         new_full_diff = new_end_date - new_start_date
         new_event_diff = (new_full_diff.to_f * old_event_percent).round
         new_date = new_start_date + new_event_diff

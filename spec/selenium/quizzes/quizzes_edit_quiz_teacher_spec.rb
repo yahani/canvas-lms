@@ -20,11 +20,13 @@
 require_relative "../common"
 require_relative "../helpers/quizzes_common"
 require_relative "../helpers/assignment_overrides"
+require_relative "page_objects/quizzes_edit_page"
 
 describe "editing a quiz" do
   include_context "in-process server selenium tests"
   include QuizzesCommon
   include AssignmentOverridesSeleniumHelper
+  include QuizzesEditPage
 
   def delete_quiz
     expect_new_page_load do
@@ -84,9 +86,9 @@ describe "editing a quiz" do
 
         # verify alert
         alert_box = f(".alert .unpublished_warning")
-        expect(alert_box.text).to \
-          eq "You have made changes to the questions in this quiz.\nThese "\
-             "changes will not appear for students until you save the quiz."
+        expect(alert_box.text)
+          .to eq "You have made changes to the questions in this quiz.\nThese " \
+                 "changes will not appear for students until you save the quiz."
 
         # verify button
         save_it_now_button = fj(".btn.btn-primary", ".edit_quizzes_quiz")
@@ -97,6 +99,12 @@ describe "editing a quiz" do
         expect(f(".alert .unpublished_warning")).not_to be_displayed
 
         expect { @quiz.quiz_questions.count }.to become(1)
+      end
+
+      it "shows the speed grader link" do
+        get "/courses/#{@course.id}/quizzes/#{@quiz.id}/edit"
+        f(".al-trigger").click
+        expect(f(".speed-grader-link-quiz")).to be_displayed
       end
     end
 
@@ -203,6 +211,44 @@ describe "editing a quiz" do
     it "doesn't allow XSS via :redirect_to query param" do
       get "/courses/#{@course.id}/quizzes/#{@quiz.id}/edit?return_to=javascript%3Aalert(document.cookie)"
       expect(f("#quiz_edit_actions #cancel_button").attribute("href")).to eq(course_quiz_url(@course, @quiz))
+    end
+
+    it "doesn't allow XSS via the return_to query param on Save" do
+      # NOTE: the _=1 is required because the deparam method does not correctly parse the first query param
+      # canvas-lms/packages/deparam/index.js
+      get "/courses/#{@course.id}/quizzes/#{@quiz.id}/edit?_=1&return_to=javascript%3Aalert('sadness')"
+
+      test_text = "changed description for XSS test"
+      type_in_tiny "#quiz_description", test_text, clear: true
+
+      click_save_settings_button
+      expect(alert_present?).to be_falsey
+    end
+
+    context "in a paced course" do
+      before(:once) do
+        @course.enable_course_paces = true
+        @course.save!
+      end
+
+      it "displays the course pacing notice in place of due dates" do
+        @quiz = create_quiz_with_due_date
+        item = add_quiz_to_module
+
+        get "/courses/#{@course.id}/quizzes/#{item.content_id}/edit"
+        expect(f(quiz_edit_form)).not_to contain_css(due_date_container)
+        expect(f(quiz_edit_form)).to contain_css(course_pacing_notice)
+      end
+
+      it "does not display the course pacing notice when feature is off in the account" do
+        @course.account.disable_feature!(:course_paces)
+        @quiz = create_quiz_with_due_date
+        item = add_quiz_to_module
+
+        get "/courses/#{@course.id}/quizzes/#{item.content_id}/edit"
+        expect(f(quiz_edit_form)).to contain_css(due_date_container)
+        expect(f(quiz_edit_form)).not_to contain_css(course_pacing_notice)
+      end
     end
   end
 end

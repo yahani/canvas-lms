@@ -18,7 +18,7 @@
 
 import $ from 'jquery'
 import registrationErrors from '@canvas/normalize-registration-errors'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import '@canvas/jquery/jquery.instructure_forms'
 
 const $form = $('#change_password_form')
 $form.formSubmit({
@@ -33,9 +33,9 @@ $form.formSubmit({
     )
   },
   success() {
-    location.href = '/login/canvas?password_changed=1'
+    window.location.href = '/login/canvas?password_changed=1'
   },
   error(errors) {
-    if (errors.nonce) location.href = '/login/canvas'
-  }
+    if (errors.nonce) window.location.href = '/login/canvas'
+  },
 })

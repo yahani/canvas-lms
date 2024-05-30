@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {clone} from 'underscore'
+import {clone} from 'lodash'
 import K from './constants'
 import generateUUID from './util/generateUUID'
 
@@ -72,7 +72,7 @@ export default class QuizEvent {
     return {
       event_type: this.type,
       event_data: this.data,
-      client_timestamp: this.recordedAt
+      client_timestamp: this.recordedAt,
     }
   }
 

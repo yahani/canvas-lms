@@ -18,7 +18,8 @@
 
 import Backbone from '@canvas/backbone'
 import $ from 'jquery'
-import InputView from 'backbone-input-view'
+import 'jquery-migrate'
+import InputView from '@canvas/backbone-input-view'
 
 let view = null
 
@@ -30,7 +31,7 @@ QUnit.module('InputView', {
   },
   teardown() {
     view.remove()
-  }
+  },
 })
 const setValue = term => (view.el.value = term)
 

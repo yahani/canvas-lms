@@ -152,7 +152,7 @@ describe Role do
     it "does not allow a duplicate active role to be created in the same account" do
       dup_role = @account.roles.new name: "1337 Student"
       dup_role.base_role_type = "StudentEnrollment"
-      expect(dup_role).to be_invalid
+      expect(dup_role).not_to be_valid
       @role.destroy
       expect(dup_role).to be_valid
     end
@@ -189,6 +189,27 @@ describe Role do
         expect(@account.roles.sort_by(&:id)).to eq [@role, @deleted_role]
         expect(@account.roles.active).to eq [@role]
       end
+    end
+  end
+
+  describe "#display_sort_index" do
+    before :once do
+      account_model
+    end
+
+    it "sorts course roles by name within base role type" do
+      @account.roles.create name: "Auditor", base_role_type: "StudentEnrollment"
+      @account.roles.create name: "1337 Student", base_role_type: "StudentEnrollment"
+      roles = @account.available_course_roles.sort_by(&:display_sort_index)
+      expect(roles.map(&:label)).to eq ["Student", "1337 Student", "Auditor", "Teacher", "TA", "Designer", "Observer"]
+    end
+
+    it "sorts account roles with built-in first, then case-insensitive name" do
+      @account.roles.create! name: "button pusher", base_role_type: "AccountMembership"
+      @account.roles.create! name: "MCSE", base_role_type: "AccountMembership"
+      @account.roles.create! name: "Apple Evangelist", base_role_type: "AccountMembership"
+      roles = @account.available_account_roles.sort_by(&:display_sort_index)
+      expect(roles.map(&:label)).to eq ["Account Admin", "Apple Evangelist", "button pusher", "MCSE"]
     end
   end
 
@@ -308,9 +329,9 @@ describe Role do
         }
         ["adding", "deleting"].each do |mode|
           roles_to_test.each do |perm_role|
-            role_key_to_test = mode == "adding" ? :addable_by_user : :deleteable_by_user
-            opposite_role_key_to_test = mode == "adding" ? :deleteable_by_user : :addable_by_user
-            permission_key = mode == "adding" ? "add_#{perm_role}_to_course".to_sym : "remove_#{perm_role}_from_course"
+            role_key_to_test = (mode == "adding") ? :addable_by_user : :deleteable_by_user
+            opposite_role_key_to_test = (mode == "adding") ? :deleteable_by_user : :addable_by_user
+            permission_key = (mode == "adding") ? :"add_#{perm_role}_to_course" : "remove_#{perm_role}_from_course"
 
             it "when #{mode} a(n) #{perm_role}" do
               @course.account.role_overrides.create!(role: @role, enabled: true, permission: permission_key)
@@ -322,7 +343,7 @@ describe Role do
 
                 # the opposite (add <-> delete) permission should always be false
                 value = roles.find { |r| r[:name] == role_names[test_role] }[opposite_role_key_to_test]
-                expect(value).to eq false
+                expect(value).to be false
               end
             end
           end

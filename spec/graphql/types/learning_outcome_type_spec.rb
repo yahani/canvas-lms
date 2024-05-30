@@ -57,7 +57,7 @@ describe Types::LearningOutcomeType do
       raw = outcome_type_raw.resolve("ratings { description points }")
       expect(raw["ratings"].map(&:symbolize_keys)).to eq @outcome.rubric_criterion[:ratings]
 
-      expect(outcome_type.resolve("canEdit")).to eq true
+      expect(outcome_type.resolve("canEdit")).to be true
     end
 
     it "returns outcome without individual ratings and calculation method if FF enabled" do
@@ -77,7 +77,7 @@ describe Types::LearningOutcomeType do
     end
 
     it "returns canEdit false" do
-      expect(outcome_type.resolve("canEdit")).to eq false
+      expect(outcome_type.resolve("canEdit")).to be false
     end
   end
 
@@ -100,18 +100,18 @@ describe Types::LearningOutcomeType do
     end
 
     it "returns false when not assessed" do
-      expect(outcome_type.resolve("assessed")).to eq false
+      expect(outcome_type.resolve("assessed")).to be false
     end
 
     it "returns true when assessed" do
       rubric_assessment_model(rubric: @rubric, user: @student)
-      expect(outcome_type.resolve("assessed")).to eq true
+      expect(outcome_type.resolve("assessed")).to be true
     end
 
     it "returns false when assessment deleted" do
       assessment = rubric_assessment_model(rubric: @rubric, user: @student)
       assessment.learning_outcome_results.destroy_all
-      expect(outcome_type.resolve("assessed")).to eq false
+      expect(outcome_type.resolve("assessed")).to be false
     end
   end
 
@@ -121,13 +121,13 @@ describe Types::LearningOutcomeType do
 
     it "returns false when not imported" do
       expect(outcome_type.resolve("isImported(targetContextType: \"Course\", targetContextId: #{course.id})"))
-        .to eq false
+        .to be false
     end
 
     it "returns true when imported" do
       root_group.add_outcome(@outcome)
       expect(outcome_type.resolve("isImported(targetContextType: \"Course\", targetContextId: #{course.id})"))
-        .to eq true
+        .to be true
     end
   end
 
@@ -149,33 +149,93 @@ describe Types::LearningOutcomeType do
     end
   end
 
-  context "alignments" do
+  describe "alignments" do
     before do
       course_model
-      assignment1 = assignment_model({
-                                       course: @course,
-                                       name: "First Assignment",
-                                       due_at: nil,
-                                       points_possible: 10,
-                                       submission_types: "online_text_entry,online_upload",
-                                     })
-      assignment2 = assignment_model({
-                                       course: @course,
-                                       name: "Second Assignment",
-                                       due_at: nil,
-                                       points_possible: 20,
-                                       submission_types: "online_text_entry",
-                                     })
-      @outcome = outcome_model(context: @course, title: "outcome")
-      @alignment1 = @outcome.align(assignment1, @course)
-      @alignment2 = @outcome.align(assignment2, @course)
-      @course.account.enable_feature!(:outcome_alignment_summary)
+      course_with_student(course: @course)
+      assignment1 = assignment_model({ course: @course, name: "First Assignment" })
+      assignment2 = assignment_model({ course: @course, name: "Second Assignment" })
+      assignment3 = assignment_model({ course: @course, name: "Third Assignment" })
+      @course_outcome = outcome_model(context: @course, title: "course outcome")
+      @global_outcome = outcome_model(global: true, title: "global outcome")
+      @course_outcome_group = @course.root_outcome_group
+      @course_outcome_group.add_outcome @global_outcome
+      @course_outcome_group.save!
+      @alignment1 = @course_outcome.align(assignment1, @course)
+      @alignment2 = @course_outcome.align(assignment2, @course)
+      @alignment3 = @global_outcome.align(assignment3, @course)
+      @alignment1_id = ["D", @alignment1.id].join("_")
+      @alignment2_id = ["D", @alignment2.id].join("_")
+      @alignment3_id = ["D", @alignment3.id].join("_")
+      @course.account.enable_feature!(:improved_outcomes_management)
     end
 
-    it "resolves alignments correctly" do
-      alignment_ids = outcome_type.resolve("alignments(contextType: \"Course\", contextId: #{@course.id}) { _id }")
-      expect(alignment_ids.length).to eq 2
-      expect(alignment_ids).to include(@alignment1.id.to_s, @alignment2.id.to_s)
+    context "for users with Admin role" do
+      it "resolves alignments for course outcomes" do
+        outcome_type = GraphQLTypeTester.new(@course_outcome, { current_user: @admin })
+        alignment_ids = outcome_type.resolve("alignments(contextType: \"Course\", contextId: #{@course.id}) { _id }")
+        expect(alignment_ids.length).to eq 2
+        expect(alignment_ids).to include(@alignment1_id, @alignment2_id)
+      end
+
+      it "resolves alignments for global outcomes added to course" do
+        outcome_type = GraphQLTypeTester.new(@global_outcome, { current_user: @admin })
+        alignment_ids = outcome_type.resolve("alignments(contextType: \"Course\", contextId: #{@course.id}) { _id }")
+        expect(alignment_ids.length).to eq 1
+        expect(alignment_ids).to include(@alignment3_id)
+      end
+    end
+
+    context "for users with Teacher role" do
+      it "resolves alignments for course outcomes" do
+        outcome_type = GraphQLTypeTester.new(@course_outcome, { current_user: @teacher })
+        alignment_ids = outcome_type.resolve("alignments(contextType: \"Course\", contextId: #{@course.id}) { _id }")
+        expect(alignment_ids.length).to eq 2
+        expect(alignment_ids).to include(@alignment1_id, @alignment2_id)
+      end
+
+      it "resolves alignments for global outcomes added to course" do
+        outcome_type = GraphQLTypeTester.new(@global_outcome, { current_user: @teacher })
+        alignment_ids = outcome_type.resolve("alignments(contextType: \"Course\", contextId: #{@course.id}) { _id }")
+        expect(alignment_ids.length).to eq 1
+        expect(alignment_ids).to include(@alignment3_id)
+      end
+    end
+
+    context "for users with Student role" do
+      it "does not resolve alignments for course outcomes" do
+        outcome_type = GraphQLTypeTester.new(@outcome, { current_user: @student })
+        expect(outcome_type.resolve("alignments(contextType: \"Course\", contextId: #{@course.id}) { _id }")).to be_nil
+      end
+
+      it "does not resolve alignments for global outcomes added to course" do
+        outcome_type = GraphQLTypeTester.new(@global_outcome, { current_user: @student })
+        expect(outcome_type.resolve("alignments(contextType: \"Course\", contextId: #{@course.id}) { _id }")).to be_nil
+      end
+    end
+
+    it "does not resolve alignments for invalid context type" do
+      outcome_type = GraphQLTypeTester.new(@course_outcome, { current_user: @admin })
+      expect(outcome_type.resolve("alignments(contextType: \"Invalid\", contextId: #{@course.id}) { _id }")).to be_nil
+    end
+
+    it "does not resolve alignments for invalid context id" do
+      outcome_type = GraphQLTypeTester.new(@course_outcome, { current_user: @admin })
+      expect(outcome_type.resolve("alignments(contextType: \"Course\", contextId: 999999) { _id }")).to be_nil
+    end
+  end
+
+  context "canArchive" do
+    let(:course) { Course.create! }
+
+    it "returns true if outcome was created in the same context" do
+      expect(outcome_type.resolve("canArchive(contextType: \"Account\", contextId: #{Account.default.id})"))
+        .to be true
+    end
+
+    it "return false if outcome was created in a different context" do
+      expect(outcome_type.resolve("canArchive(contextType: \"Course\", contextId: #{course.id})"))
+        .to be false
     end
   end
 end

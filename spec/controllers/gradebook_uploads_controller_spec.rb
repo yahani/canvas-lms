@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "csv"
-
 describe GradebookUploadsController do
   def course_with_graded_student
     @group = @course.assignment_groups.create!(name: "Some Assignment Group", group_weight: 100)
@@ -34,7 +32,7 @@ describe GradebookUploadsController do
 
   def generate_file(include_sis_id = false)
     file = Tempfile.new("csv.csv")
-    file.puts(GradebookExporter.new(@course, @teacher, include_sis_id: include_sis_id).to_csv)
+    file.puts(GradebookExporter.new(@course, @teacher, include_sis_id:).to_csv)
     file.close
     file
   end
@@ -122,7 +120,7 @@ describe GradebookUploadsController do
       user_session(@teacher)
       progress = Progress.create!(tag: "test", context: @teacher)
 
-      @gb_upload = GradebookUpload.new course: @course, user: @teacher, progress: progress, gradebook: { foo: "bar" }
+      @gb_upload = GradebookUpload.new course: @course, user: @teacher, progress:, gradebook: { foo: "bar" }
       @gb_upload.save
 
       get "data", params: { course_id: @course.id }
@@ -133,7 +131,7 @@ describe GradebookUploadsController do
     it "destroys an uploaded gradebook after retrieval" do
       user_session(@teacher)
       progress = Progress.create!(tag: "test", context: @teacher)
-      @gb_upload = GradebookUpload.new course: @course, user: @teacher, progress: progress, gradebook: { foo: "bar" }
+      @gb_upload = GradebookUpload.new course: @course, user: @teacher, progress:, gradebook: { foo: "bar" }
       @gb_upload.save
       get "data", params: { course_id: @course.id }
       expect { GradebookUpload.find(@gb_upload.id) }.to raise_error(ActiveRecord::RecordNotFound)
@@ -147,30 +145,43 @@ describe GradebookUploadsController do
       assert_unauthorized
     end
 
-    describe "js_env.bulk_update_override_scores_path" do
-      it "is set if importing override scores is enabled" do
-        Account.site_admin.enable_feature!(:import_override_scores_in_gradebook)
+    it "sets js_env.bulk_update_override_scores_path" do
+      user_session(@teacher)
+      progress = Progress.create!(tag: "test", context: @teacher)
 
-        user_session(@teacher)
-        progress = Progress.create!(tag: "test", context: @teacher)
+      @gb_upload = GradebookUpload.new course: @course, user: @teacher, progress:, gradebook: { foo: "bar" }
+      @gb_upload.save
 
-        @gb_upload = GradebookUpload.new course: @course, user: @teacher, progress: progress, gradebook: { foo: "bar" }
-        @gb_upload.save
+      get "show", params: { course_id: @course.id }
+      expect(assigns[:js_env]).to have_key(:bulk_update_override_scores_path)
+    end
 
-        get "show", params: { course_id: @course.id }
-        expect(assigns[:js_env]).to have_key(:bulk_update_override_scores_path)
-      end
+    it "sets js_env.custom_grade_statuses to empty array if FF is off even if they exist" do
+      Account.site_admin.disable_feature!(:custom_gradebook_statuses)
+      CustomGradeStatus.create!(root_account: @course.root_account, name: "CARROT", color: "#000000", created_by: @teacher)
+      user_session(@teacher)
+      progress = Progress.create!(tag: "test", context: @teacher)
 
-      it "is not set if importing override scores is not enabled" do
-        user_session(@teacher)
-        progress = Progress.create!(tag: "test", context: @teacher)
+      @gb_upload = GradebookUpload.new course: @course, user: @teacher, progress:, gradebook: { foo: "bar" }
+      @gb_upload.save
 
-        @gb_upload = GradebookUpload.new course: @course, user: @teacher, progress: progress, gradebook: { foo: "bar" }
-        @gb_upload.save
+      get "show", params: { course_id: @course.id }
+      expect(assigns[:js_env]).to have_key(:custom_grade_statuses)
+      expect(assigns[:js_env][:custom_grade_statuses].length).to eq(0)
+    end
 
-        get "show", params: { course_id: @course.id }
-        expect(assigns[:js_env]).not_to have_key(:bulk_update_override_scores_path)
-      end
+    it "sets js_env.custom_grade_statuses if the FF is on" do
+      Account.site_admin.enable_feature!(:custom_gradebook_statuses)
+      CustomGradeStatus.create!(root_account: @course.root_account, name: "CARROT", color: "#000000", created_by: @teacher)
+      user_session(@teacher)
+      progress = Progress.create!(tag: "test", context: @teacher)
+
+      @gb_upload = GradebookUpload.new course: @course, user: @teacher, progress:, gradebook: { foo: "bar" }
+      @gb_upload.save
+
+      get "show", params: { course_id: @course.id }
+      expect(assigns[:js_env]).to have_key(:custom_grade_statuses)
+      expect(assigns[:js_env][:custom_grade_statuses].length).to eq(1)
     end
   end
 end

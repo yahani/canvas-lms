@@ -16,8 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {tabIdFromElement} from 'ui/features/course_settings/jquery/course_settings_helper.js'
-import $ from 'jquery'
+import {tabIdFromElement} from 'ui/features/course_settings/jquery/course_settings_helper'
+import 'jquery-migrate'
 
 QUnit.module(
   'course_settings_helper',

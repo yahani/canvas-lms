@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import _ from 'underscore'
+import {isObject} from 'lodash'
 
 export const handleActions = (actionHandler, def) => {
   return (state, action) => {
@@ -24,7 +24,7 @@ export const handleActions = (actionHandler, def) => {
 
     if (actionHandler[action.type]) {
       let stateCopy = state
-      if (_.isObject(state)) {
+      if (isObject(state)) {
         stateCopy = {...state}
       } else if (Array.isArray(state)) {
         stateCopy = state.slice()
@@ -39,4 +39,7 @@ export const handleActions = (actionHandler, def) => {
 
 export const getPayload = (state, action) => action.payload
 
-export const identity = (def = '') => (s, a) => (s === undefined ? def : s)
+export const identity =
+  (def = '') =>
+  (s, _a) =>
+    s === undefined ? def : s

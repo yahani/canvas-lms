@@ -16,15 +16,14 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import _ from 'lodash-underscore'
+import {find} from 'lodash'
 
-const find = _.find
 const RE_EXTRACT_LINK = /<([^>]+)>; rel="([^"]+)",?\s*/g
 const RE_EXTRACT_PP = /per_page=(\d+)/
 
 // Extract pagination meta from a JSON-API payload inside the
 // "meta.pagination" set.
-const parseJsonApiPagination = function(respMeta, meta) {
+const parseJsonApiPagination = function (respMeta, meta) {
   if (!meta) meta = {}
 
   meta.perPage = respMeta.per_page
@@ -39,7 +38,7 @@ const parseJsonApiPagination = function(respMeta, meta) {
 //
 // Here's a good reference:
 //   https://developer.github.com/guides/traversing-with-pagination/
-const parseLinkPagination = function(linkHeader, meta) {
+const parseLinkPagination = function (linkHeader, meta) {
   let match
   const links = []
 
@@ -49,7 +48,7 @@ const parseLinkPagination = function(linkHeader, meta) {
     links.push({
       rel: match[2],
       href: match[1],
-      page: parseInt(/page=(\d+)/.exec(match[1])[1], 10)
+      page: parseInt(/page=(\d+)/.exec(match[1])[1], 10),
     })
   }
 
@@ -137,7 +136,7 @@ const Mixin = {
 
     options.data.page = options.page || meta.nextPage
 
-    options.success = function(payload, statusText, xhr) {
+    options.success = function (payload, statusText, xhr) {
       const header = xhr.getResponseHeader('Link')
 
       if (payload.meta && payload.meta.pagination) {
@@ -179,8 +178,7 @@ const Mixin = {
     } else if (options.hasOwnProperty('page')) {
       if (process.env.NODE_ENV === 'development') {
         console.error(
-          'You should not specify a page when fetching all pages since it ' +
-          'will be reset to 1!'
+          'You should not specify a page when fetching all pages since it will be reset to 1!'
         )
       }
 
@@ -194,7 +192,7 @@ const Mixin = {
     meta.nextPage = 1
 
     return (function fetch(collection) {
-      return collection.fetchNext(options).then(function() {
+      return collection.fetchNext(options).then(function () {
         if (meta.hasMore) {
           return fetch(collection)
         } else {
@@ -207,7 +205,7 @@ const Mixin = {
   /** @private */
   _resetPaginationMeta() {
     this._paginationMeta = {}
-  }
+  },
 }
 
 export default function applyMixin(collection) {

@@ -23,8 +23,8 @@ import Folder from '../../backbone/models/Folder'
 import customPropTypes from '../modules/customPropTypes'
 import setUsageRights from '../../util/setUsageRights'
 import updateModelsUsageRights from '../../util/updateModelsUsageRights'
-import '@canvas/datetime'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import '@canvas/datetime/jquery'
+import '@canvas/jquery/jquery.instructure_forms'
 
 const I18n = useI18nScope('restrict_student_access')
 
@@ -34,7 +34,7 @@ export default {
   propTypes: {
     closeDialog: PropTypes.func.isRequired,
     models: PropTypes.arrayOf(customPropTypes.filesystemObject).isRequired,
-    usageRightsRequiredForContext: PropTypes.bool.isRequired
+    usageRightsRequiredForContext: PropTypes.bool.isRequired,
   },
 
   getInitialState() {
@@ -79,7 +79,7 @@ export default {
       const usageRightValue = {
         use_justification: values.use_justification,
         legal_copyright: values.copyright,
-        license: values.cc_license
+        license: values.cc_license,
       }
 
       // We need to first set usage rights before handling the setting of
@@ -146,5 +146,5 @@ export default {
   // for disabling/enabling of the Update Button
   radioStateChange() {
     this.setState({submitable: true})
-  }
+  },
 }

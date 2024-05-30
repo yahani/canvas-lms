@@ -17,16 +17,18 @@
  */
 
 import * as contentInsertion from '../contentInsertion'
-import {videoFromTray, videoFromUpload, audioFromTray, audioFromUpload} from './contentHelpers'
+import {audioFromTray, audioFromUpload, videoFromTray, videoFromUpload} from './contentHelpers'
+import RCEGlobals from '../RCEGlobals'
 
 describe('contentInsertion', () => {
   let editor, node
+  const canvasOrigin = 'https://mycanvas.com:3000'
 
   beforeEach(() => {
     node = {
       content: '',
       className: '',
-      id: ''
+      id: '',
     }
 
     editor = {
@@ -51,7 +53,7 @@ describe('contentInsertion', () => {
           return node
         },
         getRng: () => ({}),
-        isCollapsed: () => editor.selectionContent.length === 0
+        isCollapsed: () => editor.selectionContent.length === 0,
       },
       dom: {
         doc: window.document,
@@ -61,7 +63,7 @@ describe('contentInsertion', () => {
         decode: input => {
           return input
         },
-        encode: input => input,
+        encode: input => encodeURIComponent(input),
         setAttribs: (elem, attrs) => {
           if (elem?.nodeType === 1) {
             // this is an HTMLElement
@@ -79,7 +81,7 @@ describe('contentInsertion', () => {
           return {
             is: () => {
               return false
-            }
+            },
           }
         },
         createHTML: (tag, attrs, text) => {
@@ -87,10 +89,10 @@ describe('contentInsertion', () => {
           editor.dom.setAttribs(elem, attrs)
           elem.innerHTML = text
           return elem.outerHTML
-        }
+        },
       },
       undoManager: {
-        add: () => {}
+        add: () => {},
       },
       focus: () => {},
       insertContent: content => {
@@ -103,7 +105,7 @@ describe('contentInsertion', () => {
       iframeElement: {
         getBoundingClientRect: () => {
           return {left: 0, top: 0, bottom: 0, right: 0}
-        }
+        },
       },
       execCommand: jest.fn((cmd, ui, value, _args) => {
         if (cmd === 'mceInsertLink') {
@@ -111,7 +113,7 @@ describe('contentInsertion', () => {
         } else if (cmd === 'mceInsertContent') {
           editor.content = value
         }
-      })
+      }),
     }
   })
 
@@ -130,16 +132,32 @@ describe('contentInsertion', () => {
         text: 'Click On Me',
         selectionDetails: {
           node: undefined,
-          range: undefined
-        }
+          range: undefined,
+        },
       }
+    })
+
+    it('sets Canvas URLs to be relative', () => {
+      link.href = 'https://mycanvas.com:3000/some/path'
+      link.url = 'https://mycanvas.com:3000/some/path'
+      contentInsertion.insertLink(editor, link, canvasOrigin)
+      expect(editor.content).toEqual('<a href="/some/path" title="Here Be Links">Click On Me</a>')
+    })
+
+    it('leaves non-Canvas URLs as absolute', () => {
+      link.href = 'https://yodawg.com:3001/some/path'
+      link.url = 'https://yodawg.com:3001/some/path'
+      contentInsertion.insertLink(editor, link, canvasOrigin)
+      expect(editor.content).toEqual(
+        '<a href="https://yodawg.com:3001/some/path" title="Here Be Links">Click On Me</a>'
+      )
     })
 
     it('builds an anchor link with appropriate embed class', () => {
       link.embed = {type: 'image'}
       contentInsertion.insertLink(editor, link)
       expect(editor.content).toEqual(
-        '<a class="instructure_file_link instructure_image_thumbnail" href="/some/path" title="Here Be Links">Click On Me</a>'
+        '<a href="/some/path" title="Here Be Links" class="instructure_file_link instructure_image_thumbnail">Click On Me</a>'
       )
     })
 
@@ -147,7 +165,7 @@ describe('contentInsertion', () => {
       link.embed = {type: 'scribd'}
       contentInsertion.insertLink(editor, link)
       expect(editor.content).toEqual(
-        '<a class="instructure_file_link instructure_scribd_file" href="/some/path" title="Here Be Links">Click On Me</a>'
+        '<a href="/some/path" title="Here Be Links" class="instructure_file_link instructure_scribd_file">Click On Me</a>'
       )
     })
 
@@ -156,7 +174,7 @@ describe('contentInsertion', () => {
 
       beforeEach(() => {
         anchorElm = {
-          innerText: 'anchor text'
+          innerText: 'anchor text',
         }
 
         editor.dom.getParent = () => anchorElm
@@ -179,12 +197,29 @@ describe('contentInsertion', () => {
       })
     })
 
+    it('uses link data to set no_preview class', () => {
+      link.embed = {noPreview: true}
+      contentInsertion.insertLink(editor, link)
+      expect(editor.content).toEqual(
+        '<a href="/some/path" title="Here Be Links" class="instructure_file_link no_preview">Click On Me</a>'
+      )
+    })
+
     it('includes attributes', () => {
       link['data-canvas-previewable'] = true
       link.class = 'instructure_file_link foo'
       contentInsertion.insertLink(editor, link)
       expect(editor.content).toEqual(
-        '<a class="instructure_file_link foo" data-canvas-previewable="true" href="/some/path" title="Here Be Links">Click On Me</a>'
+        '<a href="/some/path" title="Here Be Links" data-canvas-previewable="true" class="instructure_file_link foo">Click On Me</a>'
+      )
+    })
+
+    it('includes attributes for course link when supplied', () => {
+      link['data-published'] = true
+      link['data-course-type'] = 'wikiPages'
+      contentInsertion.insertLink(editor, link)
+      expect(editor.content).toEqual(
+        '<a href="/some/path" title="Here Be Links" data-course-type="wikiPages" data-published="true">Click On Me</a>'
       )
     })
 
@@ -256,6 +291,16 @@ describe('contentInsertion', () => {
         '<a href="http://www.google.com" title="PB&amp;J">3 &lt; 4</a>'
       )
     })
+
+    it('renders quotes correctly', () => {
+      link.href = 'http://www.google.com'
+      link.title = 'PB&J'
+      link.text = '"quote test"'
+      contentInsertion.insertLink(editor, link)
+      expect(editor.content).toEqual(
+        '<a href="http://www.google.com" title="PB&amp;J">&quot;quote test&quot;</a>'
+      )
+    })
   })
 
   describe('insertContent', () => {
@@ -285,8 +330,47 @@ describe('contentInsertion', () => {
       image = {
         href: '/some/path',
         url: '/other/path',
-        title: 'Here Be Images'
+        title: 'Here Be Images',
       }
+    })
+
+    it('sets Canvas URLs to be relative', () => {
+      image.href = 'https://mycanvas.com:3000/some/path'
+      image.url = 'https://mycanvas.com:3000/some/path'
+      contentInsertion.insertImage(editor, image, canvasOrigin)
+      expect(editor.content).toEqual('<img alt="Here Be Images" src="/some/path/preview"/>')
+    })
+
+    it('leaves non-Canvas URLs as absolute', () => {
+      image.href = 'https://yodawg.com:3001/some/path'
+      image.url = 'https://yodawg.com:3001/some/path'
+      contentInsertion.insertImage(editor, image, canvasOrigin)
+      expect(editor.content).toEqual(
+        '<img alt="Here Be Images" src="https://yodawg.com:3001/some/path"/>'
+      )
+    })
+
+    it('it keeps the original image style when replaced', () => {
+      const imageToReplace = document.createElement('img')
+      imageToReplace.style.cssText = 'float: left;'
+      editor.selection.getNode = () => {
+        return {
+          ...node,
+          nodeName: 'IMG',
+          style: imageToReplace.style,
+          getAttribute: attr => {
+            const imageAttributes = {
+              width: '100px',
+            }
+
+            return imageAttributes[attr]
+          },
+        }
+      }
+      contentInsertion.insertImage(editor, image)
+      expect(editor.content).toEqual(
+        '<img alt="Here Be Images" src="/some/path/preview" width="100px" style="float:left"/>'
+      )
     })
 
     it('builds image html from image data', () => {
@@ -305,14 +389,14 @@ describe('contentInsertion', () => {
         nodeName: 'A',
         getAttribute: () => {
           return 'http://bogus.edu'
-        }
+        },
       }
       editor.selection.getNode = () => {
         return {...node, nodeName: 'IMG'}
       }
       editor.selection.getRng = () => ({
         startContainer: containerElem,
-        endContainer: containerElem
+        endContainer: containerElem,
       })
       contentInsertion.insertImage(editor, image)
       expect(editor.content).toEqual(
@@ -322,15 +406,7 @@ describe('contentInsertion', () => {
   })
 
   describe('insertEquation', () => {
-    it('builds image html from LaTeX', () => {
-      const tex = 'y = x^2'
-      const dblEncodedTex = window.encodeURIComponent(window.encodeURIComponent(tex))
-      const imgHtml = `<img alt="LaTeX: ${tex}" title="${tex}" class="equation_image" data-equation-content="${tex}" src="http://canvas.docker/equation_images/${dblEncodedTex}?scale=1" data-ignore-a11y-check="">`
-      contentInsertion.insertEquation(editor, tex, 'http://canvas.docker')
-      expect(editor.content).toEqual(imgHtml)
-    })
-
-    it('uses relative URL if no base is provided', () => {
+    it('builds relative image html from LaTeX', () => {
       const tex = 'y = x^2'
       const dblEncodedTex = window.encodeURIComponent(window.encodeURIComponent(tex))
       const imgHtml = `<img alt="LaTeX: ${tex}" title="${tex}" class="equation_image" data-equation-content="${tex}" src="/equation_images/${dblEncodedTex}?scale=1" data-ignore-a11y-check="">`
@@ -346,16 +422,16 @@ describe('contentInsertion', () => {
       }
       const link = {
         selectionDetails: {
-          node: undefined
-        }
+          node: undefined,
+        },
       }
       expect(contentInsertion.existingContentToLink(editor, link)).toBe(true)
     })
     it('returns false if content not selected', () => {
       const link = {
         selectionDetails: {
-          node: false
-        }
+          node: false,
+        },
       }
       expect(contentInsertion.existingContentToLink(editor, link)).toBe(false)
     })
@@ -373,9 +449,9 @@ describe('contentInsertion', () => {
       editor.dom.$ = elem => {
         return {
           is: () => {
-            const item = HTMLCollection.prototype.isPrototypeOf(elem) ? elem[0] : item
+            const item = HTMLCollection.prototype.isPrototypeOf(elem) ? elem[0] : null
             return !!item && item.tagName === 'IMG'
-          }
+          },
         }
       }
       editor.isHidden = () => false
@@ -423,14 +499,14 @@ describe('contentInsertion', () => {
     beforeEach(() => {
       // this is what's returned from editor.selection.getEnd()
       node = {
-        querySelector: () => 'the inserted iframe'
+        querySelector: () => 'the inserted iframe',
       }
     })
 
     it('inserts video from upload into iframe', () => {
       jest.spyOn(editor, 'insertContent')
       const video = videoFromUpload()
-      const result = contentInsertion.insertVideo(editor, video)
+      const result = contentInsertion.insertVideo(editor, video, canvasOrigin)
       expect(editor.execCommand).toHaveBeenCalledWith(
         'mceInsertContent',
         false,
@@ -443,7 +519,7 @@ describe('contentInsertion', () => {
     it('inserts video from the course content tray', () => {
       jest.spyOn(editor, 'insertContent')
       const video = videoFromTray()
-      const result = contentInsertion.insertVideo(editor, video)
+      const result = contentInsertion.insertVideo(editor, video, canvasOrigin)
       expect(editor.execCommand).toHaveBeenCalledWith(
         'mceInsertContent',
         false,
@@ -456,7 +532,7 @@ describe('contentInsertion', () => {
     it('links video if user has made a selection', () => {
       editor.selectionContent = 'link me'
       const video = videoFromTray()
-      contentInsertion.insertVideo(editor, video)
+      contentInsertion.insertVideo(editor, video, canvasOrigin)
       expect(editor.execCommand).toHaveBeenCalledWith('mceInsertLink', false, {
         class: 'instructure_file_link',
         'data-canvas-previewable': undefined,
@@ -464,7 +540,7 @@ describe('contentInsertion', () => {
         id: 17,
         rel: 'noopener noreferrer',
         target: '_blank',
-        title: 'filename.mov'
+        title: 'filename.mov',
       })
     })
   })
@@ -473,13 +549,13 @@ describe('contentInsertion', () => {
     beforeEach(() => {
       // this is what's returned from editor.seletion.getEnd()
       node = {
-        querySelector: () => 'the inserted iframe'
+        querySelector: () => 'the inserted iframe',
       }
     })
 
     it('inserts audio from upload into iframe', () => {
       const audio = audioFromUpload()
-      const result = contentInsertion.insertAudio(editor, audio)
+      const result = contentInsertion.insertAudio(editor, audio, canvasOrigin)
       expect(editor.execCommand).toHaveBeenCalledWith(
         'mceInsertContent',
         false,
@@ -491,11 +567,88 @@ describe('contentInsertion', () => {
 
     it('inserts audio from the course content tray', () => {
       const audio = audioFromTray()
-      const result = contentInsertion.insertAudio(editor, audio)
+      const result = contentInsertion.insertAudio(editor, audio, canvasOrigin)
       expect(editor.execCommand).toHaveBeenCalledWith(
         'mceInsertContent',
         false,
-        '<iframe data-media-id="29" data-media-type="audio" src="/media_objects_iframe?mediahref=url/to/course/file&type=audio" style="width:320px;height:14.25rem;display:inline-block;" title="Audio player for filename.mp3"></iframe>',
+        '<iframe data-media-id="29" data-media-type="audio" src="/media_objects_iframe?mediahref=/url/to/course/file&type=audio" style="width:320px;height:14.25rem;display:inline-block;" title="Audio player for filename.mp3"></iframe>',
+        {skip_focus: true}
+      )
+      expect(result).toEqual('the inserted iframe')
+    })
+  })
+
+  describe('insertVideo with attachment', () => {
+    beforeEach(() => {
+      RCEGlobals.getFeatures = jest.fn().mockReturnValue({media_links_use_attachment_id: true})
+      // this is what's returned from editor.selection.getEnd()
+      node = {
+        querySelector: () => 'the inserted iframe',
+      }
+    })
+
+    afterAll(() => {
+      RCEGlobals.getFeatures.mockRestore()
+    })
+
+    it('inserts video from the course content tray with attachmentId', () => {
+      jest.spyOn(editor, 'insertContent')
+      const video = videoFromTray()
+      const result = contentInsertion.insertVideo(editor, video, canvasOrigin)
+      expect(editor.execCommand).toHaveBeenCalledWith(
+        'mceInsertContent',
+        false,
+        '<iframe allow="fullscreen" allowfullscreen data-media-id="17" data-media-type="video" src="/media_attachments_iframe/17?type=video&embedded=true" style="width:400px;height:225px;display:inline-block;" title="Video player for filename.mov"></iframe>',
+        {skip_focus: true}
+      )
+      expect(result).toEqual('the inserted iframe')
+    })
+
+    it('inserts video from upload into iframe with attachmentId', () => {
+      jest.spyOn(editor, 'insertContent')
+      const video = videoFromUpload()
+      const result = contentInsertion.insertVideo(editor, video, canvasOrigin)
+      expect(editor.execCommand).toHaveBeenCalledWith(
+        'mceInsertContent',
+        false,
+        '<iframe allow="fullscreen" allowfullscreen data-media-id="m-media-id" data-media-type="video" src="/media_attachments_iframe/maybe?type=video&embedded=true" style="width:400px;height:225px;display:inline-block;" title="Video player for filename.mov"></iframe>',
+        {skip_focus: true}
+      )
+      expect(result).toEqual('the inserted iframe')
+    })
+  })
+  describe('insertAudio with attachment', () => {
+    beforeEach(() => {
+      RCEGlobals.getFeatures = jest.fn().mockReturnValue({media_links_use_attachment_id: true})
+      // this is what's returned from editor.selection.getEnd()
+      node = {
+        querySelector: () => 'the inserted iframe',
+      }
+    })
+
+    afterAll(() => {
+      RCEGlobals.getFeatures.mockRestore()
+    })
+
+    it('inserts audio from upload into iframe with attachmentId', () => {
+      const audio = audioFromUpload()
+      const result = contentInsertion.insertAudio(editor, audio, canvasOrigin)
+      expect(editor.execCommand).toHaveBeenCalledWith(
+        'mceInsertContent',
+        false,
+        '<iframe data-media-id="m-media-id" data-media-type="audio" src="/media_attachments_iframe/maybe?type=audio&embedded=true" style="width:320px;height:14.25rem;display:inline-block;" title="Audio player for filename.mp3"></iframe>',
+        {skip_focus: true}
+      )
+      expect(result).toEqual('the inserted iframe')
+    })
+
+    it('inserts audio from the course content tray with attachmentId', () => {
+      const audio = audioFromTray()
+      const result = contentInsertion.insertAudio(editor, audio, canvasOrigin)
+      expect(editor.execCommand).toHaveBeenCalledWith(
+        'mceInsertContent',
+        false,
+        '<iframe data-media-id="29" data-media-type="audio" src="/media_attachments_iframe/29?type=audio&embedded=true" style="width:320px;height:14.25rem;display:inline-block;" title="Audio player for filename.mp3"></iframe>',
         {skip_focus: true}
       )
       expect(result).toEqual('the inserted iframe')

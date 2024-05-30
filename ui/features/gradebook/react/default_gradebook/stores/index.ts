@@ -17,8 +17,13 @@
  */
 
 import create from 'zustand'
-import filters, {FiltersState} from './filtersState'
-import modules, {ModulesState} from './modulesState'
+import filters, {type FiltersState} from './filtersState'
+import modules, {type ModulesState} from './modulesState'
+import students, {type StudentsState} from './studentsState'
+import assignments, {type AssignmentsState} from './assignmentsState'
+import sisOverrides, {type SisOverrideState} from './sisOverridesState'
+import customColumns, {type CustomColumnsState} from './customColumnsState'
+import finalGradeOverrides, {type FinalGradeOverrideState} from './finalGradeOverrides'
 import {RequestDispatch} from '@canvas/network'
 import PerformanceControls from '../PerformanceControls'
 import type {FlashMessage} from '../gradebook.d'
@@ -26,7 +31,7 @@ import type {FlashMessage} from '../gradebook.d'
 const defaultPerformanceControls = new PerformanceControls()
 
 const defaultDispatch = new RequestDispatch({
-  activeRequestLimit: defaultPerformanceControls.activeRequestLimit
+  activeRequestLimit: defaultPerformanceControls.activeRequestLimit,
 })
 
 type State = {
@@ -36,7 +41,14 @@ type State = {
   flashMessages: FlashMessage[]
 }
 
-export type GradebookStore = State & ModulesState & FiltersState
+export type GradebookStore = State &
+  CustomColumnsState &
+  FiltersState &
+  ModulesState &
+  StudentsState &
+  AssignmentsState &
+  FinalGradeOverrideState &
+  SisOverrideState
 
 const store = create<GradebookStore>((set, get) => ({
   performanceControls: defaultPerformanceControls,
@@ -49,7 +61,17 @@ const store = create<GradebookStore>((set, get) => ({
 
   ...filters(set, get),
 
-  ...modules(set, get)
+  ...modules(set, get),
+
+  ...customColumns(set, get),
+
+  ...students(set, get),
+
+  ...assignments(set, get),
+
+  ...finalGradeOverrides(set, get),
+
+  ...sisOverrides(set, get),
 }))
 
 export default store

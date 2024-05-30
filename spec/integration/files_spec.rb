@@ -51,7 +51,7 @@ describe FilesController do
 
       get location
       # could be success or redirect, depending on S3 config
-      expect([200, 302]).to be_include(response.status)
+      expect([200, 302]).to include(response.status)
       # ensure that the user wasn't logged in by the normal means
       expect(controller.instance_variable_get(:@current_user)).to be_nil
     end
@@ -60,7 +60,7 @@ describe FilesController do
       allow(HostUrl).to receive(:file_host_with_shard).and_return(["test.host", Shard.default])
       get "http://test.host/files/#{@submission.attachment.id}/download", params: { inline: "1", verifier: @submission.attachment.uuid }
       # could be success or redirect, depending on S3 config
-      expect([200, 302]).to be_include(response.status)
+      expect([200, 302]).to include(response.status)
       expect(response["Pragma"]).to be_nil
       expect(response["Cache-Control"]).not_to match(/no-cache/)
     end
@@ -89,8 +89,6 @@ describe FilesController do
       remove_user_session
 
       get location
-      expect(response).to be_redirect
-      follow_redirect!
       expect(response).to be_successful
       expect(response.media_type).to eq "image/png"
       # ensure that the user wasn't logged in by the normal means
@@ -187,7 +185,7 @@ describe FilesController do
 
     get location
     # could be success or redirect, depending on S3 config
-    expect([200, 302]).to be_include(response.status)
+    expect([200, 302]).to include(response.status)
     # ensure that the user wasn't logged in by the normal means
     expect(controller.instance_variable_get(:@current_user)).to be_nil
   end
@@ -293,7 +291,7 @@ describe FilesController do
     hash[@tag.id.to_s] = { type: "must_view" }
     @module.completion_requirements = hash
     @module.save!
-    expect(@module.evaluate_for(@user).state).to eql(:unlocked)
+    expect(@module.evaluate_for(@user).state).to be(:unlocked)
 
     # the response will be on the main domain, with an iframe pointing to the files domain and the actual uploaded html file
     get "http://test.host/courses/#{@course.id}/files/#{@att.id}?fd_cookie_set=1" # just send in the param since other specs test the cookie redirect
@@ -309,8 +307,8 @@ describe FilesController do
     expect(response).to be_redirect
     follow_redirect!
     # could be success or redirect, depending on S3 config
-    expect([200, 302]).to be_include(response.status)
-    expect(@module.evaluate_for(@user).state).to eql(:completed)
+    expect([200, 302]).to include(response.status)
+    expect(@module.evaluate_for(@user).state).to be(:completed)
   end
 
   context "should support AssessmentQuestion as a context" do
@@ -318,7 +316,7 @@ describe FilesController do
       course_with_teacher_logged_in(active_all: true, user: @user)
       host!("test.host")
       bank = @course.assessment_question_banks.create!
-      @aq = assessment_question_model(bank: bank)
+      @aq = assessment_question_model(bank:)
       @att = @aq.attachments.create!(uploaded_data: stub_png_data)
     end
 
@@ -337,8 +335,6 @@ describe FilesController do
       remove_user_session
 
       get location
-      expect(response).to be_redirect
-      follow_redirect!
       expect(response).to be_successful
       expect(response.media_type).to eq "image/png"
       # ensure that the user wasn't logged in by the normal means
@@ -408,7 +404,7 @@ describe FilesController do
     sz = "640x>"
     expect_any_instantiation_of(@attachment).to receive(:create_or_update_thumbnail)
       .with(anything, sz, sz) { @attachment.thumbnails.create!(thumbnail: "640x>", uploaded_data: stub_png_data) }
-    get "/images/thumbnails/#{@attachment.id}/#{@attachment.uuid}?size=640x#{URI.encode ">"}"
+    get "/images/thumbnails/#{@attachment.id}/#{@attachment.uuid}?size=640x#{URI::DEFAULT_PARSER.escape ">"}"
     thumb = @attachment.thumbnails.where(thumbnail: "640x>").first
     expect(response).to redirect_to(thumb.authenticated_s3_url)
   end
@@ -454,8 +450,6 @@ describe FilesController do
     expect(response["Location"]).to include("files/#{attachment.id}")
 
     get response["Location"]
-    expect(response).to be_redirect
-    follow_redirect!
     expect(response).to be_successful
   end
 
@@ -463,7 +457,8 @@ describe FilesController do
     allow(HostUrl).to receive(:file_host_with_shard).and_return(["files-test.host", Shard.default])
 
     some_course = Course.create!
-    some_file = attachment_model(context: some_course, content_type: "text/html",
+    some_file = attachment_model(context: some_course,
+                                 content_type: "text/html",
                                  uploaded_data: stub_file_data("ohai.html", "<html><body>ohai</body></html>", "text/html"))
     secret_user = User.create!(name: "secret user name gasp")
 

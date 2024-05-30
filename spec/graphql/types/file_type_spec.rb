@@ -29,8 +29,12 @@ describe Types::FileType do
   let_once(:file) { attachment_with_context(course) }
   let(:file_type) { GraphQLTypeTester.new(file, current_user: @teacher) }
 
-  it "works" do
+  it "has display name" do
     expect(file_type.resolve("displayName")).to eq file.display_name
+  end
+
+  it "has the file's size" do
+    expect(file_type.resolve("size")).to eq "100 Bytes"
   end
 
   it "has modules" do
@@ -80,12 +84,12 @@ describe Types::FileType do
 
     it "returns an https URL if the request was issued over SSL" do
       request = ActionDispatch::TestRequest.create({ "HTTPS" => "on" })
-      expect(type_tester.resolve("url", request: request, current_user: @student)).to start_with("https:")
+      expect(type_tester.resolve("url", request:, current_user: @student)).to start_with("https:")
     end
 
     it "returns an http URL if the request was not issued over SSL" do
       request = ActionDispatch::TestRequest.create
-      expect(type_tester.resolve("url", request: request, current_user: @student)).to start_with("http:")
+      expect(type_tester.resolve("url", request:, current_user: @student)).to start_with("http:")
     end
   end
 
@@ -117,7 +121,7 @@ describe Types::FileType do
 
     it "returns nil if the file is not a canvadocable type" do
       allow(Canvadocs).to receive(:enabled?).and_return true
-      @student_file.update!(content_type: "application/loser")
+      @student_file.update!(content_type: "application/unknown")
       expect(
         @resolver.resolve('submissionPreviewUrl(submissionId: "' + @submission.id.to_s + '")')
       ).to be_nil

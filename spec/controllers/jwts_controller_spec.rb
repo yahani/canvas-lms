@@ -23,11 +23,12 @@ describe JwtsController do
   include_context "JWT setup"
   let(:token_user) { user_with_pseudonym }
   let(:other_user) { user_with_pseudonym }
+  let(:admin_user) { site_admin_user }
   let(:translate_token) do
     lambda do |resp|
       utf8_token_string = json_parse(resp.body)["token"]
       decoded_crypted_token = Canvas::Security.base64_decode(utf8_token_string)
-      return CanvasSecurity::ServicesJwt.decrypt(decoded_crypted_token)
+      CanvasSecurity::ServicesJwt.decrypt(decoded_crypted_token)
     end
   end
 
@@ -35,7 +36,7 @@ describe JwtsController do
     it "requires being logged in" do
       post "create"
       expect(response).to be_redirect
-      expect(response.status).to eq(302)
+      expect(response).to have_http_status(:found)
     end
 
     context "with valid user session" do
@@ -82,13 +83,13 @@ describe JwtsController do
       let(:params) { { workflows: ["ui", "rich_content"], context_type: "Course", context_id: @context_id } }
 
       it "generates a token that has course context_id" do
-        post "create", params: params, format: "json"
+        post "create", params:, format: "json"
         decrypted_token_body = translate_token.call(response)
         expect(decrypted_token_body[:context_id]).to eq(@context_id.to_s)
       end
 
       it "generates a token that has course context_type" do
-        post "create", params: params, format: "json"
+        post "create", params:, format: "json"
         decrypted_token_body = translate_token.call(response)
         expect(decrypted_token_body[:context_type]).to eq("Course")
       end
@@ -105,47 +106,75 @@ describe JwtsController do
         expect(decrypted_token_body[:context_type]).to eq("User")
       end
 
+      it "generates a token that has account context_id" do
+        user_session(admin_user)
+        post "create", params: params.merge(context_type: "Account", context_id: Account.last.id), format: "json"
+        decrypted_token_body = translate_token.call(response)
+        expect(decrypted_token_body[:context_id].to_i).to eq(Account.last.id)
+      end
+
+      it "generates a token by account context_uuid" do
+        user_session(admin_user)
+        post "create", params: params.except(:context_id).merge(context_type: "Account", context_uuid: Account.last.uuid), format: "json"
+        decrypted_token_body = translate_token.call(response)
+        expect(decrypted_token_body[:context_id].to_i).to eq(Account.last.id)
+      end
+
+      it "generates a token that has account context_type" do
+        user_session(admin_user)
+        post "create", params: params.merge(context_type: "Account", context_id: Account.last.id), format: "json"
+        decrypted_token_body = translate_token.call(response)
+        expect(decrypted_token_body[:context_type]).to eq("Account")
+      end
+
       context "returns error when" do
         it "context_type param is missing" do
           post "create", params: params.except(:context_type), format: "json"
-          expect(response.status).to eq(400)
+          expect(response).to have_http_status(:bad_request)
           expect(response.body).to match(/Missing context_type parameter./)
         end
 
         it "context_id or context_uuid param is missing" do
           post "create", params: params.except(:context_id), format: "json"
-          expect(response.status).to eq(400)
+          expect(response).to have_http_status(:bad_request)
           expect(response.body).to match(/Missing context_id or context_uuid parameter./)
         end
 
         it "context_type and context_uuid are passed" do
           post "create", params: params.merge({ context_uuid: @context_uuid }), format: "json"
-          expect(response.status).to eq(400)
+          expect(response).to have_http_status(:bad_request)
           expect(response.body).to match(/Should provide context_id or context_uuid parameters, but not both./)
         end
 
         it "context_type is invalid" do
           post "create", params: params.merge({ context_type: "unknown" }), format: "json"
-          expect(response.status).to eq(400)
+          expect(response).to have_http_status(:bad_request)
           expect(response.body).to match(/Invalid context_type parameter./)
         end
 
         it "context not found with id" do
           post "create", params: params.merge({ context_id: "unknown" }), format: "json"
-          expect(response.status).to eq(404)
+          expect(response).to have_http_status(:not_found)
           expect(response.body).to match(/Context not found./)
         end
 
         it "context not found with uuid" do
           post "create", params: params.except(:context_id).merge({ context_uuid: "unknown" }), format: "json"
-          expect(response.status).to eq(404)
+          expect(response).to have_http_status(:not_found)
           expect(response.body).to match(/Context not found./)
         end
 
         it "context is unauthorized" do
           generic_user = user_factory
           user_session(generic_user)
-          post "create", params: params, format: "json"
+          post "create", params:, format: "json"
+          assert_unauthorized
+        end
+
+        it "generic user is unauthorized for Account context type" do
+          generic_user = user_factory
+          user_session(generic_user)
+          post "create", params: params.merge(context_type: "Account", context_id: Account.last.id), format: "json"
           assert_unauthorized
         end
       end
@@ -155,7 +184,7 @@ describe JwtsController do
       token = build_wrapped_token(token_user.global_id)
       @request.headers["Authorization"] = "Bearer #{token}"
       get "create", format: "json"
-      expect(response.status).to eq(403)
+      expect(response).to have_http_status(:forbidden)
       expect(response.body).to match(/cannot generate a JWT when authorized by a JWT/)
     end
   end
@@ -164,14 +193,14 @@ describe JwtsController do
     it "requires being logged in" do
       post "refresh"
       expect(response).to be_redirect
-      expect(response.status).to eq(302)
+      expect(response).to have_http_status(:found)
     end
 
     it "doesn't allow using a token to gen a token" do
       token = build_wrapped_token(token_user.global_id)
       @request.headers["Authorization"] = "Bearer #{token}"
       get "refresh", format: "json"
-      expect(response.status).to eq(403)
+      expect(response).to have_http_status(:forbidden)
       expect(response.body).to match(/cannot generate a JWT when authorized by a JWT/)
     end
 
@@ -183,7 +212,7 @@ describe JwtsController do
 
       it "requires a jwt param" do
         post "refresh"
-        expect(response.status).to_not eq(200)
+        expect(response).to_not have_http_status(:ok)
       end
 
       it "returns a refreshed token for user" do
@@ -192,10 +221,10 @@ describe JwtsController do
         user_session(real_user)
         services_jwt = class_double(CanvasSecurity::ServicesJwt).as_stubbed_const
         expect(services_jwt).to receive(:refresh_for_user)
-          .with("testjwt", "testhost", other_user, real_user: real_user, symmetric: true)
+          .with("testjwt", "testhost", other_user, real_user:, symmetric: true)
           .and_return("refreshedjwt")
         post "refresh", params: { jwt: "testjwt", as_user_id: other_user.id }, format: "json"
-        token = JSON.parse(response.body)["token"]
+        token = response.parsed_body["token"]
         expect(token).to eq("refreshedjwt")
       end
 
@@ -207,7 +236,7 @@ describe JwtsController do
           symmetric: true
         )
         post "refresh", params: { jwt: original_jwt }
-        refreshed_jwt = JSON.parse(response.body)["token"]
+        refreshed_jwt = response.parsed_body["token"]
         expect(refreshed_jwt).to_not eq(original_jwt)
       end
 
@@ -217,7 +246,97 @@ describe JwtsController do
         expect(services_jwt).to receive(:refresh_for_user)
           .and_raise(CanvasSecurity::ServicesJwt::InvalidRefresh)
         post "refresh", params: { jwt: "testjwt" }, format: "json"
-        expect(response.status).to eq(400)
+        expect(response).to have_http_status(:bad_request)
+      end
+    end
+
+    context "current_user is different than the sub claim" do
+      before do
+        enable_default_developer_key!
+        allow(CanvasSecurity::ServicesJwt).to receive(:decrypt).and_return({ "sub" => token_user.global_id })
+        Setting.set("write_feature_flag_audit_logs", "false")
+        Account.site_admin.enable_feature!(:new_quizzes_allow_service_jwt_refresh)
+      end
+
+      context "calling user cannot refresh for another user" do
+        before do
+          access_token = other_user.access_tokens.create!.full_token
+          request.headers["Authorization"] = "Bearer #{access_token}"
+          post "refresh", params: { jwt: "testjwt" }, format: "json"
+        end
+
+        it "returns an invalid refresh error" do
+          expect(response.body).to match(/invalid refresh/)
+          expect(response).to have_http_status(:bad_request)
+        end
+      end
+
+      context "calling user is able to refresh for another user" do
+        before do
+          pseudonym(admin_user)
+          access_token = admin_user.access_tokens.create!.full_token
+          admin_user.access_tokens.first.developer_key.update!(internal_service: true)
+          request.headers["Authorization"] = "Bearer #{access_token}"
+          expect(CanvasSecurity::ServicesJwt).to receive(:refresh_for_user)
+            .with(
+              "testjwt",
+              request.host_with_port,
+              token_user,
+              real_user: nil,
+              symmetric: true
+            ).and_return("fresh-jwt")
+
+          post "refresh", params: { jwt: "testjwt" }, format: "json"
+        end
+
+        it "returns with a fresh JWT" do
+          expect(response).to have_http_status(:ok)
+          expect(response.body).to match(/fresh-jwt/)
+        end
+      end
+
+      context "the developer key of the calling user is not an internal service key" do
+        before do
+          pseudonym(admin_user)
+          access_token = admin_user.access_tokens.create!.full_token
+          admin_user.access_tokens.first.developer_key.update!(internal_service: false)
+          request.headers["Authorization"] = "Bearer #{access_token}"
+
+          post "refresh", params: { jwt: "testjwt" }, format: "json"
+        end
+
+        it "returns an invalid refresh error" do
+          expect(response.body).to match(/invalid refresh/)
+          expect(response).to have_http_status(:bad_request)
+        end
+      end
+
+      context "incoming JWT is invalid and decryption fails" do
+        before do
+          allow(CanvasSecurity::ServicesJwt).to receive(:decrypt).and_raise(JSON::JWE::DecryptionFailed)
+          pseudonym(admin_user)
+          access_token = admin_user.access_tokens.create!.full_token
+          admin_user.access_tokens.first.developer_key.update!(internal_service: true)
+          request.headers["Authorization"] = "Bearer #{access_token}"
+
+          post "refresh", params: { jwt: "invalid jwt" }, format: "json"
+        end
+
+        it "returns an invalid refresh error" do
+          expect(response.body).to match(/invalid refresh/)
+          expect(response).to have_http_status(:bad_request)
+        end
+
+        context "incoming jwt invalid formatting" do
+          before do
+            allow(CanvasSecurity::ServicesJwt).to receive(:decrypt).and_raise(JSON::JWT::InvalidFormat)
+          end
+
+          it "returns an invalid refresh error" do
+            expect(response.body).to match(/invalid refresh/)
+            expect(response).to have_http_status(:bad_request)
+          end
+        end
       end
     end
   end

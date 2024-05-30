@@ -1,3 +1,4 @@
+/* eslint-disable qunit/resolve-async */
 /*
  * Copyright (C) 2016 - present Instructure, Inc.
  *
@@ -16,9 +17,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import GradeChangeLoggingCollection from 'ui/features/account_admin_tools/backbone/collections/GradeChangeLoggingCollection.js'
-import GradeChangeLoggingContentView from 'ui/features/account_admin_tools/backbone/views/GradeChangeLoggingContentView.js'
+import GradeChangeLoggingCollection from 'ui/features/account_admin_tools/backbone/collections/GradeChangeLoggingCollection'
+import GradeChangeLoggingContentView from 'ui/features/account_admin_tools/backbone/views/GradeChangeLoggingContentView'
 import $ from 'jquery'
+import 'jquery-migrate'
 import fakeENV from 'helpers/fakeENV'
 import assertions from 'helpers/assertions'
 
@@ -41,8 +43,8 @@ const buildEvent = options => {
       course: 2,
       student: 7,
       grader: 1,
-      page_view: null
-    }
+      page_view: null,
+    },
   }
   return Object.assign(base, options)
 }
@@ -50,18 +52,18 @@ const excusedEvent = () =>
   buildEvent({
     id: 1,
     excused_before: false,
-    excused_after: true
+    excused_after: true,
   })
 const unexcusedEvent = () =>
   buildEvent({
     id: 1,
     excused_before: true,
-    excused_after: false
+    excused_after: false,
   })
-const createView = function(logItems, options) {
+const createView = function (logItems, options) {
   options = {
     users: [],
-    ...options
+    ...options,
   }
   const collection = new GradeChangeLoggingCollection(logItems)
   const view = new GradeChangeLoggingContentView({collection})
@@ -78,7 +80,7 @@ QUnit.module('GradeChangeLoggingItemView', {
   teardown() {
     $('#fixtures').empty()
     fakeENV.teardown()
-  }
+  },
 })
 
 test('it should be accessible', assert => {

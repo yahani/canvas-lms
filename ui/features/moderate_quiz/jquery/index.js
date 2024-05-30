@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-shadow */
+/* eslint-disable eqeqeq */
 /*
  * Copyright (C) 2011 - present Instructure, Inc.
  *
@@ -21,15 +23,17 @@ import $ from 'jquery'
 import timing from './quiz_timing'
 import openModerateStudentDialog from './openModerateStudentDialog'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/datetime'/* datetimeString */
-import '@canvas/forms/jquery/jquery.instructure_forms'/* fillFormData, getFormData */
+import '@canvas/datetime/jquery' /* datetimeString */
+import '@canvas/jquery/jquery.instructure_forms' /* fillFormData, getFormData */
 import 'jqueryui/dialog'
 import '@canvas/util/jquery/fixDialogButtons'
-import '@canvas/jquery/jquery.instructure_misc_helpers'/* replaceTags */
-import '@canvas/jquery/jquery.instructure_misc_plugins'/* showIf */
+import '@canvas/jquery/jquery.instructure_misc_helpers' /* replaceTags */
+import '@canvas/jquery/jquery.instructure_misc_plugins' /* showIf */
 import '@canvas/rails-flash-notifications'
-import '@canvas/util/templateData'/* fillTemplateData */
+import '@canvas/util/templateData' /* fillTemplateData */
 import 'date-js'
+import replaceTags from '@canvas/util/replaceTags'
+
 const I18n = useI18nScope('quizzes.moderate')
 /* Date.parse */
 
@@ -44,11 +48,11 @@ const DIALOG_WIDTH = 490
  * @param {Number} extraTime
  *        The submission's extra allotted time.
  */
-const updateExtraTime = function($studentBlock, extraTime) {
+const updateExtraTime = function ($studentBlock, extraTime) {
   const $extraTime = $studentBlock.find('.extra_time_allowed')
 
   if (extraTime > 0) {
-    $extraTime.text($extraTime.text().replace(/\s\d+\s/, ' ' + extraTime + ' '))
+    $extraTime.text($extraTime.text().replace(/\d(.*\d)?/, I18n.n(extraTime)))
   }
 
   $extraTime.toggle(extraTime > 0)
@@ -59,7 +63,7 @@ window.moderation = {
   updateTimes() {
     const now = new Date()
     moderation.studentsCurrentlyTakingQuiz = !!$('#students .student.in_progress')
-    $('#students .student.in_progress').each(function() {
+    $('#students .student.in_progress').each(function () {
       const $row = $(this)
       const row = $row.data('timing') || {}
       const started_at = $row.attr('data-started-at')
@@ -95,12 +99,8 @@ window.moderation = {
       if (hr) {
         times.push(hr < 10 ? '0' + hr : hr)
       }
-      if (true || min) {
-        times.push(min < 10 ? '0' + min : min)
-      }
-      if (true || sec) {
-        times.push(sec < 10 ? '0' + sec : sec)
-      }
+      times.push(min < 10 ? '0' + min : min)
+      times.push(sec < 10 ? '0' + sec : sec)
       $row.find('.time').text(times.join(':'))
     })
   },
@@ -112,29 +112,32 @@ window.moderation = {
       )
     }
     let state_text = ''
-    if (submission.workflow_state == 'complete' || submission.workflow_state == 'pending_review') {
+    if (
+      submission.workflow_state === 'complete' ||
+      submission.workflow_state === 'pending_review'
+    ) {
       state_text = I18n.t('finished_in_duration', 'finished in %{duration}', {
-        duration: submission.finished_in_words
+        duration: submission.finished_in_words,
       })
     }
     const data = {
       attempt: submission.attempt || '--',
       extra_time: submission.extra_time,
       extra_attempts: submission.extra_attempts,
-      score: submission.kept_score == null ? null : I18n.n(submission.kept_score)
+      score: submission.kept_score == null ? null : I18n.n(submission.kept_score),
     }
     if (submission.attempts_left == -1) {
       data.attempts_left = '--'
     } else if (submission.attempts_left) {
       data.attempts_left = submission.attempts_left
     }
-    if (submission.workflow_state != 'untaken') {
+    if (submission.workflow_state !== 'untaken') {
       data.time = state_text
     }
     $student
       .fillTemplateData({data})
       .toggleClass('extendable', submission['extendable?'])
-      .toggleClass('in_progress', submission.workflow_state == 'untaken')
+      .toggleClass('in_progress', submission.workflow_state === 'untaken')
       .toggleClass('manually_unlocked', !!submission.manually_unlocked)
       .attr('data-started-at', submission.started_at || '')
       .attr('data-end-at', submission.end_at || '')
@@ -145,10 +148,10 @@ window.moderation = {
     updateExtraTime($student, submission.extra_time)
   },
   lastUpdatedAt: '',
-  studentsCurrentlyTakingQuiz: false
+  studentsCurrentlyTakingQuiz: false,
 }
 
-$(document).ready(function(event) {
+$(document).ready(function (_event) {
   timing.initTimes()
   setInterval(moderation.updateTimes, 500)
   let updateErrors = 0
@@ -178,7 +181,7 @@ $(document).ready(function(event) {
     const last_updated_at = moderation.lastUpdatedAt && moderation.lastUpdatedAt.toISOString()
 
     $.ajaxJSON(
-      $.replaceTags(moderate_url, 'update', last_updated_at),
+      replaceTags(moderate_url, 'update', last_updated_at),
       'GET',
       {},
       data => {
@@ -198,7 +201,7 @@ $(document).ready(function(event) {
           moderation.updateSubmission(data[idx], true)
         }
       },
-      data => {
+      _data => {
         updating(false)
         updateErrors++
         if (updateErrors > 5) {
@@ -230,33 +233,33 @@ $(document).ready(function(event) {
     $('#checked_count').text(cnt)
     $('.moderate_multiple_link').showIf(cnt)
   }
-  $('#check_all').change(function() {
+  $('#check_all').change(function () {
     const isChecked = $(this).is(':checked')
     $('.student_check').each((index, elem) => {
       $(elem).prop('checked', isChecked)
     })
     checkChange()
   })
-  $('.student_check').change(function() {
-    if (!$(this).attr('checked')) {
-      $('#check_all').attr('checked', false)
+  $('.student_check').change(function () {
+    if (!$(this).prop('checked')) {
+      $('#check_all').prop('checked', false)
     }
     checkChange()
   })
 
-  $('.moderate_multiple_link').live('click', function(event) {
+  $(document).on('click', '.moderate_multiple_link', function (event) {
     event.preventDefault()
     const student_ids = []
     const data = {}
-    $('.student_check:checked').each(function() {
+    $('.student_check:checked').each(function () {
       const $student = $(this).parents('.student')
       student_ids.push($(this).attr('data-id'))
       const student_data = {
         manually_unlocked: $student.hasClass('manually_unlocked') ? '1' : '0',
         extra_attempts: parseInt($student.find('.extra_attempts').text(), 10) || '',
-        extra_time: parseInt($student.find('.extra_time').text(), 10) || ''
+        extra_time: parseInt($student.find('.extra_time').text(), 10) || '',
       }
-      $.each(['manually_unlocked', 'extra_attempts', 'extra_time'], function() {
+      $.each(['manually_unlocked', 'extra_attempts', 'extra_time'], function () {
         if (data[this] == null) {
           data[this] = student_data[this].toString()
         } else if (data[this] != student_data[this].toString()) {
@@ -276,32 +279,26 @@ $(document).ready(function(event) {
     $('#moderate_student_dialog')
       .dialog({
         title: I18n.t('titles.student_extensions', 'Student Extensions'),
-        width: DIALOG_WIDTH
+        width: DIALOG_WIDTH,
+        modal: true,
+        zIndex: 1000,
       })
       .fixDialogButtons()
   })
 
-  $('.moderate_student_link').live('click', function(event) {
+  $(document).on('click', '.moderate_student_link', function (event) {
     event.preventDefault()
     const $student = $(this).parents('.student')
     const data = {
       manually_unlocked: $student.hasClass('manually_unlocked') ? '1' : '0',
       extra_attempts: parseInt($student.find('.extra_attempts').text(), 10) || '',
       extra_time:
-        parseInt(
-          $student
-            .find('.extra_time_allowed')
-            .text()
-            .replace(/[^\d]/g, ''),
-          10
-        ) || ''
+        parseInt($student.find('.extra_time_allowed').text().replace(/[^\d]/g, ''), 10) || '',
     }
     const name = $student.find('.student_name').text()
     $('#moderate_student_form').fillFormData(data)
     $('#moderate_student_form').data('ids', [$student.attr('data-user-id')])
-    $('#moderate_student_form')
-      .find('button')
-      .attr('disabled', false)
+    $('#moderate_student_form').find('button').prop('disabled', false)
     $('#moderate_student_dialog h2').text(
       I18n.t('extensions_for_student', 'Extensions for %{student}', {student: name})
     )
@@ -315,17 +312,17 @@ $(document).ready(function(event) {
   })
 
   $('#extension_extra_time')
-    .on('invalid:not_a_number', function(e) {
+    .on('invalid:not_a_number', function (_e) {
       $(this).errorBox(
         I18n.t('errors.quiz_submission_extra_time_not_a_number', 'Extra time must be a number.')
       )
     })
-    .on('invalid:greater_than', function(e) {
+    .on('invalid:greater_than', function (_e) {
       $(this).errorBox(
         I18n.t('errors.quiz_submission_extra_time_too_short', 'Extra time must be greater than 0.')
       )
     })
-    .on('invalid:less_than', function(e) {
+    .on('invalid:less_than', function (_e) {
       $(this).errorBox(
         I18n.t(
           'errors.quiz_submission_extra_time_too_long',
@@ -335,7 +332,7 @@ $(document).ready(function(event) {
     })
 
   $('#extension_extra_attempts')
-    .on('invalid:not_a_number', function(e) {
+    .on('invalid:not_a_number', function (_e) {
       $(this).errorBox(
         I18n.t(
           'errors.quiz_submission_extra_attempts_not_a_number',
@@ -343,7 +340,7 @@ $(document).ready(function(event) {
         )
       )
     })
-    .on('invalid:greater_than', function(e) {
+    .on('invalid:greater_than', function (_e) {
       $(this).errorBox(
         I18n.t(
           'errors.quiz_submission_extra_attempts_too_short',
@@ -351,7 +348,7 @@ $(document).ready(function(event) {
         )
       )
     })
-    .on('invalid:less_than', function(e) {
+    .on('invalid:less_than', function (_e) {
       $(this).errorBox(
         I18n.t(
           'errors.quiz_submission_extra_attempts_too_long',
@@ -360,17 +357,17 @@ $(document).ready(function(event) {
       )
     })
 
-  $('#moderate_student_form').submit(function(event) {
+  $('#moderate_student_form').submit(function (event) {
     event.preventDefault()
     event.stopPropagation()
     const ids = $(this).data('ids')
-    if (ids.length == 0) {
+    if (ids.length === 0) {
       return
     }
     const $form = $(this)
     $form
       .find('button')
-      .attr('disabled', true)
+      .prop('disabled', true)
       .filter('.save_button')
       .text(I18n.t('buttons.saving', 'Saving...'))
     let finished = 0,
@@ -378,11 +375,11 @@ $(document).ready(function(event) {
     const formData = $(this).getFormData()
 
     function valid(data) {
-      let extraAttempts = parseInt(data.extra_attempts),
-        extraTime = parseInt(data.extra_time),
-        valid = true
+      const extraAttempts = parseInt(data.extra_attempts, 10)
+      const extraTime = parseInt(data.extra_time, 10)
+      let valid = true
 
-      if (data.extra_attempts && isNaN(extraAttempts)) {
+      if (data.extra_attempts && Number.isNaN(Number(extraAttempts))) {
         $('#extension_extra_attempts').trigger('invalid:not_a_number')
         valid = false
       } else if (extraAttempts > 1000) {
@@ -393,7 +390,7 @@ $(document).ready(function(event) {
         valid = false
       }
 
-      if (data.extra_time && isNaN(extraTime)) {
+      if (data.extra_time && Number.isNaN(Number(extraTime))) {
         $('#extension_extra_time').trigger('invalid:not_a_number')
         valid = false
       } else if (extraTime > 10080) {
@@ -409,7 +406,7 @@ $(document).ready(function(event) {
     if (!valid(formData)) {
       $form
         .find('button')
-        .attr('disabled', false)
+        .prop('disabled', false)
         .filter('.save_button')
         .text(I18n.t('buttons.save', 'Save'))
       return
@@ -421,13 +418,13 @@ $(document).ready(function(event) {
           if (ids.length == 1) {
             $form
               .find('button')
-              .attr('disabled', false)
+              .prop('disabled', false)
               .filter('.save_button')
               .text(I18n.t('buttons.save_failed', 'Save Failed, please try again'))
           } else {
             $form
               .find('button')
-              .attr('disabled', false)
+              .prop('disabled', false)
               .filter('.save_button')
               .text(
                 I18n.t(
@@ -440,7 +437,7 @@ $(document).ready(function(event) {
         } else {
           $form
             .find('button')
-            .attr('disabled', false)
+            .prop('disabled', false)
             .filter('.save_button')
             .text(I18n.t('buttons.save', 'Save'))
           $('#moderate_student_dialog').dialog('close')
@@ -449,17 +446,19 @@ $(document).ready(function(event) {
     }
     for (const idx in ids) {
       const id = ids[idx]
-      const url = $.replaceTags($('.extension_url').attr('href'), 'user_id', id)
+      const url = replaceTags($('.extension_url').attr('href'), 'user_id', id)
       $.ajaxJSON(
         url,
         'POST',
         formData,
+        // eslint-disable-next-line no-loop-func
         data => {
           finished++
           moderation.updateSubmission(data)
           checkIfFinished()
         },
-        data => {
+        // eslint-disable-next-line no-loop-func
+        _data => {
           finished++
           errors++
           checkIfFinished()
@@ -472,7 +471,7 @@ $(document).ready(function(event) {
     .click(() => {
       $('#moderate_student_dialog').dialog('close')
     })
-  $('.extend_time_link').live('click', event => {
+  $(document).on('click', '.extend_time_link', event => {
     event.preventDefault()
     const $row = $(event.target).parents('.student')
     const end_at = $.datetimeString($row.attr('data-end-at'))
@@ -482,14 +481,16 @@ $(document).ready(function(event) {
     $dialog.fillTemplateData({
       data: {
         end_at,
-        started_at
-      }
+        started_at,
+      },
     })
-    $dialog.find('button').attr('disabled', false)
+    $dialog.find('button').prop('disabled', false)
     $dialog
       .dialog({
         title: I18n.t('titles.extend_quiz_time', 'Extend Quiz Time'),
-        width: DIALOG_WIDTH
+        width: DIALOG_WIDTH,
+        modal: true,
+        zIndex: 1000,
       })
       .fixDialogButtons()
   })
@@ -509,10 +510,11 @@ $(document).ready(function(event) {
         return
       }
       if (
-        data.time_type == 'extend_from_now' &&
+        data.time_type === 'extend_from_now' &&
         data.time < $dialog.data('row').data('minutes_left')
       ) {
-        const result = confirm(
+        // eslint-disable-next-line no-alert
+        const result = window.confirm(
           I18n.t(
             'confirms.taking_time_away',
             'That would be less time than the student currently has.  Continue anyway?'
@@ -525,10 +527,10 @@ $(document).ready(function(event) {
       params[data.time_type] = data.time
       $dialog
         .find('button')
-        .attr('disabled', true)
+        .prop('disabled', true)
         .filter('.save_button')
         .text(I18n.t('buttons.extending_time', 'Extending Time...'))
-      const url = $.replaceTags(
+      const url = replaceTags(
         $('.extension_url').attr('href'),
         'user_id',
         $dialog.data('row').attr('data-user-id')
@@ -540,16 +542,16 @@ $(document).ready(function(event) {
         data => {
           $dialog
             .find('button')
-            .attr('disabled', false)
+            .prop('disabled', false)
             .filter('.save_button')
             .text(I18n.t('buttons.extend_time', 'Extend Time'))
           moderation.updateSubmission(data)
           $dialog.dialog('close')
         },
-        data => {
+        _data => {
           $dialog
             .find('button')
-            .attr('disabled', false)
+            .prop('disabled', false)
             .filter('.save_button')
             .text(I18n.t('buttons.time_extension_failed', 'Extend Time Failed, please try again'))
         }
@@ -643,13 +645,11 @@ $(document).ready(function(event) {
     closeDialog() {
       $('#autosubmit_content_description_things_to_do').hide()
       $('#autosubmit_content_description_all_done').hide()
-      $('.autosubmit_data_row')
-        .not('.example_autosubmit_row')
-        .remove()
+      $('.autosubmit_data_row').not('.example_autosubmit_row').remove()
       this.cleanUpEventListeners()
       this.dialog.dialog('close')
     },
-    setFocusOnLoad(event, ui) {
+    setFocusOnLoad(_event, _ui) {
       $('#autosubmit_form').focus()
     },
     showDialog() {
@@ -659,7 +659,8 @@ $(document).ready(function(event) {
           modal: true,
           width: DIALOG_WIDTH,
           height: 200,
-          close: this.closeDialog.bind(this)
+          close: this.closeDialog.bind(this),
+          zIndex: 1000,
         })
         .dialog('open')
         .fixDialogButtons()
@@ -671,7 +672,7 @@ $(document).ready(function(event) {
       $('#autosubmit_form_submit_btn').on('click keyclick', this.submitOutstandings.bind(this))
 
       this.setFocusOnLoad()
-    }
+    },
   }
   outstanding.fetchData()
   $('#check_outstanding').click(outstanding.init.bind(outstanding))

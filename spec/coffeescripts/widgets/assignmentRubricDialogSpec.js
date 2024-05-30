@@ -40,7 +40,8 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import $ from 'jquery'
-import assignmentRubricDialog from 'ui/features/discussion_topic/jquery/assignmentRubricDialog.js'
+import 'jquery-migrate'
+import assignmentRubricDialog from 'ui/features/discussion_topic/jquery/assignmentRubricDialog'
 
 QUnit.module('assignmentRubricDialog')
 

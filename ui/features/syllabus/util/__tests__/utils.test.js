@@ -17,11 +17,11 @@
  */
 
 import {attachImmersiveReaderButton} from '../utils'
-import ImmersiveReader from '@canvas/immersive-reader/ImmersiveReader'
+import {initializeReaderButton} from '@canvas/immersive-reader/ImmersiveReader'
 
 jest.mock('@canvas/immersive-reader/ImmersiveReader', () => {
   return {
-    initializeReaderButton: jest.fn()
+    initializeReaderButton: jest.fn(),
   }
 })
 
@@ -42,7 +42,7 @@ describe('attachImmersiveReaderButton', () => {
 
     attachImmersiveReaderButton([mountNode])
 
-    const content = ImmersiveReader.initializeReaderButton.mock.calls[0][1].content
+    const content = initializeReaderButton.mock.calls[0][1].content
     expect(content()).toEqual(CUSTOM_CONTENT)
   })
 })

@@ -17,14 +17,15 @@
  */
 
 import $ from 'jquery'
-import UnassignedUsersView from 'ui/features/manage_groups/backbone/views/UnassignedUsersView.js'
-import AssignToGroupMenu from 'ui/features/manage_groups/backbone/views/AssignToGroupMenu.js'
-import GroupCollection from '@canvas/groups/backbone/collections/GroupCollection.coffee'
-import UnassignedGroupUserCollection from '@canvas/groups/backbone/collections/UnassignedGroupUserCollection.coffee'
-import Group from '@canvas/groups/backbone/models/Group.coffee'
-import GroupCategory from '@canvas/groups/backbone/models/GroupCategory.coffee'
+import 'jquery-migrate'
+import UnassignedUsersView from 'ui/features/manage_groups/backbone/views/UnassignedUsersView'
+import AssignToGroupMenu from 'ui/features/manage_groups/backbone/views/AssignToGroupMenu'
+import GroupCollection from '@canvas/groups/backbone/collections/GroupCollection'
+import UnassignedGroupUserCollection from '@canvas/groups/backbone/collections/UnassignedGroupUserCollection'
+import Group from '@canvas/groups/backbone/models/Group'
+import GroupCategory from '@canvas/groups/backbone/models/GroupCategory'
 import fakeENV from 'helpers/fakeENV'
-import 'helpers/jquery.simulate'
+import '@canvas/jquery/jquery.simulate'
 
 let clock = null
 let view = null
@@ -38,14 +39,17 @@ QUnit.module('UnassignedUsersView', {
     clock = sinon.useFakeTimers()
     groups = new GroupCollection([new Group({name: 'a group'}), new Group({name: 'another group'})])
     users = new UnassignedGroupUserCollection(
-      [{id: 1, name: 'bob', sortable_name: 'bob'}, {id: 2, name: 'joe', sortable_name: 'joe'}],
+      [
+        {id: 1, name: 'bob', sortable_name: 'bob'},
+        {id: 2, name: 'joe', sortable_name: 'joe'},
+      ],
       {category: new GroupCategory()}
     )
     const menu = new AssignToGroupMenu({collection: groups})
     view = new UnassignedUsersView({
       collection: users,
       groupsCollection: groups,
-      assignToGroupMenu: menu
+      assignToGroupMenu: menu,
     })
     view.render()
     $('#fixtures')
@@ -59,14 +63,11 @@ QUnit.module('UnassignedUsersView', {
     clock.restore()
     view.remove()
     $('#fixtures').empty()
-  }
+  },
 })
 
 test('opens the assignToGroupMenu', () => {
-  view
-    .$('.assign-to-group')
-    .eq(0)
-    .simulate('click')
+  view.$('.assign-to-group').eq(0).simulate('click')
   clock.tick(100)
   const $menu = $('.assign-to-group-menu').filter(':visible')
   equal($menu.length, 1)

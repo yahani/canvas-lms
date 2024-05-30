@@ -21,19 +21,17 @@ import 'jqueryui/dialog'
 import '@canvas/jquery/jquery.instructure_misc_plugins'
 import '@canvas/loading-image'
 
-$('.visibility_help_link').live('click', event => {
+$(document).on('click', '.visibility_help_link', event => {
   event.preventDefault()
   let $dialog = $('#visibility_help_dialog')
   if ($dialog.length === 0) {
-    $dialog = $('<div/>')
-      .attr('id', 'visibility_help_dialog')
-      .hide()
-      .appendTo('body')
-      .dialog({
-        autoOpen: false,
-        title: '',
-        width: 330
-      })
+    $dialog = $('<div/>').attr('id', 'visibility_help_dialog').hide().appendTo('body').dialog({
+      autoOpen: false,
+      title: '',
+      width: 330,
+      modal: true,
+      zIndex: 1000,
+    })
 
     $('#course_course_visibility option').each((_i, element) => {
       $dialog.append($('<div/>').append($('<b/>', {text: element.innerText})))

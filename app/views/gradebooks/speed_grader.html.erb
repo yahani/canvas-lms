@@ -23,7 +23,8 @@
     :RUBRIC_ASSESSMENT => {
       :assessor_id => @current_user.id.to_s,
       :assessment_type => can_do(@assignment, @current_user, :grade) ? "grading" : "peer_review"
-    }
+    },
+    studio_media_capture_enabled: Account.site_admin.feature_enabled?(:speedgrader_studio_media_capture)
   })
   @show_left_side = false
   @show_embedded_chat = false
@@ -31,6 +32,7 @@
   @can_edit_anything = !@context.completed?
   @emojis_enabled = @context.feature_enabled?(:submission_comment_emojis)
 %>
+
 
 <% provide :page_title, t(:page_title, "%{assignment_name}, SpeedGrader, %{course_name}", :assignment_name => @assignment.title, :course_name => @context.name) %>
 <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0;display: flex;flex-direction: column;">
@@ -42,7 +44,7 @@
     <div id="gradebook_header" class="subheadContent" style="display:none;">
       <div class="subheadContent subheadContent--flex-start">
         <div id="speedgrader-icons" class="gradebookActions">
-          <a href="<%= polymorphic_url([@context, :gradebook]) %>" id="speed_grader_gradebook_link" class="Button Button--icon-action gradebookActions__Button gradebook-icon-link" title="<%= t('Gradebook') %>">
+          <a href="<%= polymorphic_url([@context, :gradebook]) %>" id="speed_grader_gradebook_link" class="Button Button--icon-action-rev gradebookActions__Button gradebook-icon-link" title="<%= t('Gradebook') %>">
             <i class="icon-gradebook" aria-hidden="true"></i>
             <span class="screenreader-only" aria-hidden="true"><%= t("Gradebook") %></span>
           </a>
@@ -76,7 +78,7 @@
           </div>
         </div>
         <div class="studentSelection">
-          <button id="prev-student-button" class="Button Button--icon-action gradebookMoveToNext prev" type="button" aria-label="<%= t("Previous") %>">
+          <button id="prev-student-button" class="Button Button--icon-action-rev gradebookMoveToNext prev" type="button" aria-label="<%= t("Previous") %>">
             <i class="icon-arrow-left prev" aria-hidden="true"></i>
           </button>
           <% if service_enabled?(:avatars) %>
@@ -85,7 +87,7 @@
             </div>
           <% end %>
           <div id="combo_box_container"></div>
-          <button id="next-student-button" class="Button Button--icon-action gradebookMoveToNext next" type="button" aria-label="<%= t("Next") %>">
+          <button id="next-student-button" class="Button Button--icon-action-rev gradebookMoveToNext next" type="button" aria-label="<%= t("Next") %>">
             <i class="icon-arrow-right next" aria-hidden="true"></i>
           </button>
         </div>
@@ -152,28 +154,23 @@
         </div>
       </div>
     </div>
+    <div id="speed_grader_rubric_assessment_tray_wrapper"></div>
     <div id="right_side" class="full_height">
       <div id="not_gradeable_message"><%= t("This submission has already been graded and is ready for moderation.") %></div>
       <div class="full_height" id="width_resizer"></div>
       <div class=right_side_content>
         <div id="rightside_inner" class="full_height">
           <div class="secondary_mount_point_container">
-            <% if Account.site_admin.feature_enabled?(:edit_submission_status_from_speedgrader) %>
-              <div id="speed_grader_edit_status_secondary_mount_point"></div>
-            <% end %>
+            <div id="speed_grader_edit_status_secondary_mount_point"></div>
           </div>
           <div id="submission_details" class="content_box">
             <div style="display: flex;">
               <div id="multiple_submissions" style="display:flex; flex: 1"></div>
-              <% if Account.site_admin.feature_enabled?(:edit_submission_status_from_speedgrader) %>
-                <div id="speed_grader_edit_status_mount_point"></div>
-              <% end %>
+              <div id="speed_grader_edit_status_mount_point"></div>
             </div>
             <div id="submission_not_newest_notice" title='<%= t('titles.not_newest', "use the dropdown above to change which submission to look at") %>'><%= t(:not_newest_notice, "Note: This is not the most recent submission") %></div>
             <div id="submission_attachment_viewed_at_container"></div>
-            <% if Account.site_admin.feature_enabled?(:word_count_in_speed_grader) %>
-              <div id="submission_word_count"></div>
-            <% end %>
+            <div id="submission_word_count"></div>
             <div id="submission_files_container">
               <label><%= t("Submitted Files") %>: <span class="labelText--not-bold"><%= t("(click to load)") %></span>&nbsp;</label>
               <div id="submission_files_list">
@@ -187,10 +184,10 @@
                   <span class="turnitin_score_container"></span>
                   <a class="display_name no-hover" href="<%= preview_url %>" title="<%= t('titles.preview_file', "Preview this File") %>">???</a>
                   <span id="react_pill_container"></span>
-                  <a class="submission-file-delete icon-trash" href="/api/v1/files/{{attachmentId}}?replace=1" style="display:none;">
+                  <a role="button" class="submission-file-delete icon-trash" href="/api/v1/files/{{attachmentId}}?replace=1" style="display:none;">
                     <span class="screenreader-only"><%= t("Delete this file") %></span>
                   </a>
-                  <a class="submission-file-download icon-download" href="<%= download_url %>" download>
+                  <a role="button" class="submission-file-download icon-download" href="<%= download_url %>" download>
                     <span class="screenreader-only"><%= t("Download this file") %></span>
                   </a>
                 </div>
@@ -230,6 +227,7 @@
             <% end %>
 
             <% if  @assignment.active_rubric_association? || can_do(@context, @current_user, :manage_grades) || (@context.concluded? && can_do(@context, @current_user, :read_as_admin)) %>
+            <div id="grades-loading-spinner"></div>
             <div id="grading">
               <h2 class="gradebookHeader--rightside"><%= t('headers.assessment', "Assessment") %></h2>
               <% if can_do(@context, @current_user, :manage_grades) || (@context.concluded? && can_do(@context, @current_user, :read_as_admin)) %>
@@ -338,38 +336,78 @@
                     </span>
                   </a>
                 </div>
-                <div class="ic-Action-header">
+                <% if Account.site_admin.feature_enabled?(:speedgrader_studio_media_capture) %>
+                  <div class="ic-Action-header flex-wrap">
                   <div id="emojis-attachments-container">
                     <span id="emoji-quick-picker-container"></span>
                     <div class="ic-Action-header__Primary attach_things<%= @emojis_enabled ? " emojis" : "" %>" role="group">
-                      <button class="Button Button--small" id="add_attachment" title="<%= t("File Attachment") %>" type="button">
-                        <i class="icon-paperclip" aria-hidden="true"></i>
-                        <span class="screenreader-only">
-                          <%= t("File Attachment") %>
-                        </span>
-                      </button>
-                      <% if feature_enabled?(:kaltura) %>
-                        <button id="media_comment_button" class="Button Button--small media_comment_link" title="<%= t("Media Comment") %> " type="button">
-                          <i class="icon-media" aria-hidden="true"></i>
-                          <span class="screenreader-only">
-                            <%= t("Media Comment") %>
-                          </span>
-                        </button>
-                      <% end %>
-                      <div class="speech-recognition" style="display:none">
-                        <a id="speech_recognition_button" title="<%= t("Speech Recognition") %>" href="#" class="Button Button--small speech_recognition_link">
+                    <div class="speech-recognition" style="display:none">
+                        <a id="speech_recognition_button" title="<%= t("Speech Recognition") %>" href="#" class="Button Button--small speech_recognition_link transparent-bg borderless">
                           <i class="icon-audio"></i>
                           <span class="screenreader-only">
                             <%= t("Speech Recognition") %>
                           </span>
                         </a>
                       </div>
+                      <% if feature_enabled?(:kaltura) %>
+                        <div id="new-studio-media-indicator-wrapper" title="<%= t("New") + "&excl; " + t(" Record videos and screen capture with auto captioning.") %>">
+                          <button id="media_comment_button" class="Button Button--small media_comment_link transparent-bg borderless r-margin-0" type="button">
+                            <i id="screen-capture-icon-mount-point" aria-hidden="true"></i>
+                            <span class="screenreader-only">
+                              <%= t("Media Comment") %>
+                            </span>
+                          </button>
+                          <p id="new-studio-media-indicator"><%= t("NEW") %></p>
+                        </div>
+                      <% end %>
+                      <div style="display:flex; align-items: center; justify-content: center; flex: 0 0;">
+                        <button class="Button Button--small transparent-bg borderless" id="add_attachment" title="<%= t("File Attachment") %>" type="button">
+                          <i class="icon-paperclip" aria-hidden="true"></i>
+                          <span class="screenreader-only">
+                            <%= t("File Attachment") %>
+                          </span>
+                        </button>
+                      </div>
                     </div>
                   </div>
-                  <div class="ic-Action-header__Secondary">
+                  <div class="ic-Action-header__Secondary m-left-auto">
                     <button id="comment_submit_button" class="Button Button--primary" type="submit"><%= t("Submit") %></button>
                   </div>
                 </div>
+                  <% else %>
+                  <div class="ic-Action-header">
+                    <div id="emojis-attachments-container">
+                      <span id="emoji-quick-picker-container"></span>
+                      <div class="ic-Action-header__Primary attach_things<%= @emojis_enabled ? " emojis" : "" %>" role="group">
+                        <button class="Button Button--small" id="add_attachment" title="<%= t("File Attachment") %>" type="button">
+                          <i class="icon-paperclip" aria-hidden="true"></i>
+                          <span class="screenreader-only">
+                            <%= t("File Attachment") %>
+                          </span>
+                        </button>
+                        <% if feature_enabled?(:kaltura) %>
+                          <button id="media_comment_button" class="Button Button--small media_comment_link" title="<%= t("Media Comment") %> " type="button">
+                            <i class="icon-media" aria-hidden="true"></i>
+                            <span class="screenreader-only">
+                              <%= t("Media Comment") %>
+                            </span>
+                          </button>
+                        <% end %>
+                        <div class="speech-recognition" style="display:none">
+                          <a id="speech_recognition_button" title="<%= t("Speech Recognition") %>" href="#" class="Button Button--small speech_recognition_link">
+                            <i class="icon-audio"></i>
+                            <span class="screenreader-only">
+                              <%= t("Speech Recognition") %>
+                            </span>
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="ic-Action-header__Secondary">
+                      <button id="comment_submit_button" class="Button Button--primary" type="submit"><%= t("Submit") %></button>
+                    </div>
+                  </div>
+                <% end %>
               </form>
 
               <% if @can_reassign_submissions %>
@@ -426,11 +464,11 @@
       </p>
     <% end %>
 
-    <p <% unless @assignment.quiz %>class=hidden<% end %>>
+    <p <% unless @assignment.supports_grade_by_question? %>class=hidden<% end %>>
       <%= check_box_tag :enable_speedgrader_grade_by_question, "1",
         @current_user.preferences[:enable_speedgrader_grade_by_question] %>
       <%= label_tag :enable_speedgrader_grade_by_question,
-        t('labels.grade_by_question_beta', 'Grade by question (beta)') %>
+        t("Grade by question") %>
     </p>
 
     <div class="button-container">

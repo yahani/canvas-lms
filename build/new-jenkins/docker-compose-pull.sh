@@ -17,8 +17,8 @@ DOCKER_IMAGES=(
   $POSTGRES_IMAGE_TAG
   $REGISTRY_BASE/canvas-rce-api
   $REGISTRY_BASE/redis:alpine
-  $REGISTRY_BASE/selenium-node-chrome:"${CHROME_VERSION:-101.0}"
-  $REGISTRY_BASE/selenium-hub:"${HUB_VERSION:-4.1}"
+  $REGISTRY_BASE/selenium-node-chrome:"${CHROME_VERSION:-120.0}"
+  $REGISTRY_BASE/selenium-hub:"${HUB_VERSION:-4.16}"
 )
 
 echo "${DOCKER_IMAGES[@]}" | xargs -P0 -n1 ./build/new-jenkins/docker-with-flakey-network-protection.sh pull &
@@ -28,5 +28,5 @@ wait
 # because it is unlikely that another build that runs on the node will need it, saving
 # disk space. The dependency image(s) will not be cleared however, so tag them to avoid
 # future builds on this node from downloading the layers again.
-WEBPACK_CACHE_SELECTED_TAG=$(docker image inspect -f "{{.Config.Labels.WEBPACK_CACHE_SELECTED_TAG}}" $PATCHSET_TAG)
-./build/new-jenkins/docker-with-flakey-network-protection.sh pull $WEBPACK_CACHE_SELECTED_TAG
+WEBPACK_ASSETS_SELECTED_TAG=$(docker image inspect -f "{{.Config.Labels.WEBPACK_ASSETS_SELECTED_TAG}}" $PATCHSET_TAG)
+./build/new-jenkins/docker-with-flakey-network-protection.sh pull $WEBPACK_ASSETS_SELECTED_TAG

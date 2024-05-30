@@ -72,7 +72,7 @@
 </style>
 
 <% css_bundle :slickgrid %>
-<% js_bundle :jobs %>
+<% deferred_js_bundle :jobs %>
 
 <div id="running-wrapper" style="float:<%= direction('left') %>">
   <h2><%= t 'headings.running_jobs', "Running Jobs" %></h2>
@@ -185,8 +185,8 @@ jobs_opts = {
   :on_hold_attempt_count => Delayed::Job::ON_HOLD_COUNT,
   :limit => JobsController::LIMIT,
   :starting_query => params[:q],
-  :slow_threshold => Setting.get('jobs.slow_threshold', 600).to_f,
-  :super_slow_threshold => Setting.get('jobs.super_slow_threshold', 3600).to_f
+  :slow_threshold => 10.minutes,
+  :super_slow_threshold => 1.hour
 }
 running_opts = jobs_opts.merge({
   :url => jobs_v1_index_url(:only => :running),

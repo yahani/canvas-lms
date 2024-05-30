@@ -17,7 +17,7 @@
  */
 
 import moment from 'moment'
-import {BlackoutDateState, BlackoutDate, Course} from './shared/types'
+import type {BlackoutDateState, BlackoutDate, Course} from './shared/types'
 
 /* Model types */
 
@@ -30,6 +30,7 @@ export interface Enrollment {
   readonly start_at?: string
   readonly completed_course_pace_at?: string
   readonly avatar_url?: string
+  readonly section_id?: string
 }
 
 export interface Enrollments {
@@ -82,6 +83,7 @@ export interface ModuleWithDueDates extends Module {
 }
 
 export type PaceContextTypes = 'Course' | 'Section' | 'Enrollment'
+export type APIPaceContextTypes = 'course' | 'section' | 'student_enrollment'
 export type WorkflowStates = 'unpublished' | 'active' | 'deleted'
 export type ProgressStates = 'queued' | 'running' | 'completed' | 'failed'
 export type ContextTypes = 'user' | 'course' | 'term' | 'hypothetical'
@@ -109,6 +111,7 @@ export interface CoursePace {
   readonly published_at?: string
   readonly compressed_due_dates: CoursePaceItemDueDates | undefined
   readonly updated_at: string
+  readonly name?: string
 }
 
 export interface Progress {
@@ -144,9 +147,31 @@ export interface UIState {
   readonly selectedContextId: string
   readonly loadingMessage: string
   readonly responsiveSize: ResponsiveSizes
+  readonly outerResponsiveSize: ResponsiveSizes
   readonly showLoadingOverlay: boolean
+  readonly showPaceModal: boolean
   readonly showProjections: boolean
   readonly editingBlackoutDates: boolean
+  readonly blueprintLocked?: boolean
+}
+
+export type SortableColumn = 'name' | null
+export type OrderType = 'asc' | 'desc'
+
+export interface PaceContextsState {
+  readonly selectedContextType: APIPaceContextTypes
+  readonly selectedContext: PaceContext | null
+  readonly entries: PaceContext[]
+  readonly page: number
+  readonly pageCount: number
+  readonly entriesPerRequest: number
+  readonly isLoading: boolean
+  readonly defaultPaceContext: PaceContext | null
+  readonly isLoadingDefault: false
+  readonly searchTerm: string
+  readonly sortBy: SortableColumn
+  readonly order: OrderType
+  readonly contextsPublishing: PaceContextProgress[]
 }
 
 export interface StoreState {
@@ -157,6 +182,42 @@ export interface StoreState {
   readonly ui: UIState
   readonly course: Course
   readonly blackoutDates: BlackoutDateState
+  readonly paceContexts: PaceContextsState
+}
+
+export interface Pace {
+  name: string
+  type: string
+  last_modified: string
+  duration: number
+}
+
+export interface PaceContext {
+  name: string
+  type: string
+  item_id: string
+  associated_section_count: number
+  associated_student_count: number
+  applied_pace: Pace | null
+}
+
+export interface PaceContextProgress {
+  progress_context_id: string
+  pace_context: PaceContext
+  polling: boolean
+}
+
+export interface PaceContextsApiResponse {
+  pace_contexts: PaceContext[]
+  total_entries: number
+}
+
+export interface PaceContextsAsyncActionPayload {
+  result: PaceContextsApiResponse | PaceContext
+  page?: number
+  searchTerm?: string
+  sortBy?: SortableColumn
+  orderType?: OrderType
 }
 
 /* Random types  */

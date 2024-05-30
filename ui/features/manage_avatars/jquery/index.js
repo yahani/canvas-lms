@@ -20,22 +20,25 @@ import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import '@canvas/jquery/jquery.ajaxJSON'
 import '@canvas/jquery/jquery.instructure_misc_plugins'
+
 const I18n = useI18nScope('manage_avatars')
 /* showIf */
 
-$(document).ready(function() {
-  $('.update_avatar_link').live('click', function(event) {
+$(document).ready(function () {
+  $(document).on('click', '.update_avatar_link', function (event) {
     event.preventDefault()
     const $link = $(this)
-    if ($link.attr('data-state') == 'none') {
-      var result = confirm(
+    if ($link.attr('data-state') === 'none') {
+      // eslint-disable-next-line no-alert
+      const result = window.confirm(
         I18n.t('prompts.delete_avatar', "Are you sure you want to delete this user's profile pic?")
       )
       if (!result) {
         return
       }
-    } else if ($link.attr('data-state') == 'locked') {
-      var result = confirm(
+    } else if ($link.attr('data-state') === 'locked') {
+      // eslint-disable-next-line no-alert
+      const result = window.confirm(
         I18n.t(
           'prompts.lock_avatar',
           'Locking this picture will approve it and prevent the user from updating it.  Continue?'
@@ -58,26 +61,23 @@ $(document).ready(function() {
       data => {
         $td
           .find('.lock_avatar_link')
-          .showIf(data.avatar_state != 'locked')
+          .showIf(data.avatar_state !== 'locked')
           .end()
           .find('.unlock_avatar_link')
-          .showIf(data.avatar_state == 'locked')
+          .showIf(data.avatar_state === 'locked')
           .end()
           .find('.reject_avatar_link')
-          .showIf(data.avatar_state != 'none')
+          .showIf(data.avatar_state !== 'none')
           .end()
           .find('.approve_avatar_link')
           .hide()
-        if (data.avatar_state == 'none') {
-          $td
-            .parents('tr')
-            .find('.avatar img')
-            .attr('src', '/images/dotted_pic.png')
+        if (data.avatar_state === 'none') {
+          $td.parents('tr').find('.avatar img').attr('src', '/images/dotted_pic.png')
         }
         $td.parents('tr').attr('class', data.avatar_state)
         $td.find('.progress').css('visibility', 'hidden')
       },
-      data => {
+      _data => {
         $td
           .find('.progress')
           .text(I18n.t('errors.update_failed', 'Update failed, please try again'))

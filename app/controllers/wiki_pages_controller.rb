@@ -33,8 +33,8 @@ class WikiPagesController < ApplicationController
   include K5Mode
 
   add_crumb(proc { t "#crumbs.wiki_pages", "Pages" }) do |c|
-    context = c.instance_variable_get("@context")
-    current_user = c.instance_variable_get("@current_user")
+    context = c.instance_variable_get(:@context)
+    current_user = c.instance_variable_get(:@current_user)
     if context.grants_right?(current_user, :read)
       c.send :polymorphic_path, [context, :wiki_pages]
     end
@@ -78,7 +78,7 @@ class WikiPagesController < ApplicationController
     GuardRail.activate(:secondary) do
       if authorized_action(@context.wiki, @current_user, :read) && tab_enabled?(@context.class::TAB_PAGES)
         log_asset_access(["pages", @context], "pages", "other")
-        js_env((ConditionalRelease::Service.env_for(@context)))
+        js_env(ConditionalRelease::Service.env_for(@context))
         wiki_pages_js_env(@context)
         set_tutorial_js_env
         @padless = true
@@ -89,15 +89,17 @@ class WikiPagesController < ApplicationController
   def show
     GuardRail.activate(:secondary) do
       if @page.new_record?
+        wiki_page = @context.wiki_pages.deleted_last.where(url: @page.url).first
         if @page.grants_any_right?(@current_user, session, :update, :update_content)
           flash[:info] = t("notices.create_non_existent_page", 'The page "%{title}" does not exist, but you can create it below', title: @page.title)
+          InstStatsd::Statsd.increment("wikipage.show.page_does_not_exist.with_edit_rights") unless wiki_page&.deleted?
           encoded_name = @page_name && CGI.escape(@page_name).tr("+", " ")
           redirect_to polymorphic_url([@context, :wiki_page], id: encoded_name || @page, titleize: params[:titleize], action: :edit)
         else
-          wiki_page = @context.wiki_pages.deleted_last.where(url: @page.url).first
-          flash[:warning] = if wiki_page && wiki_page.deleted?
+          flash[:warning] = if wiki_page&.deleted?
                               t("notices.page_deleted", 'The page "%{title}" has been deleted.', title: @page.title)
                             else
+                              InstStatsd::Statsd.increment("wikipage.show.page_does_not_exist.without_edit_rights")
                               t("notices.page_does_not_exist", 'The page "%{title}" does not exist.', title: @page.title)
                             end
           redirect_to polymorphic_url([@context, :wiki_pages])
@@ -107,6 +109,10 @@ class WikiPagesController < ApplicationController
 
       if authorized_action(@page, @current_user, :read) &&
          (!@context.conditional_release? || enforce_assignment_visible(@page))
+        if params[:id] != @page.url
+          InstStatsd::Statsd.increment("wikipage.show.page_url_resolved")
+          redirect_to polymorphic_url([@context, :wiki_page], id: @page, titleize: params[:titleize])
+        end
         add_crumb(@page.title)
         log_asset_access(@page, "wiki", @wiki)
         wiki_pages_js_env(@context)
@@ -150,8 +156,10 @@ class WikiPagesController < ApplicationController
   end
 
   def show_redirect
-    redirect_to polymorphic_url([@context, @page], titleize: params[:titleize],
-                                                   module_item_id: params[:module_item_id]), status: :moved_permanently
+    redirect_to polymorphic_url([@context, @page],
+                                titleize: params[:titleize],
+                                module_item_id: params[:module_item_id]),
+                status: :moved_permanently
   end
 
   def revisions_redirect
@@ -162,13 +170,17 @@ class WikiPagesController < ApplicationController
 
   def wiki_pages_js_env(context)
     set_k5_mode # we need this to run now, even though we haven't hit the render hook yet
-    wiki_index_menu_tools = @domain_root_account&.feature_enabled?(:commons_favorites) ? external_tools_display_hashes(:wiki_index_menu) : []
     @wiki_pages_env ||= {
       wiki_page_menu_tools: external_tools_display_hashes(:wiki_page_menu),
-      wiki_index_menu_tools: wiki_index_menu_tools,
-      DISPLAY_SHOW_ALL_LINK: tab_enabled?(context.class::TAB_PAGES, { no_render: true }) && !@k5_details_view,
-      CAN_SET_TODO_DATE: context.grants_any_right?(@current_user, session, :manage_content, :manage_course_content_edit)
+      wiki_index_menu_tools: external_tools_display_hashes(:wiki_index_menu),
+      DISPLAY_SHOW_ALL_LINK: tab_enabled?(context.class::TAB_PAGES, no_render: true) && !@k5_details_view,
+      CAN_SET_TODO_DATE: context.grants_any_right?(@current_user, session, :manage_content, :manage_course_content_edit),
+      BLOCK_EDITOR: context.account.feature_enabled?(:block_editor)
     }
+    if Account.site_admin.feature_enabled?(:permanent_page_links)
+      title_availability_path = context.is_a?(Course) ? api_v1_course_page_title_availability_path : api_v1_group_page_title_availability_path
+      @wiki_pages_env[:TITLE_AVAILABILITY_PATH] = title_availability_path
+    end
     js_env(@wiki_pages_env)
     @wiki_pages_env
   end

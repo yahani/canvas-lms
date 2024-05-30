@@ -19,10 +19,10 @@
 import {useState, useCallback, useEffect} from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import resolveProgress from '@canvas/progress/resolve_progress'
-import {IMPORT_OUTCOMES} from '@canvas/outcomes/graphql/Management'
+import {IMPORT_OUTCOMES} from '../../graphql/Management'
 import {useMutation} from 'react-apollo'
 import {showFlashAlert} from '@canvas/alerts/react/FlashAlert'
-import useCanvasContext from '@canvas/outcomes/react/hooks/useCanvasContext'
+import useCanvasContext from './useCanvasContext'
 
 const I18n = useI18nScope('FindOutcomesModal')
 
@@ -30,6 +30,7 @@ export const IMPORT_NOT_STARTED = 'IMPORT_NOT_STARTED'
 export const IMPORT_PENDING = 'IMPORT_PENDING'
 export const IMPORT_COMPLETED = 'IMPORT_COMPLETED'
 export const IMPORT_FAILED = 'IMPORT_FAILED'
+export const ROOT_GROUP = 'ROOT_GROUP'
 
 const getLocalStorageActiveImports = () => {
   try {
@@ -57,12 +58,12 @@ const useOutcomesImport = (outcomePollingInterval = 1000, groupPollingInterval =
       if (isGroup) {
         setImportGroupsStatus(prevStatus => ({
           ...prevStatus,
-          [outcomeOrGroupId]: status
+          [outcomeOrGroupId]: status,
         }))
       } else {
         setImportOutcomesStatus(prevStatus => ({
           ...prevStatus,
-          [outcomeOrGroupId]: status
+          [outcomeOrGroupId]: status,
         }))
       }
     },
@@ -74,15 +75,15 @@ const useOutcomesImport = (outcomePollingInterval = 1000, groupPollingInterval =
       message: err.message
         ? isGroup
           ? I18n.t('An error occurred while importing these outcomes: %{message}.', {
-              message: err.message
+              message: err.message,
             })
           : I18n.t('An error occurred while importing this outcome: %{message}.', {
-              message: err.message
+              message: err.message,
             })
         : isGroup
         ? I18n.t('An error occurred while importing these outcomes.')
         : I18n.t('An error occurred while importing this outcome.'),
-      type: 'error'
+      type: 'error',
     })
 
   const trackProgress = useCallback(
@@ -92,47 +93,49 @@ const useOutcomesImport = (outcomePollingInterval = 1000, groupPollingInterval =
             'All outcomes from %{groupTitle} have been successfully added to %{targetGroupTitle}.',
             {
               groupTitle,
-              targetGroupTitle
+              targetGroupTitle,
             }
           )
         : isCourse
         ? I18n.t('All outcomes from %{groupTitle} have been successfully added to this course.', {
-            groupTitle
+            groupTitle,
           })
         : I18n.t('All outcomes from %{groupTitle} have been successfully added to this account.', {
-            groupTitle
+            groupTitle,
           })
-
       try {
         await resolveProgress(
           {
             url: `/api/v1/progress/${progress._id}`,
-            workflow_state: progress.state
+            workflow_state: progress.state,
           },
           {
-            interval: isGroup ? groupPollingInterval : outcomePollingInterval
+            interval: isGroup ? groupPollingInterval : outcomePollingInterval,
           }
         )
-        if (isGroup) {
+        const shouldShowAlert = getLocalStorageActiveImports().some(
+          imp => imp.isGroup === isGroup && imp.outcomeOrGroupId === outcomeOrGroupId
+        )
+        if (isGroup && shouldShowAlert) {
           showFlashAlert({
             message,
-            type: 'success'
+            type: 'success',
           })
         }
         setStatus(outcomeOrGroupId, IMPORT_COMPLETED, isGroup)
       } catch (err) {
         showFlashError(err, isGroup)
         setStatus(outcomeOrGroupId, IMPORT_FAILED, isGroup)
-      }
-
-      const activeImports = getLocalStorageActiveImports()
-      storeActiveImportsInLocalStorage(
-        activeImports.filter(
-          imp => !(imp.isGroup === isGroup && imp.outcomeOrGroupId === outcomeOrGroupId)
+      } finally {
+        const activeImports = getLocalStorageActiveImports()
+        storeActiveImportsInLocalStorage(
+          activeImports.filter(
+            imp => !(imp.isGroup === isGroup && imp.outcomeOrGroupId === outcomeOrGroupId)
+          )
         )
-      )
+      }
     },
-    [groupPollingInterval, outcomePollingInterval, isCourse, setStatus]
+    [isCourse, groupPollingInterval, outcomePollingInterval, setStatus]
   )
 
   useEffect(() => {
@@ -153,14 +156,14 @@ const useOutcomesImport = (outcomePollingInterval = 1000, groupPollingInterval =
       targetGroupId,
       targetGroupTitle,
       groupTitle = null,
-      isGroup = true
+      isGroup = true,
     }) => {
       try {
         const input = targetGroupId
           ? {targetGroupId}
           : {
               targetContextId,
-              targetContextType
+              targetContextType,
             }
         if (isGroup) {
           input.groupId = outcomeOrGroupId
@@ -183,13 +186,12 @@ const useOutcomesImport = (outcomePollingInterval = 1000, groupPollingInterval =
           isGroup,
           groupTitle,
           targetGroupTitle,
-          progress
+          progress,
         }
 
         const activeImports = getLocalStorageActiveImports()
         activeImports.push(newTrackedImport)
         storeActiveImportsInLocalStorage(activeImports)
-        setStatus(outcomeOrGroupId, IMPORT_PENDING, isGroup)
         trackProgress(progress, outcomeOrGroupId, isGroup, groupTitle, targetGroupTitle)
         setHasAddedOutcomes(true)
       } catch (err) {
@@ -211,7 +213,7 @@ const useOutcomesImport = (outcomePollingInterval = 1000, groupPollingInterval =
     clearGroupsStatus,
     clearOutcomesStatus,
     hasAddedOutcomes,
-    setHasAddedOutcomes
+    setHasAddedOutcomes,
   }
 }
 

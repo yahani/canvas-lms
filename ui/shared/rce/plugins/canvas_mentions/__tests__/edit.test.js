@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 import {insert, insertMentionFor, replace} from '../edit'
-import FakeEditor from '@instructure/canvas-rce/src/rce/plugins/shared/__tests__/FakeEditor'
+import FakeEditor from './FakeEditor'
 
 let editor
 
@@ -93,7 +93,7 @@ describe('replace()', () => {
 describe('insertMentionFor()', () => {
   const user = {
     id: '123',
-    shortName: 'Test User'
+    shortName: 'Test User',
   }
 
   const subject = () => insertMentionFor(user, editor)

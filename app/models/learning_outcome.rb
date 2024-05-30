@@ -23,15 +23,23 @@ class LearningOutcome < ActiveRecord::Base
   include Workflow
   include MasterCourses::Restrictor
   restrict_columns :state, [:workflow_state]
-  self.ignored_columns = %i[migration_id_2 vendor_guid_2 root_account_id]
 
   belongs_to :context, polymorphic: [:account, :course]
   has_many :learning_outcome_results
   has_many :alignments, -> { where("content_tags.tag_type='learning_outcome' AND content_tags.workflow_state<>'deleted'") }, class_name: "ContentTag"
 
+  belongs_to :copied_from,
+             class_name: "LearningOutcome",
+             optional: true,
+             inverse_of: :cloned_outcomes,
+             foreign_key: "copied_from_outcome_id"
+  has_many :cloned_outcomes,
+           class_name: "LearningOutcome",
+           inverse_of: :copied_from,
+           foreign_key: "copied_from_outcome_id"
   serialize :data
 
-  before_validation :infer_default_calculation_method, :adjust_calculation_int
+  before_validation :adjust_calculation_method, :infer_default_calculation_method, :adjust_calculation_int
   before_save :infer_defaults
   before_save :infer_root_account_ids
   after_save :propagate_changes_to_rubrics
@@ -125,7 +133,7 @@ class LearningOutcome < ActiveRecord::Base
       else
         errors.add(:calculation_int, t(
                                        "'%{calculation_int}' is not a valid value for this calculation method. The value must be between '%{valid_calculation_ints_min}' and '%{valid_calculation_ints_max}'",
-                                       calculation_int: calculation_int,
+                                       calculation_int:,
                                        valid_calculation_ints_min: valid_ints.min,
                                        valid_calculation_ints_max: valid_ints.max
                                      ))
@@ -166,13 +174,49 @@ class LearningOutcome < ActiveRecord::Base
     end
   end
 
+  def new_decaying_average_calculation_ff_enabled?
+    return context.root_account.feature_enabled?(:outcomes_new_decaying_average_calculation) if context
+
+    LoadAccount.default_domain_root_account.feature_enabled?(:outcomes_new_decaying_average_calculation)
+  end
+
+  # We have redefined the calculation methods as follows:
+  # weighted_average - This is the preferred way to describe legacy decaying_average.
+  # decaying_average - This is the deprecated way to describe legacy decaying_average.
+  # standard_decaying_average - This is the preferred way to describe the new decaying_average.
+  # if this FF is ENABLED then on user facing side(Only UI)
+  # end-user will use "weighted_average" for old "decaying_average"
+  # and "decaying_average" for "standard_decaying_average"
+  # eg:
+  # |User Facing Name | DB Value                                                                           |
+  # |------------------------------------------------------------------------------------------------------|
+  # |decaying_average | standard_decaying_average [after data migration will be named as decaying_average] |
+  # |weighted_average | decaying_average [after data migration this old decaying_average                   |
+  # |                 | will be named as weighted_average]                                                 |
+  # |------------------------------------------------------------------------------------------------------|
+  def adjust_calculation_method(method = self.calculation_method)
+    if new_decaying_average_calculation_ff_enabled?
+      self.calculation_method = "decaying_average" if method == "weighted_average"
+    elsif method == "standard_decaying_average"
+      # If FF is disabled “decaying_average” and “standard_decaying_average”
+      # will all be treated the same and calculate using the legacy approach.
+      # Any time a learning outcome is updated / saved it will have the calculation_method
+      # updated back to being “decaying_average”.
+      self.calculation_method = "decaying_average"
+    end
+  end
+
   def default_calculation_method
-    "decaying_average"
+    if new_decaying_average_calculation_ff_enabled?
+      "standard_decaying_average"
+    else
+      "decaying_average"
+    end
   end
 
   def default_calculation_int(method = self.calculation_method)
     case method
-    when "decaying_average" then 65
+    when "decaying_average", "standard_decaying_average", "weighted_average" then 65
     when "n_mastery" then 5
     else nil
     end
@@ -188,7 +232,7 @@ class LearningOutcome < ActiveRecord::Base
       create_missing_outcome_link(context)
       if MasterCourses::MasterTemplate.is_master_course?(context)
         # mark for re-sync
-        context.learning_outcome_links.where(content: self).touch_all if context_type == "Account"
+        context.learning_outcome_links.where(content: self).touch_all
         touch
       end
     end
@@ -236,6 +280,7 @@ class LearningOutcome < ActiveRecord::Base
 
   workflow do
     state :active
+    state :archived
     state :retired
     state :deleted
   end
@@ -266,6 +311,17 @@ class LearningOutcome < ActiveRecord::Base
       mastery_points: 3,
       points_possible: 5
     }
+  end
+
+  # Set default mastery level and color scheme for outcome ratings
+  # will not override current values stored in ratings
+  def find_or_set_rating_defaults(ratings, mastery_points)
+    mastery_index = find_mastery_index(ratings, mastery_points)
+    set_mastery_level(ratings, mastery_index)
+    if meets_color_criteria(ratings, mastery_index)
+      find_or_set_default_mastery_colors(ratings, mastery_index)
+    end
+    ratings
   end
 
   def rubric_criterion
@@ -317,6 +373,28 @@ class LearningOutcome < ActiveRecord::Base
 
     self.workflow_state = "deleted"
     save!
+  end
+
+  def archive!
+    # Only active outcomes can be archived
+    if workflow_state == "active"
+      self.workflow_state = "archived"
+      self.archived_at = Time.now.utc
+      save!
+    elsif workflow_state == "deleted"
+      raise ActiveRecord::RecordNotSaved, "Cannot archive a deleted LearningOutcome"
+    end
+  end
+
+  def unarchive!
+    # Only archived outcomes can be unarchived
+    if workflow_state == "archived"
+      self.workflow_state = "active"
+      self.archived_at = nil
+      save!
+    elsif workflow_state == "deleted"
+      raise ActiveRecord::RecordNotSaved, "Cannot unarchive a deleted LearningOutcome"
+    end
   end
 
   def assessed?(course = nil)
@@ -378,7 +456,7 @@ class LearningOutcome < ActiveRecord::Base
   end
 
   scope(:for_context_codes, ->(codes) { where(context_code: codes) })
-  scope(:active, -> { where("learning_outcomes.workflow_state<>'deleted'") })
+  scope(:active, -> { where("learning_outcomes.workflow_state NOT IN ('deleted', 'archived')") })
   scope(:active_first, -> { order(Arel.sql("CASE WHEN workflow_state = 'active' THEN 0 ELSE 1 END")) })
   scope(:has_result_for_user,
         lambda do |user|
@@ -446,7 +524,7 @@ class LearningOutcome < ActiveRecord::Base
     alignments.find_or_create_by(
       content: asset,
       tag_type: "learning_outcome",
-      context: context
+      context:
     ) do |_a|
       InstStatsd::Statsd.increment("learning_outcome.align", tags: { type: asset.class.name })
     end
@@ -482,5 +560,93 @@ class LearningOutcome < ActiveRecord::Base
     return context.root_account.feature_enabled?(:improved_outcomes_management) if context
 
     LoadAccount.default_domain_root_account.feature_enabled?(:improved_outcomes_management)
+  end
+
+  # finds rating set as mastery and returns index of rating in ratings
+  def find_mastery_index(ratings, mastery_points)
+    length = ratings.length
+    mastery_index = case length
+                    when 1, 2, 3, 4
+                      0
+                    else
+                      1
+                    end
+
+    # If mastery_points exactly matches a rating, then set mastery_index to that rating
+    ratings.each_with_index do |rating, i|
+      if rating[:points] == mastery_points
+        mastery_index = i
+        break
+      end
+    end
+
+    mastery_index
+  end
+
+  # checks to see if ratings and mastery level meet certain criteria to be assigned default colors
+  def meets_color_criteria(ratings, mastery_index)
+    length = ratings.length
+    case length
+    # 1, 2, or 3 ratings will always get colors
+    when 1, 2, 3
+      true
+    # If mastery_index is set to 2 then use numbers
+    when 4
+      (mastery_index != 2)
+    # If mastery_index is set to 0, 2, 3, 4, or 5 then use numbers
+    when 5, 6
+      mastery_index == 1
+      # Anything larger than 6 ratings will use numbers
+    else
+      false
+    end
+  end
+
+  # set color defaults for ratings in an outcome
+  # rubocop:disable Lint/DuplicateBranch
+  def find_or_set_default_mastery_colors(ratings, mastery_index)
+    length = ratings.length
+    # apply appropriate defaults for each length if
+    case length
+    when 1
+      ratings[0][:color] ||= "0B874B"
+
+    when 2
+      ratings[0][:color] ||= "0B874B"
+      ratings[1][:color] ||= "555555"
+
+    when 3
+      ratings[0][:color] ||= (mastery_index == 1) ? "0374B5" : "0B874B"
+      ratings[1][:color] ||= (mastery_index == 1) ? "0B874B" : "FAB901"
+      ratings[2][:color] ||= "555555"
+
+    when 4
+      ratings[0][:color] ||= (mastery_index == 1) ? "0374B5" : "0B874B"
+      ratings[1][:color] ||= (mastery_index == 1) ? "0B874B" : "FAB901"
+      ratings[2][:color] ||= (mastery_index == 1) ? "FAB901" : "E0061F"
+      ratings[3][:color] ||= "555555"
+
+    when 5
+      ratings[0][:color] ||= "0374B5"
+      ratings[1][:color] ||= "0B874B"
+      ratings[2][:color] ||= "FAB901"
+      ratings[3][:color] ||= "E0061F"
+      ratings[4][:color] ||= "555555"
+
+    when 6
+      ratings[0][:color] ||= "0374B5"
+      ratings[1][:color] ||= "0B874B"
+      ratings[2][:color] ||= "FAB901"
+      ratings[3][:color] ||= "D97900"
+      ratings[4][:color] ||= "E0061F"
+      ratings[5][:color] ||= "555555"
+    end
+  end
+  # rubocop:enable Lint/DuplicateBranch
+
+  def set_mastery_level(ratings, mastery_index)
+    ratings.each_with_index do |rating, i|
+      rating[:mastery] = (i == mastery_index)
+    end
   end
 end

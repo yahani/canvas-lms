@@ -108,6 +108,10 @@ class SectionsController < ApplicationController
   #   - "permissions": Include whether section grants :manage_calendar permission
   #     to the caller
   #
+  # @argument search_term [Optional, String]
+  #   When included, searches course sections for the term. Returns only matching
+  #   results. Term must be at least 2 characters.
+  #
   # @returns [Section]
   def index
     if authorized_action(@context, @current_user, %i[read read_roster view_all_grades manage_grades])
@@ -116,8 +120,10 @@ class SectionsController < ApplicationController
       end
 
       includes = Array(params[:include])
+      search_term = params[:search_term]
 
       sections = @context.active_course_sections.order(CourseSection.best_unicode_collation_key("name"), :id)
+      sections = CourseSection.search_by_attribute(sections, :name, search_term) if search_term.present?
 
       unless params[:all].present?
         sections = Api.paginate(sections, self, api_v1_course_sections_url)
@@ -201,7 +207,7 @@ class SectionsController < ApplicationController
     # cross-listing should only be allowed within the same root account
     @new_course = @section.root_account.all_courses.not_deleted.where(id: course_id).first if Api::ID_REGEX.match?(course_id)
     @new_course ||= @section.root_account.all_courses.not_deleted.where(sis_source_id: course_id).first if course_id.present?
-    allowed = @new_course && @section.grants_right?(@current_user, session, :update) && @new_course.grants_right?(@current_user, session, :manage)
+    allowed = @new_course && !MasterCourses::MasterTemplate.find_by(course_id: params[:new_course_id]) && @section.grants_right?(@current_user, session, :update) && @new_course.grants_right?(@current_user, session, :manage)
     res = { allowed: !!allowed }
     if allowed
       @account = @new_course.account
@@ -216,9 +222,20 @@ class SectionsController < ApplicationController
   # Move the Section to another course.  The new course may be in a different account (department),
   # but must belong to the same root account (institution).
   #
+  # @argument override_sis_stickiness [boolean]
+  #   Default is true. If false, any fields containing “sticky” changes will not be updated.
+  #   See SIS CSV Format documentation for information on which fields can have SIS stickiness
+  #
   # @returns Section
   def crosslist
     @new_course = api_find(@section.root_account.all_courses.not_deleted, params[:new_course_id])
+
+    if params[:override_sis_stickiness] && !value_to_boolean(params[:override_sis_stickiness])
+      return render json: (api_request? ? section_json(@section, @current_user, session, []) : @section)
+    end
+
+    return render json: { error: "cannot crosslist into blueprint courses" }, status: :forbidden if MasterCourses::MasterTemplate.find_by(course_id: params[:new_course_id])
+
     if authorized_action(@section, @current_user, :update) && authorized_action(@new_course, @current_user, :manage)
       @section.crosslist_to_course(@new_course, updating_user: @current_user)
       respond_to do |format|
@@ -232,13 +249,17 @@ class SectionsController < ApplicationController
   # @API De-cross-list a Section
   # Undo cross-listing of a Section, returning it to its original course.
   #
+  # @argument override_sis_stickiness [boolean]
+  #   Default is true. If false, any fields containing “sticky” changes will not be updated.
+  #   See SIS CSV Format documentation for information on which fields can have SIS stickiness
+  #
   # @returns Section
   def uncrosslist
     @new_course = @section.nonxlist_course
     return render(json: { message: "section is not cross-listed" }, status: :bad_request) if @new_course.nil?
 
     if authorized_action(@section, @current_user, :update) && authorized_action(@new_course, @current_user, :manage)
-      @section.uncrosslist(updating_user: @current_user)
+      @section.uncrosslist(updating_user: @current_user) if !params[:override_sis_stickiness] || value_to_boolean(params[:override_sis_stickiness])
       respond_to do |format|
         flash[:notice] = t("section_decrosslisted", "Section successfully de-cross-listed!")
         format.html { redirect_to named_context_url(@new_course, :context_section_url, @section.id) }
@@ -268,6 +289,10 @@ class SectionsController < ApplicationController
   # @argument course_section[restrict_enrollments_to_section_dates] [Boolean]
   #   Set to true to restrict user enrollments to the start and end dates of the section.
   #
+  # @argument override_sis_stickiness [boolean]
+  #   Default is true. If false, any fields containing “sticky” changes will not be updated.
+  #   See SIS CSV Format documentation for information on which fields can have SIS stickiness
+  #
   # @returns Section
   def update
     params[:course_section] ||= {}
@@ -277,7 +302,7 @@ class SectionsController < ApplicationController
       integration_id = params[:course_section].delete(:integration_id)
       if sis_id || integration_id
         if @section.root_account.grants_right?(@current_user, :manage_sis)
-          @section.sis_source_id = (sis_id == "") ?  nil : sis_id if sis_id
+          @section.sis_source_id = (sis_id == "") ? nil : sis_id if sis_id
           @section.integration_id = (integration_id == "") ? nil : integration_id if integration_id
         elsif api_request?
           return render json: { message: "You must have manage_sis permission to update sis attributes" }, status: :unauthorized
@@ -359,6 +384,14 @@ class SectionsController < ApplicationController
   protected
 
   def course_section_params
-    params[:course_section] ? params[:course_section].permit(:name, :start_at, :end_at, :restrict_enrollments_to_section_dates) : {}
+    if params[:course_section]
+      if params[:override_sis_stickiness] && !value_to_boolean(params[:override_sis_stickiness])
+        params[:course_section].permit(:restrict_enrollments_to_section_dates)
+      else
+        params[:course_section].permit(:name, :start_at, :end_at, :restrict_enrollments_to_section_dates)
+      end
+    else
+      {}
+    end
   end
 end

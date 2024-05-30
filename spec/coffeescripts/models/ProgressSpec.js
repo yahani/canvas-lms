@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Progress from '@canvas/progress/backbone/models/Progress.coffee'
+import Progress from '@canvas/progress/backbone/models/Progress'
 
 let server = null
 let clock = null
@@ -33,13 +33,13 @@ QUnit.module('progressable', {
   teardown() {
     server.restore()
     clock.restore()
-  }
+  },
 })
 const respond = data =>
   server.respond('GET', model.url(), [
     200,
     {'Content-Type': 'application/json'},
-    JSON.stringify(data)
+    JSON.stringify(data),
   ])
 
 test('polls the progress api until the job is finished', () => {
@@ -47,12 +47,13 @@ test('polls the progress api until the job is finished', () => {
   model.on('complete', spy)
   model.poll()
   respond({workflow_state: 'queued'})
+  clock.tick(1000)
   equal(model.get('workflow_state'), 'queued')
-  clock.tick(1000)
   respond({workflow_state: 'running'})
-  equal(model.get('workflow_state'), 'running')
   clock.tick(1000)
+  equal(model.get('workflow_state'), 'running')
   respond({workflow_state: 'completed'})
+  clock.tick(1000)
   equal(model.get('workflow_state'), 'completed')
   ok(spy.calledOnce)
 })

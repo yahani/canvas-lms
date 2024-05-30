@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "atom"
-
 class Wiki < ActiveRecord::Base
   has_many :wiki_pages, dependent: :destroy
   has_one :course
@@ -42,7 +40,7 @@ class Wiki < ActiveRecord::Base
   # some hacked up stuff similar to what's in MasterCourses::Restrictor
   def load_tag_for_master_course_import!(child_subscription_id)
     @child_tag_for_import = MasterCourses::ChildContentTag.where(content: self).first ||
-                            MasterCourses::ChildContentTag.create(content: self, child_subscription_id: child_subscription_id)
+                            MasterCourses::ChildContentTag.create(content: self, child_subscription_id:)
   end
 
   def can_update_front_page_for_master_courses?
@@ -64,13 +62,12 @@ class Wiki < ActiveRecord::Base
   end
 
   def to_atom
-    Atom::Entry.new do |entry|
-      entry.title     = title
-      entry.updated   = updated_at
-      entry.published = created_at
-      entry.links << Atom::Link.new(rel: "alternate",
-                                    href: "/wikis/#{id}")
-    end
+    {
+      title:,
+      updated: updated_at,
+      published: created_at,
+      link: "/wikis/#{id}"
+    }
   end
 
   def update_default_wiki_page_roles(new_roles, old_roles)
@@ -91,11 +88,11 @@ class Wiki < ActiveRecord::Base
     # TODO: i18n
     t :front_page_name, "Front Page"
     # attempt to find the page and store it's url (if it is found)
-    page = wiki_pages.not_deleted.where(url: url).first
+    page = find_page(url)
     set_front_page_url!(url) if has_no_front_page && page
 
     # return an implicitly created page if a page could not be found
-    page ||= wiki_pages.temp_record(title: url.titleize, url: url, context: context)
+    page ||= wiki_pages.temp_record(title: url.titleize, url:, context:)
     page
   end
 
@@ -181,7 +178,7 @@ class Wiki < ActiveRecord::Base
         # otherwise we lose dirty changes
         context.save! if context.changed?
         context.lock!
-        return context.wiki if context.wiki_id
+        next context.wiki if context.wiki_id
 
         # TODO: i18n
         t :default_course_wiki_name, "%{course_name} Wiki", course_name: nil
@@ -223,7 +220,16 @@ class Wiki < ActiveRecord::Base
             else
               wiki_pages.not_deleted
             end
-    scope.where(url: [param.to_s, param.to_url]).first || scope.where(id: param.to_i).first
+    lookup = if Account.site_admin.feature_enabled?(:permanent_page_links)
+               # Just want to look at the WikiPageLookups associated with the pages in this wiki
+               wiki_lookups = WikiPageLookup.by_wiki_id(id)
+               wiki_lookups.where(slug: [param.to_s, param.to_url]).first
+             end
+    if lookup
+      scope.where(id: lookup.wiki_page_id).first
+    else
+      scope.where(url: [param.to_s, param.to_url]).first || scope.where(id: param.to_i).first
+    end
   end
 
   def path

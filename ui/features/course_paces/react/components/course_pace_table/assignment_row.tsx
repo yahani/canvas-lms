@@ -17,44 +17,49 @@
  */
 
 import React from 'react'
+// @ts-expect-error
 import {connect} from 'react-redux'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import {debounce, pick} from 'lodash'
 import moment from 'moment-timezone'
 
-import {ApplyTheme} from '@instructure/ui-themeable'
+import {InstUISettingsProvider} from '@instructure/emotion'
+import {FlaggableNumberInput} from './flaggable_number_input'
 import {Flex} from '@instructure/ui-flex'
 import {
   IconAssignmentLine,
   IconDiscussionLine,
   IconPublishSolid,
   IconQuizLine,
-  IconUnpublishedLine
+  IconUnpublishedLine,
 } from '@instructure/ui-icons'
-import {NumberInput} from '@instructure/ui-number-input'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import {Table} from '@instructure/ui-table'
 import {Text} from '@instructure/ui-text'
 import {View} from '@instructure/ui-view'
 
 import {coursePaceDateFormatter} from '../../shared/api/backend_serializer'
-import {CoursePaceItem, CoursePace, StoreState} from '../../types'
-import {BlackoutDate} from '../../shared/types'
+import type {CoursePaceItem, CoursePace, StoreState} from '../../types'
+import type {BlackoutDate} from '../../shared/types'
 import {
   getCoursePace,
   getExcludeWeekends,
   getCoursePaceItemPosition,
-  isStudentPace
+  isStudentPace,
+  getCoursePaceItemChanges,
 } from '../../reducers/course_paces'
 import {actions} from '../../actions/course_pace_items'
 import * as DateHelpers from '../../utils/date_stuff/date_helpers'
-import {getShowProjections, getSyncing} from '../../reducers/ui'
+import {
+  getShowProjections,
+  getSyncing,
+  getSelectedContextType,
+  getBlueprintLocked,
+} from '../../reducers/ui'
 import {getBlackoutDates} from '../../shared/reducers/blackout_dates'
+import type {Change} from '../../utils/change_tracking'
 
 const I18n = useI18nScope('course_paces_assignment_row')
-
-// Doing this to avoid TS2339 errors-- remove once we're on InstUI 8
-const {Cell, Row} = Table as any
 
 interface PassedProps {
   readonly datesVisible: boolean
@@ -67,12 +72,15 @@ interface PassedProps {
 
 interface StoreProps {
   readonly coursePace: CoursePace
+  readonly blueprintLocked: boolean | undefined
   readonly excludeWeekends: boolean
   readonly coursePaceItemPosition: number
   readonly blackoutDates: BlackoutDate[]
   readonly isSyncing: boolean
   readonly showProjections: boolean
   readonly isStudentPace: boolean
+  readonly context_type: string
+  readonly coursePaceItemChanges: Change<CoursePaceItem>[]
 }
 
 interface DispatchProps {
@@ -89,7 +97,7 @@ type ComponentProps = PassedProps & StoreProps & DispatchProps
 export class AssignmentRow extends React.Component<ComponentProps, LocalState> {
   state: LocalState = {
     duration: String(this.props.coursePaceItem.duration),
-    hovering: false
+    hovering: false,
   }
 
   private debouncedCommitChanges: any
@@ -102,7 +110,7 @@ export class AssignmentRow extends React.Component<ComponentProps, LocalState> {
     super(props)
     this.debouncedCommitChanges = debounce(this.commitChanges, 300, {
       leading: false,
-      trailing: true
+      trailing: true,
     })
     this.dateFormatter = coursePaceDateFormatter()
   }
@@ -118,8 +126,18 @@ export class AssignmentRow extends React.Component<ComponentProps, LocalState> {
         nextProps.coursePace.context_id !== this.props.coursePace.context_id) ||
       nextProps.isSyncing !== this.props.isSyncing ||
       nextProps.showProjections !== this.props.showProjections ||
-      nextProps.datesVisible !== this.props.datesVisible
+      nextProps.datesVisible !== this.props.datesVisible ||
+      nextProps.coursePaceItemChanges !== this.props.coursePaceItemChanges
     )
+  }
+
+  componentDidUpdate(prevProps: Readonly<ComponentProps>) {
+    // reconcile the memoized local state duration with the redux state duration if the
+    // latter changes, for example due to onResetPace
+    if (prevProps.coursePaceItem.duration !== this.props.coursePaceItem.duration) {
+      // we're checking that a redux state change has occurred before calling setState
+      this.setState({duration: String(this.props.coursePaceItem.duration)})
+    }
   }
 
   /* Helpers */
@@ -239,30 +257,36 @@ export class AssignmentRow extends React.Component<ComponentProps, LocalState> {
   }
 
   renderDurationInput = () => {
-    if (this.props.isStudentPace) {
+    if (this.props.isStudentPace && !window.ENV.FEATURES.course_paces_for_students) {
       return (
         <Flex height="2.375rem" alignItems="center" justifyItems="center">
           {this.state.duration}
         </Flex>
       )
     }
+    const disabledByBlueprintLock = this.props.blueprintLocked
+    const itemChange = this.props.coursePaceItemChanges.find(
+      c => c.newValue.module_item_id === this.props.coursePaceItem.module_item_id
+    )
+    const durationHasChanged = itemChange?.oldValue?.duration !== itemChange?.newValue.duration
 
     return (
-      <NumberInput
-        interaction={this.props.isSyncing ? 'disabled' : 'enabled'}
-        renderLabel={
+      <FlaggableNumberInput
+        label={
           <ScreenReaderContent>
-            Duration for module {this.props.coursePaceItem.assignment_title}
+            {I18n.t('Duration for assignment %{name}', {
+              name: this.props.coursePaceItem.assignment_title,
+            })}
           </ScreenReaderContent>
         }
-        data-testid="duration-number-input"
-        display="inline-block"
-        width="5.5rem"
+        interaction={this.props.isSyncing || disabledByBlueprintLock ? 'disabled' : 'enabled'}
         value={this.state.duration}
         onChange={this.onChangeItemDuration}
         onBlur={this.onBlur}
         onDecrement={e => this.onDecrementOrIncrement(e, -1)}
         onIncrement={e => this.onDecrementOrIncrement(e, 1)}
+        showTooltipOn={disabledByBlueprintLock ? ['hover', 'focus'] : []}
+        showFlag={durationHasChanged}
       />
     )
   }
@@ -304,38 +328,46 @@ export class AssignmentRow extends React.Component<ComponentProps, LocalState> {
 
   render() {
     const labelMargin = this.props.isStacked ? '0 0 0 small' : undefined
-    const themeOverrides = {background: this.state.hovering ? '#eef7ff' : '#fff'}
+
+    const componentOverrides = {
+      'Table.Cell': {
+        background: this.state.hovering ? '#eef7ff' : '#fff',
+      },
+    }
 
     return (
-      <ApplyTheme theme={{[(Cell as any).theme]: themeOverrides}}>
-        <Row
+      <InstUISettingsProvider theme={{componentOverrides}}>
+        <Table.Row
           data-testid="pp-module-item-row"
           onMouseEnter={() => this.setState({hovering: true})}
           onMouseLeave={() => this.setState({hovering: false})}
           {...pick(this.props, ['hover', 'isStacked', 'headers'])}
         >
-          <Cell data-testid="pp-title-cell">
+          <Table.Cell data-testid="pp-title-cell">
             <View margin={labelMargin}>{this.renderTitle()}</View>
-          </Cell>
-          <Cell data-testid="pp-duration-cell" textAlign="center">
+          </Table.Cell>
+          <Table.Cell data-testid="pp-duration-cell" textAlign="center">
             <View data-testid="duration-input" margin={labelMargin}>
               {this.renderDurationInput()}
             </View>
-          </Cell>
+          </Table.Cell>
           {(this.props.showProjections || this.props.datesVisible) && (
-            <Cell textAlign="center">
+            <Table.Cell data-testid="pp-due-date-cell" textAlign="center">
               <View data-testid="assignment-due-date" margin={labelMargin}>
                 <span style={{whiteSpace: this.props.isStacked ? 'normal' : 'nowrap'}}>
                   {this.renderDate()}
                 </span>
               </View>
-            </Cell>
+            </Table.Cell>
           )}
-          <Cell textAlign={this.props.isStacked ? 'start' : 'center'}>
+          <Table.Cell
+            data-testid="pp-status-cell"
+            textAlign={this.props.isStacked ? 'start' : 'center'}
+          >
             <View margin={labelMargin}>{this.renderPublishStatusBadge()}</View>
-          </Cell>
-        </Row>
-      </ApplyTheme>
+          </Table.Cell>
+        </Table.Row>
+      </InstUISettingsProvider>
     )
   }
 }
@@ -346,16 +378,19 @@ const mapStateToProps = (state: StoreState, props: PassedProps): StoreProps => {
   return {
     coursePace,
     excludeWeekends: getExcludeWeekends(state),
+    blueprintLocked: getBlueprintLocked(state),
     coursePaceItemPosition: getCoursePaceItemPosition(state, props),
     blackoutDates: getBlackoutDates(state),
     isSyncing: getSyncing(state),
     showProjections: getShowProjections(state),
-    isStudentPace: isStudentPace(state)
+    isStudentPace: isStudentPace(state),
+    context_type: getSelectedContextType(state),
+    coursePaceItemChanges: getCoursePaceItemChanges(state),
   }
 }
 
 const ConnectedAssignmentRow = connect(mapStateToProps, {
-  setPaceItemDuration: actions.setPaceItemDuration
+  setPaceItemDuration: actions.setPaceItemDuration,
 })(AssignmentRow)
 
 // This hack allows AssignmentRow to be rendered inside an InstUI Table.Body

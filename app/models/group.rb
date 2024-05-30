@@ -18,9 +18,9 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "atom"
-
 class Group < ActiveRecord::Base
+  self.ignored_columns += ["category"]
+
   include Context
   include Workflow
   include CustomValidations
@@ -61,6 +61,7 @@ class Group < ActiveRecord::Base
   has_many :messages, as: :context, inverse_of: :context, dependent: :destroy
   belongs_to :wiki
   has_many :wiki_pages, as: :context, inverse_of: :context
+  has_many :wiki_page_lookups, as: :context, inverse_of: :context
   has_many :web_conferences, as: :context, inverse_of: :context, dependent: :destroy
   has_many :collaborations, -> { order(Arel.sql("collaborations.title, collaborations.created_at")) }, as: :context, inverse_of: :context, dependent: :destroy
   has_many :media_objects, as: :context, inverse_of: :context
@@ -76,7 +77,6 @@ class Group < ActiveRecord::Base
            dependent: :destroy
 
   before_validation :ensure_defaults
-  before_save :maintain_category_attribute
   before_save :update_max_membership_from_group_category
 
   after_create :refresh_group_discussion_topics
@@ -136,13 +136,13 @@ class Group < ActiveRecord::Base
   end
 
   def all_real_students
-    return context.all_real_students.where(users: { id: group_memberships.select(:user_id) }) if context.respond_to? "all_real_students"
+    return context.all_real_students.where(users: { id: group_memberships.select(:user_id) }) if context.respond_to? :all_real_students
 
     users
   end
 
   def all_real_student_enrollments
-    return context.all_real_student_enrollments.where(user_id: group_memberships.select(:user_id)) if context.respond_to? "all_real_student_enrollments"
+    return context.all_real_student_enrollments.where(user_id: group_memberships.select(:user_id)) if context.respond_to? :all_real_student_enrollments
 
     group_memberships
   end
@@ -238,7 +238,7 @@ class Group < ActiveRecord::Base
   end
 
   def has_member?(user)
-    return nil unless user.present?
+    return false unless user.present?
 
     if group_memberships.loaded?
       group_memberships.to_a.find { |gm| gm.accepted? && gm.user_id == user.id }
@@ -248,7 +248,7 @@ class Group < ActiveRecord::Base
   end
 
   def has_moderator?(user)
-    return nil unless user.present?
+    return false unless user.present?
     if group_memberships.loaded?
       return group_memberships.to_a.find { |gm| gm.accepted? && gm.user_id == user.id && gm.moderator }
     end
@@ -333,20 +333,19 @@ class Group < ActiveRecord::Base
   end
 
   def to_atom
-    Atom::Entry.new do |entry|
-      entry.title     = name
-      entry.updated   = updated_at
-      entry.published = created_at
-      entry.links << Atom::Link.new(rel: "alternate",
-                                    href: "/groups/#{id}")
-    end
+    {
+      title: name,
+      updated: updated_at,
+      published: created_at,
+      link: "/groups/#{id}"
+    }
   end
 
   # this method is idempotent
   def add_user(user, new_record_state = nil, moderator = nil)
     return nil unless user
 
-    attrs = { user: user, moderator: !!moderator }
+    attrs = { user:, moderator: !!moderator }
     new_record_state ||= { "invitation_only" => "invited",
                            "parent_context_request" => "requested",
                            "parent_context_auto_join" => "accepted" }[join_level]
@@ -382,7 +381,7 @@ class Group < ActiveRecord::Base
 
   def broadcast_data
     if context_type == "Course"
-      { course_id: context_id, root_account_id: root_account_id }
+      { course_id: context_id, root_account_id: }
     else
       {}
     end
@@ -427,7 +426,7 @@ class Group < ActiveRecord::Base
       moderator: false,
       created_at: current_time,
       updated_at: current_time,
-      root_account_id: root_account_id
+      root_account_id:
     }.merge(options)
     GroupMembership.bulk_insert(users.map do |user|
       options.merge({ user_id: user.id, uuid: CanvasSlug.generate_securish_uuid })
@@ -517,15 +516,18 @@ class Group < ActiveRecord::Base
     # group, the student must be able to :participate, and the teacher should be able to add students while the course
     # is unpublished and therefore unreadable to said students) unless their containing context can be read by the user
     # in question
-    given { |user, session| context.is_a?(Account) || context.grants_right?(user, session, :read) }
+    given { |user, session| context.is_a?(Account) || context&.grants_right?(user, session, :read) || false }
 
     use_additional_policy do
       given { |user| user && has_member?(user) }
-      can :read_forum and
-        can :read and
-        can :read_announcements and
-        can :read_roster and
-        can :view_unpublished_items
+      can %i[
+        read_forum
+        read
+        read_announcements
+        read_roster
+        view_unpublished_items
+        read_files
+      ]
 
       given do |user, session|
         user && has_member?(user) &&
@@ -565,16 +567,38 @@ class Group < ActiveRecord::Base
         !context.root_account.feature_enabled?(:granular_permissions_manage_groups) &&
           context.grants_right?(user, session, :manage_groups)
       end
-      can :create and can :create_collaborations and can :delete and can :manage and
-        can :manage_admin_users and can :allow_course_admin_actions and can :manage_calendar and
-        can :manage_content and can :manage_course_content_add and
-        can :manage_course_content_edit and can :manage_course_content_delete and
-        can :manage_files_add and can :manage_files_edit and can :manage_files_delete and
-        can :manage_students and can :manage_wiki_create and can :manage_wiki_delete and
-        can :manage_wiki_update and can :moderate_forum and can :post_to_forum and
-        can :create_forum and can :read and can :read_forum and can :read_announcements and
-        can :read_roster and can :send_messages and can :send_messages_all and can :update and
-        can :view_unpublished_items
+      can %i[
+        create
+        create_collaborations
+        delete
+        manage
+        manage_admin_users
+        allow_course_admin_actions
+        manage_calendar
+        manage_content
+        manage_course_content_add
+        manage_course_content_edit
+        manage_course_content_delete
+        manage_files_add
+        manage_files_edit
+        manage_files_delete
+        manage_students
+        manage_wiki_create
+        manage_wiki_delete
+        manage_wiki_update
+        moderate_forum
+        post_to_forum
+        create_forum
+        read
+        read_forum
+        read_announcements
+        read_roster
+        send_messages
+        send_messages_all
+        update
+        view_unpublished_items
+        read_files
+      ]
 
       ##################### End legacy permission block ##########################
 
@@ -582,28 +606,49 @@ class Group < ActiveRecord::Base
         context.root_account.feature_enabled?(:granular_permissions_manage_groups) &&
           context.grants_right?(user, session, :manage_groups_add)
       end
-      can :read and can :create
+      can %i[read read_files create]
 
       # permissions to update a group and manage actions within the context of a group
       given do |user, session|
         context.root_account.feature_enabled?(:granular_permissions_manage_groups) &&
           context.grants_right?(user, session, :manage_groups_manage)
       end
-      can :read and can :update and can :create_collaborations and can :manage and
-        can :manage_admin_users and can :allow_course_admin_actions and can :manage_calendar and
-        can :manage_content and can :manage_course_content_add and
-        can :manage_course_content_edit and can :manage_course_content_delete and
-        can :manage_files_add and can :manage_files_edit and can :manage_files_delete and
-        can :manage_students and can :manage_wiki_create and can :manage_wiki_delete and
-        can :manage_wiki_update and can :moderate_forum and can :post_to_forum and
-        can :create_forum and can :read_forum and can :read_announcements and can :read_roster and
-        can :send_messages and can :send_messages_all and can :view_unpublished_items
+      can %i[
+        read
+        update
+        create_collaborations
+        manage
+        manage_admin_users
+        allow_course_admin_actions
+        manage_calendar
+        manage_content
+        manage_course_content_add
+        manage_course_content_edit
+        manage_course_content_delete
+        manage_files_add
+        manage_files_edit
+        manage_files_delete
+        manage_students
+        manage_wiki_create
+        manage_wiki_delete
+        manage_wiki_update
+        moderate_forum
+        post_to_forum
+        create_forum
+        read_forum
+        read_announcements
+        read_roster
+        send_messages
+        send_messages_all
+        view_unpublished_items
+        read_files
+      ]
 
       given do |user, session|
         context.root_account.feature_enabled?(:granular_permissions_manage_groups) &&
           context.grants_right?(user, session, :manage_groups_delete)
       end
-      can :read and can :delete
+      can %i[read read_files delete]
 
       given { |user, session| context&.grants_all_rights?(user, session, :read_as_admin, :post_to_forum) }
       can :post_to_forum
@@ -612,7 +657,7 @@ class Group < ActiveRecord::Base
       can :create_forum
 
       given { |user, session| context&.grants_right?(user, session, :view_group_pages) }
-      can :read and can :read_forum and can :read_announcements and can :read_roster
+      can %i[read read_forum read_announcements read_roster read_files]
 
       # Join is participate + the group being in a state that allows joining directly (free_association)
       given { |user| user && can_participate?(user) && free_association?(user) }
@@ -726,7 +771,7 @@ class Group < ActiveRecord::Base
   TAB_HOME, TAB_PAGES, TAB_PEOPLE, TAB_DISCUSSIONS, TAB_FILES,
     TAB_CONFERENCES, TAB_ANNOUNCEMENTS, TAB_PROFILE, TAB_SETTINGS, TAB_COLLABORATIONS,
     TAB_COLLABORATIONS_NEW = *1..20
-  def tabs_available(user = nil, **)
+  def tabs_available(user = nil, *)
     available_tabs = [
       { id: TAB_HOME,          label: t("#group.tabs.home", "Home"), css_class: "home", href: :group_path },
       { id: TAB_ANNOUNCEMENTS, label: t("#tabs.announcements", "Announcements"), css_class: "announcements", href: :group_announcements_path },
@@ -751,18 +796,6 @@ class Group < ActiveRecord::Base
 
   def allow_media_comments?
     true
-  end
-
-  def group_category_name
-    read_attribute(:category)
-  end
-
-  def maintain_category_attribute
-    # keep this field up to date even though it's not used (group_category_name
-    # exists solely for the migration that introduces the GroupCategory model).
-    # this way group_category_name is correct if someone mistakenly uses it
-    # (modulo category renaming in the GroupCategory model).
-    write_attribute(:category, self.group_category&.name)
   end
 
   def as_json(options = nil)

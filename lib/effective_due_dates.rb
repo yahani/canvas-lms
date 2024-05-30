@@ -95,7 +95,7 @@ class EffectiveDueDates
   # This iterates through a single assignment's EffectiveDueDate hash to see
   # if any students in them are in a closed grading period.
   def in_closed_grading_period?(assignment_id, student_or_student_id = nil)
-    assignment_id = assignment_id.id if assignment_id.is_a?(Assignment)
+    assignment_id = assignment_id.id if assignment_id.is_a?(AbstractAssignment)
     return false if assignment_id.nil?
 
     # false if there aren't even grading periods set up
@@ -132,12 +132,6 @@ class EffectiveDueDates
 
   private
 
-  def prioritize_individual_overrides?
-    return @prioritize_individual_overrides if defined?(@prioritize_individual_overrides)
-
-    @prioritize_individual_overrides = Account.site_admin.feature_enabled?(:prioritize_individual_overrides)
-  end
-
   def any_student_in_closed_grading_period?(assignment_due_dates)
     return false unless assignment_due_dates
 
@@ -151,6 +145,148 @@ class EffectiveDueDates
   def filter_students_sql(table)
     if @filtered_students.present?
       "AND #{table}.user_id IN (#{filtered_students.join(",")})"
+    else
+      ""
+    end
+  end
+
+  def active_in_section_sql
+    if Account.site_admin.feature_enabled?(:deprioritize_section_overrides_for_nonactive_enrollments)
+      "e.workflow_state = 'active'"
+    else
+      "TRUE"
+    end
+  end
+
+  def context_module_overrides
+    if Account.site_admin.feature_enabled?(:differentiated_modules)
+      "/* fetch all module overrides for this assignment */
+      tags AS (
+        SELECT
+          t.id,
+          t.context_module_id,
+          t.content_id,
+          qt.context_module_id as quiz_context_module_id,
+          q.assignment_id as quiz_assignment_id
+        FROM
+          models a
+        LEFT JOIN #{ContentTag.quoted_table_name} t ON t.content_id = a.id AND t.content_type = 'Assignment'
+        LEFT JOIN #{Quizzes::Quiz.quoted_table_name} q ON q.assignment_id = a.id
+        LEFT JOIN #{ContentTag.quoted_table_name} qt ON qt.content_id = q.id AND qt.content_type = 'Quizzes::Quiz'
+        WHERE
+          COALESCE(t.tag_type, qt.tag_type) = 'context_module'
+          AND COALESCE(t.workflow_state, qt.workflow_state) <> 'deleted'
+      ),
+
+      modules AS (
+        SELECT
+          m.id
+        FROM
+          tags t
+        INNER JOIN #{ContextModule.quoted_table_name} m ON m.id = COALESCE(t.context_module_id, t.quiz_context_module_id)
+        WHERE
+          m.workflow_state <>'deleted'
+      ),
+
+      module_overrides AS (
+        SELECT
+          o.id,
+          a.id,
+          o.set_type,
+          o.set_id,
+          FALSE,
+          a.due_at,
+          o.unassign_item
+        FROM
+          models a,
+          tags t,
+          modules m
+            INNER JOIN #{AssignmentOverride.quoted_table_name} o on o.context_module_id = m.id
+        WHERE
+           o.workflow_state = 'active' AND m.id = COALESCE(t.context_module_id, t.quiz_context_module_id) AND
+           a.id = COALESCE(t.content_id, t.quiz_assignment_id)
+      ),"
+    else
+      ""
+    end
+  end
+
+  def visible_to_everyone
+    if Account.site_admin.feature_enabled?(:differentiated_modules)
+      "a.only_visible_to_overrides IS NOT TRUE AND (NOT EXISTS (SELECT * FROM modules) OR EXISTS (
+        SELECT
+          *
+        FROM
+          tags t,
+          modules m
+        LEFT JOIN #{AssignmentOverride.quoted_table_name} o on o.context_module_id = m.id AND o.workflow_state = 'active'
+        WHERE
+          o.context_module_id IS NULL
+          AND a.id = COALESCE(t.content_id, t.quiz_assignment_id)
+          AND m.id = COALESCE(t.context_module_id, t.quiz_context_module_id)
+        )
+      )"
+    else
+      "a.only_visible_to_overrides IS NOT TRUE"
+    end
+  end
+
+  def union_all_overrides
+    if Account.site_admin.feature_enabled?(:differentiated_modules)
+      "overrides AS (
+        SELECT * FROM assignment_overrides
+        UNION ALL
+        SELECT * FROM module_overrides
+      ),"
+    else
+      "overrides AS (
+        SELECT * FROM assignment_overrides
+      ),"
+    end
+  end
+
+  def course_overrides
+    if Account.site_admin.feature_enabled?(:differentiated_modules)
+      "/* fetch all students affected by course overrides */
+      override_course_students AS (
+        SELECT
+          e.user_id AS student_id,
+          TRUE as active_in_section,
+          o.assignment_id,
+          o.id AS override_id,
+          date_trunc('minute', o.due_at) AS trunc_due_at,
+          o.due_at,
+          o.set_type AS override_type,
+          o.due_at_overridden,
+          o.unassign_item,
+          2 AS priority
+        FROM
+          overrides o
+        INNER JOIN #{Enrollment.quoted_table_name} e ON e.course_id = o.set_id
+        WHERE
+          o.set_type = 'Course' AND
+          e.workflow_state NOT IN ('rejected', 'deleted') AND
+          e.type IN ('StudentEnrollment', 'StudentViewEnrollment')
+          #{filter_students_sql("e")}
+          ),"
+    else
+      ""
+    end
+  end
+
+  def union_course_overrides
+    if Account.site_admin.feature_enabled?(:differentiated_modules)
+      "SELECT * FROM override_course_students
+        UNION ALL"
+    else
+      ""
+    end
+  end
+
+  def unassign_item
+    if Account.site_admin.feature_enabled?(:differentiated_modules)
+      "WHERE
+        overrides.unassign_item = FALSE"
     else
       ""
     end
@@ -184,10 +320,10 @@ class EffectiveDueDates
       else
         # otherwise, map through the array as necessary to get id's
         assignment_collection.flatten!
-        assignment_collection.map! { |assignment| assignment.try(:id) } if assignment_collection.first.is_a?(Assignment)
+        assignment_collection.map! { |assignment| assignment.try(:id) } if assignment_collection.first.is_a?(AbstractAssignment)
         assignment_collection.compact!
-        if assignment_collection.any? { |id| Assignment.global_id?(id) }
-          assignment_collection = Assignment.where(id: assignment_collection).pluck(:id)
+        if assignment_collection.any? { |id| AbstractAssignment.global_id?(id) }
+          assignment_collection = AbstractAssignment.where(id: assignment_collection).pluck(:id)
         end
         assignment_collection = assignment_collection.join(",")
       end
@@ -199,7 +335,7 @@ class EffectiveDueDates
           /* fetch the assignment itself */
           WITH models AS (
             SELECT *
-            FROM #{Assignment.quoted_table_name}
+            FROM #{AbstractAssignment.quoted_table_name}
             WHERE
               id IN (#{assignment_collection}) AND
               workflow_state <> 'deleted' AND
@@ -207,14 +343,15 @@ class EffectiveDueDates
           ),
 
           /* fetch all overrides for this assignment */
-          overrides AS (
+          assignment_overrides AS (
             SELECT
               o.id,
               o.assignment_id,
               o.set_type,
               o.set_id,
               o.due_at_overridden,
-              CASE WHEN o.due_at_overridden IS TRUE THEN o.due_at ELSE a.due_at END AS due_at
+              CASE WHEN o.due_at_overridden IS TRUE THEN o.due_at ELSE a.due_at END AS due_at,
+              o.unassign_item
             FROM
               models a
             INNER JOIN #{AssignmentOverride.quoted_table_name} o ON o.assignment_id = a.id
@@ -222,17 +359,23 @@ class EffectiveDueDates
               o.workflow_state = 'active'
           ),
 
+          #{context_module_overrides}
+
+          #{union_all_overrides}
+
           /* fetch all students affected by adhoc overrides */
           override_adhoc_students AS (
             SELECT
               os.user_id AS student_id,
+              TRUE as active_in_section,
               o.assignment_id,
               o.id AS override_id,
               date_trunc('minute', o.due_at) AS trunc_due_at,
               o.due_at,
               o.set_type AS override_type,
               o.due_at_overridden,
-              #{prioritize_individual_overrides? ? 1 : 2} AS priority
+              o.unassign_item,
+              1 AS priority
             FROM
               overrides o
             INNER JOIN #{AssignmentOverrideStudent.quoted_table_name} os ON os.assignment_override_id = o.id AND
@@ -246,12 +389,14 @@ class EffectiveDueDates
           override_groups_students AS (
             SELECT
               gm.user_id AS student_id,
+              TRUE as active_in_section,
               o.assignment_id,
               o.id AS override_id,
               date_trunc('minute', o.due_at) AS trunc_due_at,
               o.due_at,
               o.set_type AS override_type,
               o.due_at_overridden,
+              o.unassign_item,
               2 AS priority
             FROM
               overrides o
@@ -268,12 +413,14 @@ class EffectiveDueDates
           override_sections_students AS (
             SELECT
               e.user_id AS student_id,
+              #{active_in_section_sql} AS active_in_section,
               o.assignment_id,
               o.id AS override_id,
               date_trunc('minute', o.due_at) AS trunc_due_at,
               o.due_at,
               o.set_type AS override_type,
               o.due_at_overridden,
+              o.unassign_item,
               2 AS priority
             FROM
               overrides o
@@ -287,17 +434,21 @@ class EffectiveDueDates
               #{filter_students_sql("e")}
           ),
 
+          #{course_overrides}
+
           /* fetch all students who have an 'Everyone Else'
             due date applied to them from the assignment */
           override_everyonelse_students AS (
             SELECT
               e.user_id AS student_id,
+              TRUE as active_in_section,
               a.id as assignment_id,
               NULL::integer AS override_id,
               date_trunc('minute', a.due_at) AS trunc_due_at,
               a.due_at,
               'Everyone Else'::varchar AS override_type,
               FALSE AS due_at_overridden,
+              FALSE AS unassign_item,
               3 AS priority
             FROM
               models a
@@ -305,7 +456,7 @@ class EffectiveDueDates
             WHERE
               e.workflow_state NOT IN ('rejected', 'deleted') AND
               e.type IN ('StudentEnrollment', 'StudentViewEnrollment') AND
-              a.only_visible_to_overrides IS NOT TRUE
+              #{visible_to_everyone}
               #{filter_students_sql("e")}
           ),
 
@@ -317,6 +468,7 @@ class EffectiveDueDates
             UNION ALL
             SELECT * FROM override_sections_students
             UNION ALL
+            #{union_course_overrides}
             SELECT * FROM override_everyonelse_students
           ),
 
@@ -325,7 +477,7 @@ class EffectiveDueDates
             SELECT DISTINCT ON (student_id, assignment_id)
               *
             FROM override_all_students
-            ORDER BY student_id ASC, assignment_id ASC, due_at_overridden DESC, priority ASC, due_at DESC NULLS FIRST
+            ORDER BY student_id ASC, assignment_id ASC, active_in_section DESC, due_at_overridden DESC, priority ASC, due_at DESC NULLS FIRST
           ),
 
           /* now find all grading periods, including both
@@ -402,6 +554,7 @@ class EffectiveDueDates
           /* match the effective due date with its grading period */
           LEFT OUTER JOIN applied_grading_periods periods ON
               periods.start_date < overrides.trunc_due_at AND overrides.trunc_due_at <= periods.end_date
+          #{unassign_item}
         SQL
       end
     end

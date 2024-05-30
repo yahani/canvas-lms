@@ -20,9 +20,9 @@ import $ from 'jquery'
 import 'jqueryui/draggable'
 import '@canvas/jquery/jquery.instructure_misc_plugins' /* confirmDelete */
 
-$(document).ready(function() {
+$(document).ready(function () {
   $('#floating_reminders').draggable()
-  $('.show_reminders_link').click(function(event) {
+  $('.show_reminders_link').click(function (event) {
     event.preventDefault()
     $(this).blur()
     const $floater = $('#floating_reminders')
@@ -36,7 +36,7 @@ $(document).ready(function() {
       height: 20,
       left: offset.left,
       top: offset.top - floaterTop,
-      opacity: 0.0
+      opacity: 0.0,
     })
     $floater.css('visibility', 'hidden').css('left', '')
     $helper.animate(
@@ -45,27 +45,24 @@ $(document).ready(function() {
         left: $floater.css('left'),
         width: $floater.width(),
         height: $floater.height(),
-        opacity: 1.0
+        opacity: 1.0,
       },
       'slow',
-      function() {
+      function () {
         $(this).remove()
         $floater.css('visibility', 'visible')
         $floater.find('a:not(.hide_reminders_link):visible:first').focus()
         $('#reminders_icon').hide()
       }
     )
-    const url = $floater.find('.update_session_url').attr('href')
   })
-  $('.hide_reminders_link').click(function(event) {
+  $('.hide_reminders_link').click(function (event) {
     event.preventDefault()
     const $floater = $(this).parents('#floating_reminders')
     const $helper = $floater.clone()
     $floater.after($helper).css('left', -2000)
     $helper.children().css('visibility', 'hidden')
-    const offset = $('#reminders_icon')
-      .show()
-      .offset()
+    const offset = $('#reminders_icon').show().offset()
     const floaterTop = $helper.offset().top
     $helper.animate(
       {
@@ -73,32 +70,31 @@ $(document).ready(function() {
         height: 20,
         left: offset.left,
         top: offset.top - floaterTop,
-        opacity: 0.0
+        opacity: 0.0,
       },
       'slow',
-      function() {
+      function () {
         $(this).remove()
       }
     )
-    const url = $floater.find('.update_session_url').attr('href')
   })
-  $('.drop_held_context_link').click(function(event) {
+  $('.drop_held_context_link').click(function (event) {
     event.preventDefault()
     const $reminder = $(this).parents('.reminder')
     $reminder.confirmDelete({
       url: $(this).attr('href'),
       message: 'Are you sure you want to drop this ' + $reminder.find('.item_type').text() + '?',
-      success(data) {
-        $(this).fadeOut('fast', function() {
+      success(_data) {
+        $(this).fadeOut('fast', function () {
           $(this).remove()
           if ($('#floating_reminders .reminder').length === 0) {
-            $('#floating_reminders').fadeOut('fast', function() {
+            $('#floating_reminders').fadeOut('fast', function () {
               $(this).remove()
               $('#reminders_icon').remove()
             })
           }
         })
-      }
+      },
     })
   })
 })

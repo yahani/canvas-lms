@@ -26,6 +26,7 @@ module ApplicationHelper
   include Canvas::LockExplanation
   include DatadogRumHelper
   include NewQuizzesFeaturesHelper
+  include HeapHelper
 
   def context_user_name_display(user)
     name = user.try(:short_name) || user.try(:name)
@@ -40,7 +41,8 @@ module ApplicationHelper
     Rails
       .cache
       .fetch(["context_user_name", context, user_id].cache_key, { expires_in: 15.minutes }) do
-        context_user_name_display(User.find(user_id))
+        user = User.find_by(id: user_id)
+        user && context_user_name_display(user)
       end
   end
 
@@ -87,7 +89,7 @@ module ApplicationHelper
   end
 
   def count_if_any(count = nil)
-    count && count > 0 ? "(#{count})" : ""
+    (count && count > 0) ? "(#{count})" : ""
   end
 
   # Used to generate context_specific urls, as in:
@@ -96,13 +98,13 @@ module ApplicationHelper
   def context_url(context, *opts)
     @context_url_lookup ||= {}
     context_name = url_helper_context_from_object(context)
-    lookup = [context ? context.id : nil, context_name, *opts]
+    lookup = [context&.id, context_name, *opts]
     return @context_url_lookup[lookup] if @context_url_lookup[lookup]
 
     res = nil
     if opts.length > 1 || (opts[0].is_a? String) || (opts[0].is_a? Symbol)
       name = opts.shift.to_s
-      name = name.sub(/context/, context_name)
+      name = name.sub("context", context_name)
       opts.unshift context.id
       opts.push({}) unless opts[-1].is_a?(Hash)
       begin
@@ -136,7 +138,7 @@ module ApplicationHelper
   end
 
   def url_helper_context_from_object(context)
-    (context ? context.class.base_class : context.class).name.underscore
+    (context ? context.class.url_context_class : context.class).name.underscore
   end
 
   def message_user_path(user, context = nil)
@@ -175,20 +177,13 @@ module ApplicationHelper
     object.grants_any_right?(user, session, *actions)
   end
 
-  def load_scripts_async_in_order(script_urls)
-    # this is how you execute scripts in order, in a way that doesn’t block rendering,
-    # and without having to use 'defer' to wait until the whole DOM is loaded.
-    # see: https://www.html5rocks.com/en/tutorials/speed/script-loading/
-    javascript_tag "
-      ;#{script_urls.map { |url| javascript_path(url) }}.forEach(function(src) {
-        var s = document.createElement('script')
-        s.src = src
-        s.async = false
-        document.head.appendChild(s)
-      });"
+  def load_scripts_async_in_order(script_urls, cors_anonymous: false)
+    script_urls.map { |url| javascript_path(url) }.map do |url|
+      javascript_include_tag(url, defer: true, crossorigin: cors_anonymous ? "anonymous" : nil)
+    end.join("\n  ").rstrip.html_safe
   end
 
-  # puts the "main" webpack entry and the moment & timezone files in the <head> of the document
+  # puts webpack entries and the moment & timezone files in the <head> of the document
   def include_head_js
     paths = []
     paths << active_brand_config_url("js")
@@ -199,27 +194,24 @@ module ApplicationHelper
     paths << "/timezone/#{js_env[:CONTEXT_TIMEZONE]}.js" if js_env[:CONTEXT_TIMEZONE]
     paths << "/timezone/#{js_env[:BIGEASY_LOCALE]}.js" if js_env[:BIGEASY_LOCALE]
 
-    @script_chunks = []
-
     # if there is a moment locale besides english set, put a script tag for it
     # so it is loaded and ready before we run any of our app code
     if js_env[:MOMENT_LOCALE] && js_env[:MOMENT_LOCALE] != "en"
-      @script_chunks += ::Canvas::Cdn.registry.scripts_for(
+      paths += ::Canvas::Cdn.registry.scripts_for(
         "moment/locale/#{js_env[:MOMENT_LOCALE]}"
       )
     end
-    @script_chunks += ::Canvas::Cdn.registry.scripts_for("main")
+
+    @script_chunks = ::Canvas::Cdn.registry.entries
     @script_chunks.uniq!
 
     chunk_urls = @script_chunks
 
     capture do
-      # if we don't also put preload tags for these, the browser will prioritize and
-      # download the bundle chunks we preload below before these scripts
-      paths.each { |url| concat preload_link_tag(javascript_path(url)) }
-      chunk_urls.each { |url| concat preload_link_tag(url) }
-
-      concat load_scripts_async_in_order(paths + chunk_urls)
+      concat load_scripts_async_in_order(paths)
+      concat "\n  "
+      concat load_scripts_async_in_order(chunk_urls, cors_anonymous: true)
+      concat "\n"
       concat include_js_bundles
     end
   end
@@ -234,6 +226,7 @@ module ApplicationHelper
     @rendered_js_bundles += new_js_bundles
 
     @rendered_preload_chunks ||= []
+    @script_chunks ||= []
     preload_chunks =
       new_js_bundles.map do |(bundle, plugin, *)|
         ::Canvas::Cdn.registry.scripts_for("#{plugin ? "#{plugin}-" : ""}#{bundle}")
@@ -276,7 +269,8 @@ module ApplicationHelper
       bundles = new_css_bundles.map { |(bundle, plugin)| css_url_for(bundle, plugin) }
       bundles << css_url_for("disable_transitions") if disable_css_transitions?
       bundles << { media: "all" }
-      stylesheet_link_tag(*bundles)
+      tags = bundles.map { |bundle| stylesheet_link_tag(bundle) }
+      tags.reject(&:empty?).join("\n  ").html_safe
     end
   end
 
@@ -339,62 +333,6 @@ module ApplicationHelper
     stylesheet_link_tag css_url_for(:common), media: "all"
   end
 
-  def quiz_lti_tab?(tab)
-    if tab[:id].is_a?(String) && tab[:id].start_with?("context_external_tool_") && tab[:args] &&
-       tab[:args][1]
-      return ContextExternalTool.find_by(id: tab[:args][1])&.quiz_lti?
-    end
-
-    false
-  end
-
-  def sortable_tabs
-    tabs =
-      @context.tabs_available(
-        @current_user,
-        for_reordering: true,
-        root_account: @domain_root_account,
-        course_subject_tabs: @context.try(:elementary_subject_course?)
-      )
-    tabs.select do |tab|
-      if begin
-        tab[:id] == @context.class::TAB_COLLABORATIONS
-      rescue
-        false
-      end
-        Collaboration.any_collaborations_configured?(@context) &&
-          !@context.feature_enabled?(:new_collaborations)
-      elsif begin
-        quiz_lti_tab?(tab)
-      rescue
-        false
-      end
-        new_quizzes_navigation_placements_enabled?(@context)
-      elsif begin
-        tab[:id] == @context.class::TAB_COLLABORATIONS_NEW
-      rescue
-        false
-      end
-        @context.feature_enabled?(:new_collaborations)
-      elsif begin
-        tab[:id] == @context.class::TAB_CONFERENCES
-      rescue
-        false
-      end
-        feature_enabled?(:web_conferences)
-      else
-        tab[:id] !=
-          (
-            begin
-              @context.class::TAB_SETTINGS
-            rescue
-              nil
-            end
-          )
-      end
-    end
-  end
-
   def embedded_chat_quicklaunch_params
     {
       user_id: @current_user.id,
@@ -431,7 +369,7 @@ module ApplicationHelper
       .cache
       .fetch(["active_external_tool_for", @context, tool_id].cache_key, expires_in: 1.hour) do
         # don't use for groups. they don't have account_chain_ids
-        tool = @context.context_external_tools.active.where(tool_id: tool_id).first
+        tool = @context.context_external_tools.active.where(tool_id:).first
 
         unless tool
           # account_chain_ids is in the order we need to search for tools
@@ -442,7 +380,7 @@ module ApplicationHelper
           tools =
             ContextExternalTool
             .active
-            .where(context_type: "Account", context_id: account_chain_ids, tool_id: tool_id)
+            .where(context_type: "Account", context_id: account_chain_ids, tool_id:)
             .to_a
           account_chain_ids.each do |account_id|
             tool = tools.find { |t| t.context_id == account_id }
@@ -470,6 +408,7 @@ module ApplicationHelper
     link_to(
       icon,
       "#",
+      role: "button",
       class: "license_help_link no-hover",
       title: I18n.t("Help with content licensing")
     )
@@ -481,6 +420,7 @@ module ApplicationHelper
     link_to(
       icon,
       "#",
+      role: "button",
       class: "visibility_help_link no-hover",
       title: I18n.t("Help with course visibilities")
     )
@@ -530,7 +470,7 @@ module ApplicationHelper
 
   def safe_cache_key(*args)
     key = args.cache_key
-    key = Digest::MD5.hexdigest(key) if key.length > 200
+    key = Digest::SHA256.hexdigest(key) if key.length > 200
     key
   end
 
@@ -539,7 +479,7 @@ module ApplicationHelper
 
     # TODO: get these kaltura settings out of the global INST object completely.
     # Only load them when trying to record a video
-    if @context.try_rescue(:allow_media_comments?) || controller_name == "conversations"
+    if @context.try_rescue(:allow_media_comments?) || ["conversations", "file_previews"].include?(controller_name)
       kalturaConfig = CanvasKaltura::ClientV3.config
       if kalturaConfig
         global_inst_object[:allowMediaComments] = true
@@ -549,6 +489,7 @@ module ApplicationHelper
             "domain",
             "resource_domain",
             "rtmp_domain",
+            "protocol",
             "partner_id",
             "subpartner_id",
             "player_ui_conf",
@@ -562,7 +503,6 @@ module ApplicationHelper
           )
       end
     end
-
     {
       equellaEnabled: !!equella_enabled?,
       disableGooglePreviews: !service_enabled?(:google_docs_previews),
@@ -577,7 +517,17 @@ module ApplicationHelper
     global_inst_object
   end
 
+  def remote_env(hash = nil)
+    @remote_env ||= {}
+    @remote_env.merge!(hash) if hash
+
+    @remote_env
+  end
+
   def editor_buttons
+    # called outside of Lti::ContextToolFinder to make sure that
+    # @context is non-nil and also a type of Context that would have
+    # tools in it (ie Course/Account/Group/User)
     contexts = ContextExternalTool.contexts_to_search(@context)
     return [] if contexts.empty?
 
@@ -585,20 +535,19 @@ module ApplicationHelper
       Rails
       .cache
       .fetch((["editor_buttons_for2"] + contexts.uniq).cache_key) do
-        tools =
-          ContextExternalTool
-          .shard(@context.shard)
-          .active
-          .having_setting("editor_button")
-          .where(context: contexts)
-          .order(:id)
+        tools = Lti::ContextToolFinder.new(@context, type: :editor_button).all_tools_scope_union.to_unsorted_array.sort_by(&:id)
 
         # force the YAML to be deserialized before caching, since it's expensive
         tools.each(&:settings)
       end
+
+    # Default tool icons need to have a hostname (cannot just be a path)
+    # because they are used externally via ServicesApiController endpoints
+    default_icon_base_url = "#{request.protocol}#{request.host_with_port}"
+
     ContextExternalTool
       .shard(@context.shard)
-      .editor_button_json(cached_tools.dup, @context, @current_user, session)
+      .editor_button_json(cached_tools.dup, @context, @current_user, session, default_icon_base_url)
   end
 
   def nbsp
@@ -650,7 +599,7 @@ module ApplicationHelper
         )
       end
     end
-    content_tag("iframe", "", { src: src }.merge(html_options))
+    content_tag("iframe", "", { src: }.merge(html_options))
   end
 
   # returns a time object at 00:00:00 tomorrow
@@ -682,7 +631,7 @@ module ApplicationHelper
         folders_as_options(child_folders, opts.merge({ depth: opts[:depth] + 1 }))
       end
     end
-    opts[:depth] == 0 ? raw(opts[:options_so_far].join("\n")) : nil
+    (opts[:depth] == 0) ? raw(opts[:options_so_far].join("\n")) : nil
   end
 
   # this little helper just allows you to do <% ot(...) %> and have it output the same as <%= t(...) %>. The upside though, is you can interpolate whole blocks of HTML, like:
@@ -699,7 +648,7 @@ module ApplicationHelper
     parts.join(t("#title_separator", ": "))
   end
 
-  def cache(name = {}, options = {}, &block)
+  def cache(name = {}, options = {}, &)
     unless options && options[:no_locale]
       name = name.cache_key if name.respond_to?(:cache_key)
       name += "/#{I18n.locale}" if name.is_a?(String)
@@ -720,7 +669,7 @@ module ApplicationHelper
 
   def support_url
     (@domain_root_account && @domain_root_account.settings[:support_url]) ||
-      (Account.default && Account.default.settings[:support_url])
+      Setting.get("default_support_url", nil)
   end
 
   def help_link_url
@@ -890,7 +839,7 @@ module ApplicationHelper
     stylesheet_link_tag(*(includes + [{ media: "all" }])) if includes.present?
   end
 
-  # this should be the same as friendlyDatetime in handlebars_helpers.coffee
+  # this should be the same as friendlyDatetime in handlebars_helpers.js
   def friendly_datetime(datetime, opts = {}, attributes = {})
     attributes[:pubdate] = true if opts[:pubdate]
     context = opts[:context]
@@ -958,7 +907,7 @@ module ApplicationHelper
   def multiple_due_date_tooltip(assignment, user, opts = {})
     user ||= @current_user
     presenter = OverrideTooltipPresenter.new(assignment, user, opts)
-    render "shared/vdd_tooltip", presenter: presenter
+    render "shared/vdd_tooltip", presenter:
   end
 
   require "digest"
@@ -969,7 +918,7 @@ module ApplicationHelper
   # if you can avoid loading the list at all, that's even better, of course.
   def collection_cache_key(collection)
     keys = collection.map(&:cache_key)
-    Digest::MD5.hexdigest(keys.join("/"))
+    Digest::SHA256.hexdigest(keys.join("/"))
   end
 
   def add_uri_scheme_name(uri)
@@ -1002,7 +951,7 @@ module ApplicationHelper
     if ApplicationController.test_cluster_name
       url =
         @domain_root_account.settings[
-          "#{ApplicationController.test_cluster_name}_dashboard_url".to_sym
+          :"#{ApplicationController.test_cluster_name}_dashboard_url"
         ]
     end
     url ||= @domain_root_account.settings[:dashboard_url]
@@ -1025,7 +974,7 @@ module ApplicationHelper
     js_env(csp: csp_iframe_attribute) if csp_enforced?
 
     output = []
-    output = @meta_tags.map { |meta_attrs| tag.meta(meta_attrs) } if @meta_tags.present?
+    output = @meta_tags.map { |meta_attrs| tag.meta(**meta_attrs) } if @meta_tags.present?
 
     # set this if you want android users of your site to be prompted to install an android app
     # you can see an example of the one that instructure uses in InfoController#web_app_manifest
@@ -1123,7 +1072,10 @@ module ApplicationHelper
       csp_context
       .csp_whitelisted_domains(request, include_files: true, include_tools: true)
       .join(" ")
-    headers[csp_header] = "frame-src 'self' #{domains}#{csp_report_uri}; "
+
+    # Due to New Analytics generating CSV reports as blob on the client-side and then trying to download them,
+    # as well as an interesting difference in browser interpretations of CSP, we have to allow blobs as a frame-src
+    headers[csp_header] = "frame-src 'self' blob: #{domains}#{csp_report_uri}; "
   end
 
   def add_csp_for_file
@@ -1151,7 +1103,7 @@ module ApplicationHelper
       object_domains = ["'self'"] + script_domains
       script_domains = ["'self'", "'unsafe-eval'", "'unsafe-inline'"] + script_domains
     end
-    "frame-src #{frame_domains.join(" ")}; script-src #{script_domains.join(" ")}; object-src #{object_domains.join(" ")}; "
+    "frame-src #{frame_domains.join(" ")} blob:; script-src #{script_domains.join(" ")}; object-src #{object_domains.join(" ")}; "
   end
 
   # Returns true if the current_path starts with the given value
@@ -1176,7 +1128,7 @@ module ApplicationHelper
       "#",
       id: "signup_parent",
       class: "signup_link",
-      data: data,
+      data:,
       title: I18n.t("Parent Signup")
     )
   end
@@ -1193,13 +1145,13 @@ module ApplicationHelper
       @context.is_a?(Course) && tutorials_enabled? &&
       @context.grants_right?(@current_user, session, :manage)
 
-    js_env NEW_USER_TUTORIALS: { is_enabled: is_enabled }
+    js_env NEW_USER_TUTORIALS: { is_enabled: }
   end
 
   def planner_enabled?
     !!@current_user&.has_student_enrollment? ||
       (@current_user&.roles(@domain_root_account)&.include?("observer") && k5_user?) ||
-      (!!@current_user&.roles(@domain_root_account)&.include?("observer") && Account.site_admin.feature_enabled?(:observer_picker)) # TODO: ensure observee is a student?
+      !!@current_user&.roles(@domain_root_account)&.include?("observer") # TODO: ensure observee is a student?
   end
 
   def will_paginate(collection, options = {})
@@ -1216,8 +1168,8 @@ module ApplicationHelper
       developer_key: @access_token&.developer_key,
       root_account: @domain_root_account,
       oauth_host: request.host_with_port,
-      return_url: return_url,
-      fallback_url: fallback_url
+      return_url:,
+      fallback_url:
     )
   end
 
@@ -1276,7 +1228,7 @@ module ApplicationHelper
     else
       # map wiki page url to id
       if asset_type == "WikiPage"
-        page = @context.wiki_pages.not_deleted.where(url: asset_id).first
+        page = @context.wiki.find_page(asset_id)
         asset_id = page.id if page
       else
         asset_id = asset_id.to_i
@@ -1330,26 +1282,28 @@ module ApplicationHelper
     end
 
     needed_tags = ContentTag.where(id: needed_tag_ids.uniq).preload(:context_module).index_by(&:id)
+    opts = { can_view_published: @context.grants_right?(@current_user, session, :read_as_admin) }
+
     tag_indices.each do |ix|
       hash = {
-        current: module_item_json(needed_tags[tag_ids[ix]], @current_user, session),
+        current: module_item_json(needed_tags[tag_ids[ix]], @current_user, session, nil, nil, [], opts),
         prev: nil,
         next: nil
       }
-      hash[:prev] = module_item_json(needed_tags[tag_ids[ix - 1]], @current_user, session) if ix > 0
+      hash[:prev] = module_item_json(needed_tags[tag_ids[ix - 1]], @current_user, session, nil, nil, [], opts) if ix > 0
       if ix < tag_ids.size - 1
-        hash[:next] = module_item_json(needed_tags[tag_ids[ix + 1]], @current_user, session)
+        hash[:next] = module_item_json(needed_tags[tag_ids[ix + 1]], @current_user, session, nil, nil, [], opts)
       end
       if cyoe_enabled?(@context)
         is_student = @context.grants_right?(@current_user, session, :participate_as_student)
-        opts = { context: @context, user: @current_user, session: session, is_student: is_student }
+        opts = { context: @context, user: @current_user, session:, is_student: }
         hash[:mastery_path] =
           conditional_release_rule_for_module_item(needed_tags[tag_ids[ix]], opts)
       end
       result[:items] << hash
     end
     modules = needed_tags.values.map(&:context_module).uniq
-    result[:modules] = modules.map { |mod| module_json(mod, @current_user, session) }
+    result[:modules] = modules.map { |mod| module_json(mod, @current_user, session, nil, [], opts) }
     result
   end
 
@@ -1387,7 +1341,7 @@ module ApplicationHelper
 
   def render_file_location(location)
     headers["X-Canvas-File-Location"] = "True"
-    render json: { location: location, token: file_authenticator.instfs_bearer_token }
+    render json: { location:, token: file_authenticator.instfs_bearer_token }
   end
 
   def authenticated_download_url(attachment)
@@ -1460,5 +1414,13 @@ module ApplicationHelper
 
   def append_default_due_time_js_env(context, hash)
     hash[:DEFAULT_DUE_TIME] = context.default_due_time if context&.default_due_time.present? && context.root_account.feature_enabled?(:default_due_time)
+  end
+
+  def load_hotjar?
+    # Only load hotjar UX survey tool for the Learner Passport prototype
+    # Skip it in production and development environments, include it for Beta & CD
+    controller.controller_name == "learner_passport" &&
+      Canvas.environment !~ /(production|development)/ &&
+      @domain_root_account&.feature_enabled?(:learner_passport)
   end
 end

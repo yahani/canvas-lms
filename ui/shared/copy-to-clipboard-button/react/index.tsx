@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2022 - present Instructure, Inc.
  *
@@ -37,7 +38,7 @@ export default function CopyToClipboardButton({
   screenReaderLabel,
   tooltipText,
   buttonProps,
-  tooltip
+  tooltip,
 }: CopyToClipboardButtonProps) {
   const [feedback, setFeedback] = useState<boolean | null>(null)
 
@@ -87,5 +88,5 @@ export default function CopyToClipboardButton({
 
 CopyToClipboardButton.defaultProps = {
   screenReaderLabel: I18n.t('Copy'),
-  tooltipText: I18n.t('Copy')
+  tooltipText: I18n.t('Copy'),
 }

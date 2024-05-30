@@ -16,7 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import _ from 'underscore'
+import $ from 'jquery'
+import {map, isEqual, isArray} from 'lodash'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import FilesCollection from '@canvas/files/backbone/collections/FilesCollection'
 import customPropTypes from '@canvas/files/react/modules/customPropTypes'
@@ -31,7 +32,7 @@ export default {
 
   propTypes: {
     contextType: customPropTypes.contextType,
-    contextId: customPropTypes.contextId
+    contextId: customPropTypes.contextId,
   },
 
   name: 'search',
@@ -39,11 +40,11 @@ export default {
   getInitialState() {
     return {
       collection: new FilesCollection(),
-      errors: null
+      errors: null,
     }
   },
 
-  onFetchError(jqXHR, textStatus, errorThrown) {
+  onFetchError(jqXHR, textStatus, _errorThrown) {
     let responseText
     const message = I18n.t('An unknown server error occurred.  Please try again.')
 
@@ -53,18 +54,18 @@ export default {
       responseText = {errors: [{message}]}
     }
 
-    const errors = _.isArray(responseText.errors)
+    const errors = isArray(responseText.errors)
       ? this.translateErrors(responseText.errors)
       : responseText.errors && responseText.errors.base
       ? [{message: `${responseText.errors.base}, ${responseText.status}`}]
       : [{message}]
 
     this.setState({errors})
-    $.screenReaderFlashMessageExclusive(_.map(errors, error => error.message).join(' '))
+    $.screenReaderFlashMessageExclusive(map(errors, error => error.message).join(' '))
   },
 
   translateErrors(errors) {
-    return _.map(errors, error => {
+    return map(errors, error => {
       if (error.message === '3 or more characters is required') {
         return {message: I18n.t('Please enter a search term with three or more characters')}
       } else {
@@ -86,16 +87,17 @@ export default {
     // Refactor this when given time. Maybe even use setState instead of forceUpdate
     if (
       !this.state.collection.loadedAll ||
-      !_.isEqual(this.props.query.search_term, props.query && props.query.search_term)
+      !isEqual(this.props.query.search_term, props.query && props.query.search_term)
     ) {
       const forceUpdate = () => {
+        // eslint-disable-next-line react/no-is-mounted
         if (this.isMounted()) {
           this.setState({errors: null})
           this.forceUpdate()
         }
         $.screenReaderFlashMessageExclusive(
           I18n.t('results_count', 'Showing %{num_results} search results', {
-            num_results: this.state.collection.length
+            num_results: this.state.collection.length,
           })
         )
       }
@@ -109,7 +111,7 @@ export default {
     }
   },
 
-  componentWillReceiveProps(newProps) {
+  UNSAFE_componentWillReceiveProps(newProps) {
     return this.updateResults(newProps)
   },
 
@@ -122,8 +124,8 @@ export default {
         currentFolder: null,
         rootTillCurrentFolder: null,
         showingSearchResults: true,
-        searchResultCollection: this.state.collection
+        searchResultCollection: this.state.collection,
       })
     })
-  }
+  },
 }

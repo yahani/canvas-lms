@@ -25,11 +25,13 @@ export function createSvgElement(tag, attributes = {}) {
 }
 
 export function splitTextIntoLines(text, maxChars) {
-  if (!text.trim() || maxChars <= 0) {
+  // Removes the beginning or trailing spaces, newlines or tabs.
+  const trimmedText = text.replace(/^\s+|\s+$/g, '')
+  if (!text || trimmedText.length === 0 || maxChars <= 0) {
     return []
   }
   const lines = []
-  const words = text.split(' ')
+  const words = trimmedText.match(/\S+/g)
   while (words.length) {
     let newLineNeeded = false
     let line = ''
@@ -58,14 +60,6 @@ export function splitTextIntoLines(text, maxChars) {
   }
   return lines
 }
-
-export const convertFileToBase64 = blob =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.readAsDataURL(blob)
-    reader.onload = () => resolve(reader.result)
-    reader.onerror = error => reject(error)
-  })
 
 export const decode = input =>
   new DOMParser().parseFromString(input, 'text/html').documentElement.textContent

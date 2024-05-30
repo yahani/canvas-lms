@@ -25,7 +25,7 @@ require_relative "pages/rce_next_page"
 # while there's a mix of instui 6 and 7 in canvas we're getting
 # "Warning: [themeable] A theme registry has already been initialized." js errors
 # Ignore js errors so specs can pass
-describe "RCE Next toolbar features", ignore_js_errors: true do
+describe "RCE Next toolbar features", :ignore_js_errors do
   include_context "in-process server selenium tests"
   include WikiAndTinyCommon
   include RCSSidebarPage
@@ -43,58 +43,32 @@ describe "RCE Next toolbar features", ignore_js_errors: true do
     end
 
     def assert_insert_buttons_enabled(is_enabled)
-      expect(
-        links_toolbar_button.enabled? && links_toolbar_button.attribute("aria-disabled") == "false"
-      ).to be is_enabled
-      expect(
-        images_toolbar_button.enabled? &&
-          images_toolbar_button.attribute("aria-disabled") == "false"
-      ).to be is_enabled
-      expect(
-        media_toolbar_button.enabled? && media_toolbar_button.attribute("aria-disabled") == "false"
-      ).to be is_enabled
-      expect(
-        document_toolbar_button.enabled? &&
-          document_toolbar_button.attribute("aria-disabled") == "false"
-      ).to be is_enabled
-
-      click_link_menubar_button
-      expect(external_link_menubar_button.enabled? && external_link_menubar_button.attribute("aria-disabled") == "false").to be is_enabled
-      click_insert_menu_button
-
-      click_image_menubar_button
-      expect(image_menubar_button.enabled? && image_menubar_button.attribute("aria-disabled") == "false").to be is_enabled
-      click_insert_menu_button
-
-      click_media_menubar_button
-      expect(media_menubar_button.enabled? && media_menubar_button.attribute("aria-disabled") == "false").to be is_enabled
-      click_insert_menu_button
-
-      click_document_menubar_button
-      expect(document_menubar_button.enabled? && document_menubar_button.attribute("aria-disabled") == "false").to be is_enabled
-      click_insert_menu_button
+      expect(links_toolbar_menubutton.enabled?).to be is_enabled
+      expect(images_toolbar_menubutton.enabled?).to be is_enabled
+      expect(media_toolbar_menubutton.enabled?).to be is_enabled
+      expect(document_toolbar_menubutton.enabled?).to be is_enabled
     end
 
     context "links" do
       it "menu should include external and course links" do
         rce_wysiwyg_state_setup(@course)
 
-        click_links_toolbar_menu_button
+        links_toolbar_menubutton.click
         # it's the links_toolbar_button that owns the popup menu, not the chevron
         # use it to find the menu, then assert we have the right number of menu items
-        expect(ff("##{links_toolbar_button.attribute("aria-owns")} [role='menuitemcheckbox']").length).to eq(2)
-        expect(external_links).to be_displayed
-        expect(course_links).to be_displayed
+        expect(links_toolbar_menuitems.length).to eq(2)
+        expect(external_link_toolbar_menuitem).to be_displayed
+        expect(course_links_toolbar_menuitem).to be_displayed
       end
 
       it "menu should include Remove Link when a link is selected" do
         rce_wysiwyg_state_setup(@course, 'this is <div id="one_link"><a>a link</a></div> <a>another link</a>.', html: true)
         select_in_tiny(f("textarea.body"), "#one_link")
-        click_links_toolbar_menu_button
-        expect(ff("##{links_toolbar_button.attribute("aria-owns")} [role='menuitemcheckbox']").length).to eq(3)
-        expect(remove_link).to be_displayed
 
-        click_remove_link
+        expect(links_toolbar_menuitems.length).to eq(3)
+        expect(remove_link_toolbar_menuitem).to be_displayed
+
+        click_remove_link_toolbar_menuitem
         driver.switch_to.frame("wiki_page_body_ifr")
         link_count = count_elems_by_tagname("a")
         expect(link_count).to eq(1)
@@ -103,11 +77,12 @@ describe "RCE Next toolbar features", ignore_js_errors: true do
       it "menu should include Remove Links when multiple links are selected" do
         rce_wysiwyg_state_setup(@course, "this is <a>a link</a> and <a>another link</a>.", html: true)
         select_all_wiki
-        click_links_toolbar_menu_button
-        expect(ff("##{links_toolbar_button.attribute("aria-owns")} [role='menuitemcheckbox']").length).to eq(3)
-        expect(remove_links).to be_displayed
 
-        click_remove_links
+        links_toolbar_menubutton.click
+        expect(links_toolbar_menuitems.length).to eq(3)
+        expect(remove_links_toolbar_menuitem).to be_displayed
+
+        click_remove_links_toolbar_menuitem
         driver.switch_to.frame("wiki_page_body_ifr")
         link_count = count_elems_by_tagname("a")
         expect(link_count).to eq(0)
@@ -130,8 +105,7 @@ describe "RCE Next toolbar features", ignore_js_errors: true do
       it "adds bullet lists" do
         rce_wysiwyg_state_setup(@course)
 
-        click_list_toggle_button
-        click_bullet_list_button
+        click_bullet_list_toolbar_menuitem
 
         in_frame rce_page_body_ifr_id do
           expect(ff("#tinymce ul li").length).to eq 3
@@ -142,8 +116,7 @@ describe "RCE Next toolbar features", ignore_js_errors: true do
         text = "<ul><li>1</li><li>2</li><li>3</li></ul>"
         rce_wysiwyg_state_setup(@course, text, html: true)
 
-        click_list_toggle_button
-        click_bullet_list_button
+        click_bullet_list_toolbar_menuitem
 
         in_frame rce_page_body_ifr_id do
           expect(wiki_body).not_to contain_css("li")
@@ -153,8 +126,7 @@ describe "RCE Next toolbar features", ignore_js_errors: true do
       it "adds numbered lists", priority: "1" do
         rce_wysiwyg_state_setup(@course)
 
-        click_list_toggle_button
-        click_numbered_list_button
+        click_numbered_list_toolbar_menuitem
 
         in_frame rce_page_body_ifr_id do
           expect(ff("#tinymce ol li").length).to eq 3
@@ -165,8 +137,7 @@ describe "RCE Next toolbar features", ignore_js_errors: true do
         text = "<ol><li>1</li><li>2</li><li>3</li></ol>"
         rce_wysiwyg_state_setup(@course, text, html: true)
 
-        click_list_toggle_button
-        click_numbered_list_button
+        click_numbered_list_toolbar_menuitem
 
         in_frame rce_page_body_ifr_id do
           expect(f("#tinymce")).not_to contain_css("li")
@@ -184,17 +155,15 @@ describe "RCE Next toolbar features", ignore_js_errors: true do
         @image.save!
 
         visit_front_page_edit(@course)
-        click_images_toolbar_menu_button
-        click_course_images
+        click_course_images_toolbar_menuitem
         click_image_link(title)
 
         select_all_wiki
-        click_indent_button
+        increase_indent_toolbar_menuitem.click
 
         rce_validate_wiki_style_attrib("padding-left", "40px", "p")
 
-        click_indent_toggle_button
-        click_outdent_button
+        decrease_indent_toolbar_menuitem.click
 
         rce_validate_wiki_style_attrib_empty("p")
       end
@@ -202,11 +171,10 @@ describe "RCE Next toolbar features", ignore_js_errors: true do
       it "indents and remove indentation for text" do
         rce_wysiwyg_state_setup(@course, "test")
 
-        click_indent_button
+        increase_indent_toolbar_menuitem.click
         rce_validate_wiki_style_attrib("padding-left", "40px", "p")
 
-        click_indent_toggle_button
-        click_outdent_button
+        decrease_indent_toolbar_menuitem.click
 
         rce_validate_wiki_style_attrib_empty("p")
       end
@@ -216,7 +184,7 @@ describe "RCE Next toolbar features", ignore_js_errors: true do
       it "makes text superscript in rce" do
         rce_wysiwyg_state_setup(@course)
 
-        click_superscript_button
+        superscript_toolbar_menuitem.click
 
         in_frame rce_page_body_ifr_id do
           expect(f("#tinymce sup")).to be_displayed
@@ -228,7 +196,7 @@ describe "RCE Next toolbar features", ignore_js_errors: true do
 
         rce_wysiwyg_state_setup(@course, text, html: true)
 
-        shift_click_button(superscript_button_selector)
+        superscript_toolbar_menuitem.click
 
         in_frame rce_page_body_ifr_id do
           expect(f("#tinymce")).not_to contain_css("sup")
@@ -238,8 +206,7 @@ describe "RCE Next toolbar features", ignore_js_errors: true do
       it "makes text subscript in rce" do
         rce_wysiwyg_state_setup(@course)
 
-        click_super_toggle_button
-        click_subscript_menu_button
+        subscript_toolbar_menuitem.click
 
         in_frame rce_page_body_ifr_id do
           expect(f("#tinymce sub")).to be_displayed
@@ -250,7 +217,8 @@ describe "RCE Next toolbar features", ignore_js_errors: true do
         text = "<p><sub>This is my text</sub></p>"
         rce_wysiwyg_state_setup(@course, text, html: true)
         select_in_tiny(f("#wiki_page_body"), "sub")
-        shift_click_button(subscript_button_selector)
+
+        subscript_toolbar_menuitem.click
 
         in_frame rce_page_body_ifr_id do
           expect(f("#tinymce")).not_to contain_css("sub")
@@ -262,8 +230,8 @@ describe "RCE Next toolbar features", ignore_js_errors: true do
       it "aligns text to the left" do
         rce_wysiwyg_state_setup(@course, "text to align")
 
-        click_align_toggle_button
-        click_align_left_button
+        left_align_toolbar_menuitem.click
+
         rce_validate_wiki_style_attrib("text-align", "left", "p")
       end
 
@@ -271,16 +239,16 @@ describe "RCE Next toolbar features", ignore_js_errors: true do
         text = '<p style="text-align: left;">1</p>'
         rce_wysiwyg_state_setup(@course, text, html: true)
 
-        click_align_toggle_button
-        click_align_left_button
+        left_align_toolbar_menuitem.click
+
         rce_validate_wiki_style_attrib_empty("p")
       end
 
       it "aligns text to the center" do
         rce_wysiwyg_state_setup(@course, "text to align")
 
-        click_align_toggle_button
-        click_align_center_button
+        center_align_toolbar_menuitem.click
+
         rce_validate_wiki_style_attrib("text-align", "center", "p")
       end
 
@@ -288,16 +256,16 @@ describe "RCE Next toolbar features", ignore_js_errors: true do
         text = '<p style="text-align: center;">1</p>'
         rce_wysiwyg_state_setup(@course, text, html: true)
 
-        click_align_toggle_button
-        click_align_center_button
+        center_align_toolbar_menuitem.click
+
         rce_validate_wiki_style_attrib_empty("p")
       end
 
       it "aligns text to the right" do
         rce_wysiwyg_state_setup(@course, "text to align")
 
-        click_align_toggle_button
-        click_align_right_button
+        right_align_toolbar_menuitem.click
+
         rce_validate_wiki_style_attrib("text-align", "right", "p")
       end
 
@@ -305,8 +273,8 @@ describe "RCE Next toolbar features", ignore_js_errors: true do
         text = '<p style="text-align: right;">1</p>'
         rce_wysiwyg_state_setup(@course, text, html: true)
 
-        click_align_toggle_button
-        click_align_right_button
+        right_align_toolbar_menuitem.click
+
         rce_validate_wiki_style_attrib_empty("p")
       end
     end
@@ -392,75 +360,84 @@ describe "RCE Next toolbar features", ignore_js_errors: true do
 
     context "math equations" do
       it "renders math equation from math modal" do
-        skip "LS-1839 (1/27/2021)"
         page_title = "math_rendering"
         create_wiki_page_with_text(page_title)
         visit_existing_wiki_edit(@course, page_title)
+        equation_editor_button.click
+        advanced_editor_toggle.click
+        advanced_editor_textarea.send_keys '\sqrt{81}'
+        equation_editor_done_button.click
 
-        select_math_equation_from_toolbar
-        select_squareroot_symbol
-        add_squareroot_value
-        click_insert_equation
-
-        # Verify image in rce
         in_frame rce_page_body_ifr_id do
           expect(wiki_body).to contain_css("img.equation_image")
+          expect(math_image.attribute("title")).to eq '\sqrt{81}'
+          click_repeat(math_image)
         end
-        # Select to re-edit math equation
-        in_frame rce_page_body_ifr_id do
-          select_math_image
-        end
-        click_edit_equation
-        expect(math_dialog_exists?).to eq true
+        edit_math_image_button.click
+        expect(advanced_editor_textarea.text).to eq '\sqrt{81}'
 
-        # Save and look for the image on the saved page
-        click_insert_equation
-        click_page_save_button
+        equation_editor_done_button.click
+        save_button.click
         wait_for_ajaximations
-        expect(math_rendering_exists?).to eq true
+        expect(math_rendering_exists?).to be true
+      end
+
+      it "renders inline LaTeX in the equation editor" do
+        page_title = "math_rendering"
+        body = "<p>\\(\\LaTeX\\)</p>"
+        @course.wiki_pages.create!(title: page_title, body:)
+        visit_existing_wiki_edit(@course, page_title)
+        in_frame rce_page_body_ifr_id do
+          double_click("#tinymce p")
+        end
+        equation_editor_button.click
+        editor_text = advanced_editor_textarea.text
+        expect(editor_text).to eq("\\LaTeX")
+      end
+
+      it "redirects focus in the equation editor" do
+        def active_element
+          driver.execute_script("return document.activeElement") # rubocop:disable Specs/NoExecuteScript
+        end
+
+        page_title = "math_focus"
+        create_wiki_page_with_text(page_title)
+        visit_existing_wiki_edit(@course, page_title)
+        equation_editor_button.click
+        advanced_editor_toggle.click
+        first_math_symbol_button.click
+        expect(active_element).to eq(advanced_editor_textarea)
+
+        advanced_editor_toggle.click
+        first_math_symbol_button.click
+        expect(active_element).to eq(basic_editor_textarea)
       end
 
       it 'renders math equations for inline math with "\("' do
+        Account.site_admin.disable_feature!(:explicit_latex_typesetting)
         title = "Assignment-Title with Math \\(x^2\\)"
         @assignment = @course.assignments.create!(name: title)
         get "/courses/#{@course.id}/assignments/#{@assignment.id}/"
         wait_for_ajaximations
-        expect(mathjax_element_exists_in_title?).to eq true
+        expect(mathjax_element_exists_in_title?).to be true
       end
 
       it "renders math equations for inline math with $$" do
+        Account.site_admin.disable_feature!(:explicit_latex_typesetting)
         title = "Assignment-Title with Math $$x^2$$"
         @assignment = @course.assignments.create!(name: title)
         get "/courses/#{@course.id}/assignments/#{@assignment.id}/"
         wait_for_ajaximations
-        expect(mathjax_element_exists_in_title?).to eq true
-      end
-    end
-
-    describe "floating toolbar" do
-      before do
-        create_wiki_page_with_text("hello")
-        visit_existing_wiki_edit(@course, "hello")
-        driver.manage.window.resize_to(1_000, 800)
+        expect(mathjax_element_exists_in_title?).to be true
       end
 
-      it "closes on executing any command" do
-        more_toolbar_button.click
-        expect(overflow_toolbar).to be_displayed
-        click_list_toggle_button
-        click_bullet_list_button
-        expect(f("body")).not_to contain_css(overflow_toolbar_selector)
-      end
-
-      it "closes on losing focus" do
-        in_frame rce_page_body_ifr_id do
-          f("#tinymce").send_keys("") # focus
-        end
-        more_toolbar_button.click
-        wait_for_animations
-        expect(overflow_toolbar).to be_displayed
-        f("#title").click
-        expect(f("body")).not_to contain_css(overflow_toolbar_selector)
+      it "does not render math equations for inline math with $$" do
+        Account.site_admin.enable_feature!(:explicit_latex_typesetting)
+        title = "Assignment-Title with Math $$x^2$$"
+        @assignment = @course.assignments.create!(name: title)
+        get "/courses/#{@course.id}/assignments/#{@assignment.id}/"
+        wait_for_ajaximations
+        expect(mathjax_element_exists_in_title?).to be false
       end
     end
 
@@ -471,30 +448,27 @@ describe "RCE Next toolbar features", ignore_js_errors: true do
       end
 
       it "list button in overflow menu should indicate active when appropriate" do
-        click_list_button
-        more_toolbar_button.click
-        expect(list_button).to contain_css(".tox-tbtn--enabled")
-        click_list_button
-        more_toolbar_button.click
-        expect(list_button).not_to contain_css(".tox-tbtn--enabled")
+        click_lists_toolbar_quickaction
+        expect(lists_toolbar_splitbutton).to contain_css(".tox-tbtn--enabled")
+
+        click_lists_toolbar_quickaction
+        expect(lists_toolbar_splitbutton).not_to contain_css(".tox-tbtn--enabled")
       end
 
       it "alignment button in overflow menu should indicate active when appropriate" do
-        click_align_button
-        more_toolbar_button.click
-        expect(align_button).to contain_css(".tox-tbtn--enabled")
-        click_align_button
-        more_toolbar_button.click
-        expect(align_button).not_to contain_css(".tox-tbtn--enabled")
+        left_align_toolbar_menuitem.click
+        expect(alignment_toolbar_menubutton).to have_class("tox-tbtn--enabled")
+
+        left_align_toolbar_menuitem.click
+        expect(alignment_toolbar_menubutton).not_to have_class("tox-tbtn--enabled")
       end
 
       it "superscript button in overflow menu should indicate active when appropriate" do
-        click_superscript_button
-        more_toolbar_button.click
-        expect(superscript_button).to contain_css(".tox-tbtn--enabled")
-        click_superscript_button
-        more_toolbar_button.click
-        expect(superscript_button).not_to contain_css(".tox-tbtn--enabled")
+        superscript_toolbar_menuitem.click
+        expect(superscript_toolbar_menubutton).to have_class("tox-tbtn--enabled")
+
+        superscript_toolbar_menuitem.click
+        expect(superscript_toolbar_menubutton).not_to have_class("tox-tbtn--enabled")
       end
     end
 
@@ -505,7 +479,7 @@ describe "RCE Next toolbar features", ignore_js_errors: true do
           <p><span id="ifr">cannot link <iframe>me</iframe></span></p>
           <p><span id="vid">nor <video>me</video></span></p>
         HTML
-        @course.wiki_pages.create!(title: "title", body: body)
+        @course.wiki_pages.create!(title: "title", body:)
         visit_existing_wiki_edit(@course, "title")
 
         driver.execute_script(<<~JS)
@@ -546,6 +520,34 @@ describe "RCE Next toolbar features", ignore_js_errors: true do
 
         driver.execute_script('window.selectNodeById("ok")')
         assert_insert_buttons_enabled(true)
+      end
+    end
+
+    context "find and replace plugin" do
+      before(:once) do
+        Account.site_admin.enable_feature!(:rce_find_replace)
+      end
+
+      it "finds and replaces text" do
+        rce_wysiwyg_state_setup(@course, "find me")
+
+        find_and_replace_menu_item.click
+        find_and_replace_tray_find_input.send_keys("find me")
+        find_and_replace_tray_replace_input.send_keys("replace me")
+        find_and_replace_tray_replace_button.click
+
+        in_frame rce_page_body_ifr_id do
+          expect(wiki_body).to contain_css("p", text: "replace me")
+        end
+      end
+
+      it "opens with shortcut" do
+        rce_wysiwyg_state_setup(@course)
+        driver.switch_to.frame("wiki_page_body_ifr")
+        wiki_body.click
+        wiki_body.send_keys [:control, "f"]
+        driver.switch_to.default_content
+        expect(find_and_replace_tray_header).to be_displayed
       end
     end
   end

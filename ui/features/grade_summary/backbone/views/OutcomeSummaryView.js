@@ -36,7 +36,7 @@ export default class OutcomeSummaryView extends CollectionView {
   show(path) {
     this.fetch()
     if (path) {
-      const outcome_id = parseInt(path)
+      const outcome_id = parseInt(path, 10)
       const outcome = this.collection.outcomeCache.get(outcome_id)
       if (outcome) return this.outcomeDetailView.show(outcome)
     } else {
@@ -55,6 +55,7 @@ export default class OutcomeSummaryView extends CollectionView {
     this.toggles.find('.icon-expand').click(() => {
       this.$('li.group').addClass('expanded')
       this.$('div.group-description').attr('aria-expanded', 'true')
+      // disabled attribute on <a> is invalid per the HTML spec
       $expandToggle.attr('disabled', 'disabled')
       $expandToggle.attr('aria-disabled', 'true')
       $collapseToggle.removeAttr('disabled')
@@ -64,6 +65,7 @@ export default class OutcomeSummaryView extends CollectionView {
     return this.toggles.find('.icon-collapse').click(() => {
       this.$('li.group').removeClass('expanded')
       this.$('div.group-description').attr('aria-expanded', 'false')
+      // disabled attribute on <a> is invalid per the HTML spec
       $collapseToggle.attr('disabled', 'disabled')
       $collapseToggle.attr('aria-disabled', 'true')
       $expandToggle.removeAttr('disabled')

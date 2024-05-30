@@ -31,8 +31,10 @@
 //
 // [1]: https://webpack.js.org/guides/public-path/#on-the-fly
 // [2]: https://webpack.js.org/plugins/define-plugin/
+// Also see https://www.rspack.dev/api/modules.html#__webpack_public_path__-webpack-specific
 if (typeof __webpack_public_path__ !== 'undefined') {
-  __webpack_public_path__ = ((window.ENV && window.ENV.ASSET_HOST) || '') + CANVAS_WEBPACK_PUBLIC_PATH
+  __webpack_public_path__ =
+    ((window.ENV && window.ENV.ASSET_HOST) || '') + CANVAS_WEBPACK_PUBLIC_PATH
 }
 
 /* eslint-enable no-undef */

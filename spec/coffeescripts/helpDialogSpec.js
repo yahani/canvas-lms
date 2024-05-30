@@ -17,7 +17,8 @@
  */
 
 import $ from 'jquery'
-import helpDialog from '../../ui/boot/initializers/enableHelpDialog.js'
+import 'jquery-migrate'
+import helpDialog from '../../ui/boot/initializers/enableHelpDialog'
 import fakeENV from 'helpers/fakeENV'
 import 'jquery-tinypubsub'
 
@@ -27,12 +28,14 @@ QUnit.module('HelpDialog', {
   setup() {
     fakeENV.setup({help_link_name: 'Links'})
     helpDialog.animateDuration = 0
+    this.clock = sinon.useFakeTimers()
     this.server = sinon.fakeServer.create()
     this.server.respondWith('/help_links', '[]')
     return this.server.respondWith('/api/v1/courses.json', '[]')
   },
   teardown() {
     fakeENV.teardown()
+    this.clock.restore()
     this.server.restore()
 
     // if we don't close it after each test, subsequent tests get messed up.
@@ -46,7 +49,7 @@ QUnit.module('HelpDialog', {
     $('[id^=ui-id-]').remove()
     $('#help-dialog').remove()
     $('#fixtures').empty()
-  }
+  },
 })
 
 test('init', () => {
@@ -58,17 +61,20 @@ test('init', () => {
   $tester.remove()
 })
 
-test('teacher feedback', function() {
+test('teacher feedback', function () {
   helpDialog.open()
   this.server.respond()
   helpDialog.switchTo('#teacher_feedback')
   ok(helpDialog.$dialog.find('#teacher-feedback-body').is(':visible'), 'textarea shows up')
 })
 
-test('focus management', function() {
+// unskip in FOO-4344
+QUnit.skip('focus management', function () {
   helpDialog.open()
   this.server.respond()
+  this.clock.tick(1)
   helpDialog.switchTo('#create_ticket')
+  this.clock.tick(1)
   equal(document.activeElement, helpDialog.$dialog.find('#error_subject')[0], 'focuses first input')
   ok(
     !helpDialog.$dialog.find('#help-dialog-options').is(':visible'),

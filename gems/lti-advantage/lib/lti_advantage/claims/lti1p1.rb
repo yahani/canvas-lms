@@ -27,8 +27,6 @@ module LtiAdvantage::Claims
   class Lti1p1
     include ActiveModel::Model
 
-    attr_accessor :user_id, :resource_link_id
-
-    validates_presence_of :user_id
+    attr_accessor :user_id, :resource_link_id, :oauth_consumer_key, :oauth_consumer_key_sign
   end
 end

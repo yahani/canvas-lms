@@ -71,21 +71,24 @@ class Attachments::S3Storage
   end
 
   def cred_params(datetime)
-    access_key = bucket.client.config.access_key_id
+    access_key = bucket.client.config.credentials.credentials.access_key_id
+    session_token = bucket.client.config.credentials.credentials.session_token
     day_string = datetime[0, 8]
     region = bucket.client.config.region
     credential = "#{access_key}/#{day_string}/#{region}/s3/aws4_request"
-    {
+    params = {
       "x-amz-credential" => credential,
       "x-amz-algorithm" => "AWS4-HMAC-SHA256",
-      "x-amz-date" => datetime
+      "x-amz-date" => datetime,
     }
+    params["x-amz-security-token"] = session_token if session_token
+    params
   end
 
   def shared_secret(datetime)
     config = bucket.client.config
     sha256 = OpenSSL::Digest.new("SHA256")
-    date_key = OpenSSL::HMAC.digest(sha256, "AWS4#{config.secret_access_key}", datetime[0, 8])
+    date_key = OpenSSL::HMAC.digest(sha256, "AWS4#{config.credentials.credentials.secret_access_key}", datetime[0, 8])
     date_region_key = OpenSSL::HMAC.digest(sha256, date_key, config.region)
     date_region_service_key = OpenSSL::HMAC.digest(sha256, date_region_key, "s3")
     OpenSSL::HMAC.digest(sha256, date_region_service_key, "aws4_request")
@@ -98,18 +101,11 @@ class Attachments::S3Storage
     ["x-amz-signature", signature]
   end
 
-  def open(opts)
-    # TODO: !need_local_file -- net/http and thus AWS::S3::S3Object don't
-    # natively support streaming the response, except when a block is given.
-    # so without Fibers, there's not a great way to return an IO-like object
-    # that streams the response. A separate thread, I guess. Bleck. Need to
-    # investigate other options.
-    if opts[:temp_folder].present? && !File.exist?(opts[:temp_folder])
-      FileUtils.mkdir_p(opts[:temp_folder])
-    end
-    tempfile = attachment.create_tempfile(opts) do |file|
+  def open(temp_folder: nil, integrity_check: false)
+    tempfile = attachment.create_tempfile(temp_folder:) do |file|
       attachment.s3object.get(response_target: file)
     end
+    attachment.validate_hash { |hash_context| hash_context&.file(tempfile.path) } if integrity_check
 
     if block_given?
       File.open(tempfile.path, "rb") do |file|

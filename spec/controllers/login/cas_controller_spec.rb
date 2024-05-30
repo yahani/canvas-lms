@@ -36,7 +36,7 @@ describe Login::CasController do
 
   it "logouts with specific cas ticket" do
     account = account_with_cas(account: Account.default)
-    user_with_pseudonym(active_all: true, account: account)
+    user_with_pseudonym(active_all: true, account:)
 
     cas_ticket = CanvasUuid::Uuid.generate_securish_uuid
     request_text = <<~XML.strip
@@ -55,12 +55,12 @@ describe Login::CasController do
     session[:login_aac] = Account.default.authentication_providers.first.id
 
     post :destroy, params: { logoutRequest: request_text }
-    expect(response.status).to eq 200
+    expect(response).to have_http_status :ok
   end
 
   it "doesn't allow deleted users to login" do
     account = account_with_cas(account: Account.default)
-    user_with_pseudonym(active_all: true, account: account)
+    user_with_pseudonym(active_all: true, account:)
     @user.update!(workflow_state: "deleted")
 
     response_text = <<~XML
@@ -84,7 +84,7 @@ describe Login::CasController do
 
   it "doesn't allow suspended users to login" do
     account = account_with_cas(account: Account.default)
-    user_with_pseudonym(active_all: true, account: account)
+    user_with_pseudonym(active_all: true, account:)
     @pseudonym.update!(workflow_state: "suspended")
 
     response_text = <<~XML
@@ -108,7 +108,7 @@ describe Login::CasController do
 
   it "accepts extra attributes" do
     account = account_with_cas(account: Account.default)
-    user_with_pseudonym(active_all: true, account: account)
+    user_with_pseudonym(active_all: true, account:)
 
     response_text = <<~XML
       <cas:serviceResponse xmlns:cas="http://www.yale.edu/tp/cas">
@@ -228,19 +228,24 @@ describe Login::CasController do
   end
 
   it "times out correctly" do
-    Setting.set("cas_timelimit", 0.01)
     account_with_cas(account: Account.default)
-
+    ap = Account.default.authentication_providers.detect { |a| a.auth_type == "cas" }
+    Setting.set("service_cas:#{ap.global_id}_timeout", "0.01")
     cas_client = double
     allow(controller).to receive(:client).and_return(cas_client)
     start = Time.now.utc
+    allow(Canvas::Errors).to receive(:capture_exception).and_return(true)
+    allow(InstStatsd::Statsd).to receive(:increment)
     expect(cas_client).to receive(:validate_service_ticket) { sleep 5 }
     session[:sentinel] = true
     get "new", params: { ticket: "ST-abcd" }
     expect(response).to redirect_to(login_url)
     expect(flash[:delegated_message]).to_not be_blank
     expect(Time.now.utc - start).to be < 1
-    expect(session[:sentinel]).to eq true
+    expect(session[:sentinel]).to be true
+    expect(InstStatsd::Statsd).to have_received(:increment).with(
+      "auth.timeout_error", tags: { auth_type: ap.auth_type.to_s, auth_provider_id: ap.global_id }
+    )
   end
 
   it "sets a cookie for site admin login" do

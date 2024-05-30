@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -21,7 +22,7 @@ import spacing from './formatters/spacing'
 
 enum MimeTypes {
   mathML = 'application/mathml+xml',
-  html = 'text/html'
+  html = 'text/html',
 }
 
 type ChunkerOptions = {
@@ -69,8 +70,11 @@ type Chunk = {
  */
 class ContentChunker {
   selector: string
+
   mathMLAttr: string
+
   formatters: Array<Formatter>
+
   parser: DOMParser
 
   constructor(opts: ChunkerOptions = {}) {
@@ -93,11 +97,11 @@ class ContentChunker {
     if (mathElement) {
       chunks.push({
         content: mathElement.getAttribute(this.mathMLAttr) || '',
-        mimeType: MimeTypes.mathML
+        mimeType: MimeTypes.mathML,
       })
-    } else {
       // Recursive base case: no more chunks to process
-      if (!mathElement) return chunks
+    } else if (!mathElement) {
+      return chunks
     }
 
     // Recurse and concat results

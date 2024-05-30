@@ -1,3 +1,4 @@
+/* eslint-disable qunit/no-ok-equality */
 /*
  * Copyright (C) 2016 - present Instructure, Inc.
  *
@@ -16,25 +17,25 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import openModerateStudentDialog from 'ui/features/moderate_quiz/jquery/openModerateStudentDialog.js'
+import openModerateStudentDialog from 'ui/features/moderate_quiz/jquery/openModerateStudentDialog'
 import $ from 'jquery'
+import 'jquery-migrate'
 
-let $fixture = null
 QUnit.module('openModerateStudentDialog', {
   setup() {
-    $fixture = $('#fixtures').html(`
+    $('#fixtures').html(`
       <div id='parent'>
-         <div id='moderate_student_dialog'>   
-          </div>               
+         <div id='moderate_student_dialog'>
+          </div>
           <a class='ui-dialog-titlebar-close' href='#'>
-          </a>                                           
-          </div>                                         
+          </a>
+          </div>
         </div>`)
   },
 
   teardown() {
     $('#fixtures').empty()
-  }
+  },
 })
 
 test('focues on close button when opened', () => {

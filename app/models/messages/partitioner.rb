@@ -4,11 +4,10 @@ module Messages
   class Partitioner
     cattr_accessor :logger
 
-    def self.precreate_tables
-      Setting.get("messages_precreate_tables", 2).to_i
-    end
+    PRECREATE_TABLES = 2
+    KEEP_WEEKS = 52
 
-    def self.process
+    def self.process(prune: false)
       Shard.current.database_server.unguard do
         GuardRail.activate(:deploy) do
           log "*" * 80
@@ -16,9 +15,13 @@ module Messages
 
           partman = CanvasPartman::PartitionManager.create(Message)
 
-          partman.ensure_partitions(precreate_tables)
+          partman.ensure_partitions(PRECREATE_TABLES)
 
-          Shard.current.database_server.unguard { partman.prune_partitions(Setting.get("messages_partitions_keep_weeks", 52).to_i) }
+          if prune
+            Shard.current.database_server.unguard do
+              partman.prune_partitions(KEEP_WEEKS)
+            end
+          end
 
           log "Done. Bye!"
           log "*" * 80
@@ -29,13 +32,17 @@ module Messages
       end
     end
 
+    def self.prune
+      process(prune: true)
+    end
+
     def self.log(*args)
       logger&.info(*args)
     end
 
     def self.processed?
       partman = CanvasPartman::PartitionManager.create(Message)
-      partman.partitions_created?(precreate_tables - 1)
+      partman.partitions_created?(PRECREATE_TABLES - 1)
     end
   end
 end

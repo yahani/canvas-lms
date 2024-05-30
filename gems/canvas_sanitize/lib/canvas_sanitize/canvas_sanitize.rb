@@ -36,7 +36,7 @@ class Sanitize
       #
       # http://www.whatwg.org/specs/web-apps/current-work/multipage/elements.html#embedding-custom-non-visible-data-with-the-data-*-attributes
       remove_const(:REGEX_DATA_ATTR)
-      REGEX_DATA_ATTR = /\Adata-(?!xml|kyle-menu|turn-into-dialog|flash-message|popup-within|html-tooltip-title)[a-z_][\w.\u00E0-\u00F6\u00F8-\u017F\u01DD-\u02AF-]*\z/u.freeze
+      REGEX_DATA_ATTR = /\Adata-(?!xml|kyle-menu|turn-into-dialog|flash-message|popup-within|html-tooltip-title|method)[a-z_][\w.\u00E0-\u00F6\u00F8-\u017F\u01DD-\u02AF-]*\z/u
     end
   end
 end
@@ -47,25 +47,145 @@ module CanvasSanitize # :nodoc:
   end
 
   DEFAULT_PROTOCOLS = ["http", "https", :relative].freeze
+
+  remove_spaces_from_ids = lambda do |env|
+    return unless env[:node]&.element? && env[:node][:id] && env[:node][:id].match?(/\s/)
+
+    env[:node][:id] = env[:node][:id].gsub(/\s+/, "")
+  end
+
   SANITIZE = {
     elements: [
-      "a", "b", "blockquote", "br", "caption", "cite", "code", "col",
-      "hr", "h1", "h2", "h3", "h4", "h5", "h6",
-      "del", "ins", "iframe", "font",
-      "colgroup", "dd", "div", "dl", "dt", "em", "figure", "figcaption", "i", "img", "li", "ol", "p", "pre",
-      "q", "small", "source", "span", "strike", "strong", "style", "sub", "sup", "abbr", "table", "tbody", "td",
-      "tfoot", "th", "thead", "tr", "u", "ul", "object", "embed", "param", "video", "track", "audio",
+      "a",
+      "b",
+      "blockquote",
+      "br",
+      "caption",
+      "cite",
+      "code",
+      "col",
+      "hr",
+      "h1",
+      "h2",
+      "h3",
+      "h4",
+      "h5",
+      "h6",
+      "del",
+      "ins",
+      "iframe",
+      "font",
+      "colgroup",
+      "dd",
+      "div",
+      "dl",
+      "dt",
+      "em",
+      "figure",
+      "figcaption",
+      "i",
+      "img",
+      "li",
+      "ol",
+      "p",
+      "pre",
+      "q",
+      "small",
+      "source",
+      "span",
+      "strike",
+      "strong",
+      "style",
+      "sub",
+      "sup",
+      "abbr",
+      "table",
+      "tbody",
+      "td",
+      "tfoot",
+      "th",
+      "thead",
+      "tr",
+      "u",
+      "ul",
+      "object",
+      "embed",
+      "param",
+      "video",
+      "track",
+      "audio",
       # added to unify tinymce and canvas_sanitize whitelists
-      "address", "acronym", "map", "area", "bdo", "dfn", "kbd", "legend", "samp", "tt", "var", "big",
-      "article", "aside", "details", "footer", "header", "nav", "section", "summary", "time", "picture",
-      "ruby", "rt", "rp",
+      "address",
+      "acronym",
+      "map",
+      "area",
+      "bdo",
+      "dfn",
+      "kbd",
+      "legend",
+      "samp",
+      "tt",
+      "var",
+      "big",
+      "article",
+      "aside",
+      "details",
+      "footer",
+      "header",
+      "nav",
+      "section",
+      "summary",
+      "time",
+      "picture",
+      "ruby",
+      "rt",
+      "rp",
       # MathML
-      "annotation", "annotation-xml", "maction", "maligngroup", "malignmark", "math",
-      "menclose", "merror", "mfenced", "mfrac", "mglyph", "mi", "mlabeledtr", "mlongdiv",
-      "mmultiscripts", "mn", "mo", "mover", "mpadded", "mphantom", "mprescripts", "mroot",
-      "mrow", "ms", "mscarries", "mscarry", "msgroup", "msline", "mspace", "msqrt", "msrow",
-      "mstack", "mstyle", "msub", "msubsup", "msup", "mtable", "mtd", "mtext", "mtr", "munder",
-      "munderover", "none", "semantics", "mark"
+      "annotation",
+      "annotation-xml",
+      "maction",
+      "maligngroup",
+      "malignmark",
+      "math",
+      "menclose",
+      "merror",
+      "mfenced",
+      "mfrac",
+      "mglyph",
+      "mi",
+      "mlabeledtr",
+      "mlongdiv",
+      "mmultiscripts",
+      "mn",
+      "mo",
+      "mover",
+      "mpadded",
+      "mphantom",
+      "mprescripts",
+      "mroot",
+      "mrow",
+      "ms",
+      "mscarries",
+      "mscarry",
+      "msgroup",
+      "msline",
+      "mspace",
+      "msqrt",
+      "msrow",
+      "mstack",
+      "mstyle",
+      "msub",
+      "msubsup",
+      "msup",
+      "mtable",
+      "mtd",
+      "mtext",
+      "mtr",
+      "munder",
+      "munderover",
+      "none",
+      "semantics",
+      "mark"
     ].freeze,
 
     # The default is Nokogiri::Gumbo::DEFAULT_MAX_TREE_DEPTH = 400
@@ -128,9 +248,18 @@ module CanvasSanitize # :nodoc:
       "col" => ["span", "width"].freeze,
       "colgroup" => ["span", "width"].freeze,
       "img" => %w[align alt height src usemap width longdesc].freeze,
-      "iframe" => ["src", "width", "height", "name", "align", "frameborder", "scrolling",
+      "iframe" => ["src",
+                   "width",
+                   "height",
+                   "name",
+                   "align",
+                   "frameborder",
+                   "scrolling",
                    "allow", # TODO: remove explicit allow with domain whitelist account setting
-                   "sandbox", "allowfullscreen", "webkitallowfullscreen", "mozallowfullscreen"].freeze,
+                   "sandbox",
+                   "allowfullscreen",
+                   "webkitallowfullscreen",
+                   "mozallowfullscreen"].freeze,
       "ol" => ["start", "type"].freeze,
       "q" => ["cite"].freeze,
       "table" => %w[summary width border cellpadding cellspacing center frame rules].freeze,
@@ -140,12 +269,19 @@ module CanvasSanitize # :nodoc:
       "ul" => ["type"].freeze,
       "param" => ["name", "value"].freeze,
       "object" => %w[width height style data type classid codebase].freeze,
-      "source" => %w[media sizes src srcset type].freeze,
-      "embed" => %w[name src type allowfullscreen pluginspage wmode
-                    allowscriptaccess width height].freeze,
-      "video" => %w[name src allowfullscreen muted poster width height controls playsinline].freeze,
+      "source" => %w[media width height sizes src srcset type].freeze,
+      "embed" => %w[name
+                    src
+                    type
+                    allowfullscreen
+                    pluginspage
+                    wmode
+                    allowscriptaccess
+                    width
+                    height].freeze,
+      "video" => %w[name src allowfullscreen allow muted poster width height controls playsinline].freeze,
       "track" => %w[default kind label src srclang].freeze,
-      "audio" => %w[name src muted controls].freeze,
+      "audio" => %w[name src allowfullscreen allow muted poster width height controls playsinline].freeze,
       "font" => %w[face color size].freeze,
       # MathML
       "annotation" => %w[href xref definitionURL encoding cd name src].freeze,
@@ -154,91 +290,334 @@ module CanvasSanitize # :nodoc:
       "maligngroup" => %w[href xref mathcolor mathbackground groupalign].freeze,
       "malignmark" => %w[href xref mathcolor mathbackground edge].freeze,
       "map" => ["name"].freeze,
-      "math" => %w[href xref display maxwidth overflow altimg altimg-width
-                   altimg-height altimg-valign alttext cdgroup mathcolor
-                   mathbackground scriptlevel displaystyle scriptsizemultiplier
-                   scriptminsize infixlinebreakstyle decimalpoint mathvariant
-                   mathsize width height valign form fence separator
-                   lspace rspace stretchy symmetric maxsize minsize largeop
-                   movablelimits accent linebreak lineleading linebreakstyle
-                   linebreakmultchar indentalign indentshift indenttarget
-                   indentalignfirst indentshiftfirst indentalignlast indentshiftlast
-                   depth lquote rquote linethickness munalign denomalign
-                   bevelled voffset open close separators notation
-                   subscriptshift superscriptshift accentunder align rowalign
-                   columnalign groupalign alignmentscope columnwidth rowspacing
-                   columnspacing rowlines columnlines frame framespacing
-                   equalrows equalcolumns side minlabelspacing rowspan
-                   columnspan edge stackalign charalign charspacing longdivstyle
-                   position shift location crossout length leftoverhang
-                   rightoverhang mslinethickness selection xmlns].freeze,
+      "math" => %w[href
+                   xref
+                   display
+                   maxwidth
+                   overflow
+                   altimg
+                   altimg-width
+                   altimg-height
+                   altimg-valign
+                   alttext
+                   cdgroup
+                   mathcolor
+                   mathbackground
+                   scriptlevel
+                   displaystyle
+                   scriptsizemultiplier
+                   scriptminsize
+                   infixlinebreakstyle
+                   decimalpoint
+                   mathvariant
+                   mathsize
+                   width
+                   height
+                   valign
+                   form
+                   fence
+                   separator
+                   lspace
+                   rspace
+                   stretchy
+                   symmetric
+                   maxsize
+                   minsize
+                   largeop
+                   movablelimits
+                   accent
+                   linebreak
+                   lineleading
+                   linebreakstyle
+                   linebreakmultchar
+                   indentalign
+                   indentshift
+                   indenttarget
+                   indentalignfirst
+                   indentshiftfirst
+                   indentalignlast
+                   indentshiftlast
+                   depth
+                   lquote
+                   rquote
+                   linethickness
+                   munalign
+                   denomalign
+                   bevelled
+                   voffset
+                   open
+                   close
+                   separators
+                   notation
+                   subscriptshift
+                   superscriptshift
+                   accentunder
+                   align
+                   rowalign
+                   columnalign
+                   groupalign
+                   alignmentscope
+                   columnwidth
+                   rowspacing
+                   columnspacing
+                   rowlines
+                   columnlines
+                   frame
+                   framespacing
+                   equalrows
+                   equalcolumns
+                   side
+                   minlabelspacing
+                   rowspan
+                   columnspan
+                   edge
+                   stackalign
+                   charalign
+                   charspacing
+                   longdivstyle
+                   position
+                   shift
+                   location
+                   crossout
+                   length
+                   leftoverhang
+                   rightoverhang
+                   mslinethickness
+                   selection
+                   xmlns].freeze,
       "menclose" => %w[href xref mathcolor mathbackground notation].freeze,
       "merror" => %w[href xref mathcolor mathbackground].freeze,
       "mfenced" => %w[href xref mathcolor mathbackground open close separators].freeze,
-      "mfrac" => %w[href xref mathcolor mathbackground linethickness munalign
-                    denomalign bevelled].freeze,
+      "mfrac" => %w[href
+                    xref
+                    mathcolor
+                    mathbackground
+                    linethickness
+                    munalign
+                    denomalign
+                    bevelled].freeze,
       "mglyph" => %w[href xref mathcolor mathbackground src alt width height valign].freeze,
       "mi" => %w[href xref mathcolor mathbackground mathvariant mathsize].freeze,
       "mlabeledtr" => %w[href xref mathcolor mathbackground].freeze,
-      "mlongdiv" => %w[href xref mathcolor mathbackground longdivstyle align
-                       stackalign charalign charspacing].freeze,
-      "mmultiscripts" => %w[href xref mathcolor mathbackground subscriptshift
+      "mlongdiv" => %w[href
+                       xref
+                       mathcolor
+                       mathbackground
+                       longdivstyle
+                       align
+                       stackalign
+                       charalign
+                       charspacing].freeze,
+      "mmultiscripts" => %w[href
+                            xref
+                            mathcolor
+                            mathbackground
+                            subscriptshift
                             superscriptshift].freeze,
       "mn" => %w[href xref mathcolor mathbackground mathvariant mathsize].freeze,
-      "mo" => %w[href xref mathcolor mathbackground mathvariant mathsize form
-                 fence separator lspace rspace stretchy symmetric maxsize
-                 minsize largeop movablelimits accent linebreak lineleading
-                 linebreakstyle linebreakmultchar indentalign indentshift
-                 indenttarget indentalignfirst indentshiftfirst indentalignlast
+      "mo" => %w[href
+                 xref
+                 mathcolor
+                 mathbackground
+                 mathvariant
+                 mathsize
+                 form
+                 fence
+                 separator
+                 lspace
+                 rspace
+                 stretchy
+                 symmetric
+                 maxsize
+                 minsize
+                 largeop
+                 movablelimits
+                 accent
+                 linebreak
+                 lineleading
+                 linebreakstyle
+                 linebreakmultchar
+                 indentalign
+                 indentshift
+                 indenttarget
+                 indentalignfirst
+                 indentshiftfirst
+                 indentalignlast
                  indentshiftlast].freeze,
       "mover" => %w[href xref mathcolor mathbackground accent align].freeze,
-      "mpadded" => %w[href xref mathcolor mathbackground height depth width
-                      lspace voffset].freeze,
+      "mpadded" => %w[href
+                      xref
+                      mathcolor
+                      mathbackground
+                      height
+                      depth
+                      width
+                      lspace
+                      voffset].freeze,
       "mphantom" => %w[href xref mathcolor mathbackground].freeze,
       "mprescripts" => %w[href xref mathcolor mathbackground].freeze,
       "mroot" => %w[href xref mathcolor mathbackground].freeze,
       "mrow" => %w[href xref mathcolor mathbackground].freeze,
       "ms" => %w[href xref mathcolor mathbackground mathvariant mathsize lquote rquote].freeze,
-      "mscarries" => %w[href xref mathcolor mathbackground position location
-                        crossout scriptsizemultiplier].freeze,
+      "mscarries" => %w[href
+                        xref
+                        mathcolor
+                        mathbackground
+                        position
+                        location
+                        crossout
+                        scriptsizemultiplier].freeze,
       "mscarry" => %w[href xref mathcolor mathbackground location crossout].freeze,
       "msgroup" => %w[href xref mathcolor mathbackground position shift].freeze,
-      "msline" => %w[href xref mathcolor mathbackground position length
-                     leftoverhang rightoverhang mslinethickness].freeze,
+      "msline" => %w[href
+                     xref
+                     mathcolor
+                     mathbackground
+                     position
+                     length
+                     leftoverhang
+                     rightoverhang
+                     mslinethickness].freeze,
       "mspace" => %w[href xref mathcolor mathbackground mathvariant mathsize].freeze,
       "msqrt" => %w[href xref mathcolor mathbackground].freeze,
       "msrow" => %w[href xref mathcolor mathbackground position].freeze,
-      "mstack" => %w[href xref mathcolor mathbackground align stackalign
-                     charalign charspacing].freeze,
-      "mstyle" => %w[href xref mathcolor mathbackground scriptlevel displaystyle
-                     scriptsizemultiplier scriptminsize infixlinebreakstyle
-                     decimalpoint mathvariant mathsize width height valign
-                     form fence separator lspace rspace stretchy symmetric
-                     maxsize minsize largeop movablelimits accent linebreak
-                     lineleading linebreakstyle linebreakmultchar indentalign
-                     indentshift indenttarget indentalignfirst indentshiftfirst
-                     indentalignlast indentshiftlast depth lquote rquote
-                     linethickness munalign denomalign bevelled voffset open
-                     close separators notation subscriptshift superscriptshift
-                     accentunder align rowalign columnalign groupalign
-                     alignmentscope columnwidth rowspacing columnspacing rowlines
-                     columnlines frame framespacing equalrows equalcolumns side
-                     minlabelspacing rowspan columnspan edge stackalign
-                     charalign charspacing longdivstyle position shift location
-                     crossout length leftoverhang rightoverhang mslinethickness
+      "mstack" => %w[href
+                     xref
+                     mathcolor
+                     mathbackground
+                     align
+                     stackalign
+                     charalign
+                     charspacing].freeze,
+      "mstyle" => %w[href
+                     xref
+                     mathcolor
+                     mathbackground
+                     scriptlevel
+                     displaystyle
+                     scriptsizemultiplier
+                     scriptminsize
+                     infixlinebreakstyle
+                     decimalpoint
+                     mathvariant
+                     mathsize
+                     width
+                     height
+                     valign
+                     form
+                     fence
+                     separator
+                     lspace
+                     rspace
+                     stretchy
+                     symmetric
+                     maxsize
+                     minsize
+                     largeop
+                     movablelimits
+                     accent
+                     linebreak
+                     lineleading
+                     linebreakstyle
+                     linebreakmultchar
+                     indentalign
+                     indentshift
+                     indenttarget
+                     indentalignfirst
+                     indentshiftfirst
+                     indentalignlast
+                     indentshiftlast
+                     depth
+                     lquote
+                     rquote
+                     linethickness
+                     munalign
+                     denomalign
+                     bevelled
+                     voffset
+                     open
+                     close
+                     separators
+                     notation
+                     subscriptshift
+                     superscriptshift
+                     accentunder
+                     align
+                     rowalign
+                     columnalign
+                     groupalign
+                     alignmentscope
+                     columnwidth
+                     rowspacing
+                     columnspacing
+                     rowlines
+                     columnlines
+                     frame
+                     framespacing
+                     equalrows
+                     equalcolumns
+                     side
+                     minlabelspacing
+                     rowspan
+                     columnspan
+                     edge
+                     stackalign
+                     charalign
+                     charspacing
+                     longdivstyle
+                     position
+                     shift
+                     location
+                     crossout
+                     length
+                     leftoverhang
+                     rightoverhang
+                     mslinethickness
                      selection].freeze,
       "msub" => %w[href xref mathcolor mathbackground subscriptshift].freeze,
       "msubsup" => %w[href xref mathcolor mathbackground subscriptshift superscriptshift].freeze,
       "msup" => %w[href xref mathcolor mathbackground superscriptshift].freeze,
-      "mtable" => %w[href xref mathcolor mathbackground align rowalign
-                     columnalign groupalign alignmentscope columnwidth width
-                     rowspacing columnspacing rowlines columnlines frame
-                     framespacing equalrows equalcolumns displaystyle side
+      "mtable" => %w[href
+                     xref
+                     mathcolor
+                     mathbackground
+                     align
+                     rowalign
+                     columnalign
+                     groupalign
+                     alignmentscope
+                     columnwidth
+                     width
+                     rowspacing
+                     columnspacing
+                     rowlines
+                     columnlines
+                     frame
+                     framespacing
+                     equalrows
+                     equalcolumns
+                     displaystyle
+                     side
                      minlabelspacing].freeze,
-      "mtd" => %w[href xref mathcolor mathbackground rowspan columnspan
-                  rowalign columnalign groupalign].freeze,
-      "mtext" => %w[href xref mathcolor mathbackground mathvariant mathsize
-                    width height depth linebreak].freeze,
+      "mtd" => %w[href
+                  xref
+                  mathcolor
+                  mathbackground
+                  rowspan
+                  columnspan
+                  rowalign
+                  columnalign
+                  groupalign].freeze,
+      "mtext" => %w[href
+                    xref
+                    mathcolor
+                    mathbackground
+                    mathvariant
+                    mathsize
+                    width
+                    height
+                    depth
+                    linebreak].freeze,
       "mtr" => %w[href xref mathcolor mathbackground rowalign columnalign groupalign].freeze,
       "munder" => %w[href xref mathcolor mathbackground accentunder align].freeze,
       "munderover" => %w[href xref mathcolor mathbackground accent accentunder align].freeze,
@@ -259,70 +638,72 @@ module CanvasSanitize # :nodoc:
       "embed" => { "src" => DEFAULT_PROTOCOLS }.freeze,
       "iframe" => { "src" => DEFAULT_PROTOCOLS }.freeze,
       "style" => { "any" => DEFAULT_PROTOCOLS }.freeze,
-      "annotation" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "annotation-xml" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "maction" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "maligngroup" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "malignmark" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "math" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "menclose" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "merror" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mfenced" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mfrac" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mglyph" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mi" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mlabeledtr" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mlongdiv" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mmultiscripts" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mn" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mo" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mover" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mpadded" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mphantom" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mprescripts" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mroot" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mrow" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "ms" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mscarries" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mscarry" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "msgroup" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "msline" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mspace" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "msqrt" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "msrow" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mstack" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mstyle" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "msub" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "msubsup" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "msup" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mtable" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mtd" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mtext" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "mtr" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "munder" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "munderover" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "none" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-      "semantics" => { "href" => DEFAULT_PROTOCOLS }.freeze,
-    }.freeze,
+      "audio" => { "src" => ["data", "http", "https", :relative] }.freeze,
+      "video" => { "src" => ["data", "http", "https", :relative] }.freeze,
+      "source" => { "src" => ["data", "http", "https", :relative] }.freeze,
+      "track" => { "src" => ["data", "http", "https", :relative] }.freeze,
+    },
+
     css: {
       properties: (%w[
-        align-content align-items align-self
-        background border border-radius clear clip color
-        column-gap cursor direction display flex
-        flex-basis flex-direction flex-flow
-        flex-grow flex-shrink flex-wrap float
-        font gap grid height
-        justify-content justify-items justify-self left
-        line-height list-style margin max-height
-        max-width min-height min-width
-        order overflow overflow-x overflow-y
-        padding position place-content
-        place-items place-self right row-gap
-        text-align table-layout
-        text-decoration text-indent
-        top vertical-align
-        visibility white-space width
-        z-index zoom
+        align-content
+        align-items
+        align-self
+        background
+        border
+        border-radius
+        clear
+        clip
+        color
+        column-gap
+        cursor
+        direction
+        display
+        flex
+        flex-basis
+        flex-direction
+        flex-flow
+        flex-grow
+        flex-shrink
+        flex-wrap
+        float
+        font
+        gap
+        grid
+        height
+        justify-content
+        justify-items
+        justify-self
+        left
+        line-height
+        list-style
+        margin
+        max-height
+        max-width
+        min-height
+        min-width
+        order
+        overflow
+        overflow-x
+        overflow-y
+        padding
+        position
+        place-content
+        place-items
+        place-self
+        right
+        row-gap
+        text-align
+        table-layout
+        text-decoration
+        text-indent
+        top
+        vertical-align
+        visibility
+        white-space
+        width
+        z-index
+        zoom
       ] +
       %w[area auto-columns auto-flow auto-rows column gap row template].map { |i| "grid-#{i}" } +
       %w[areas columns rows].map { |i| "grid-template-#{i}" } +
@@ -338,8 +719,26 @@ module CanvasSanitize # :nodoc:
       %w[bottom left right top].map { |i| "padding-#{i}" }
                   ).to_set.freeze,
       protocols: DEFAULT_PROTOCOLS
-    }
+    },
+
+    transformers: remove_spaces_from_ids
   }.freeze
+
+  # Any allowed elements for which we don't explicitly declare a
+  # protocol above will be populated with a sane default for
+  # href/src/cite/etc. so as to not allow arbitrary javascript or
+  # other protocols on any tag + attribute combos we may have missed
+  missing_protocol_elements = SANITIZE[:elements].to_set - SANITIZE[:protocols].keys.to_set
+  missing_protocol_elements.each do |element|
+    elements_allowed_attributes = SANITIZE[:attributes][element]
+    element_protocols = %w[href src cite].each_with_object({}) do |attribute, hash|
+      hash[attribute] = DEFAULT_PROTOCOLS if elements_allowed_attributes&.include?(attribute)
+    end
+    SANITIZE[:protocols][element] = element_protocols.freeze unless element_protocols.empty?
+  end
+
+  SANITIZE[:protocols].freeze
+  SANITIZE.freeze
 
   module ClassMethods
     def sanitize_field(*args)

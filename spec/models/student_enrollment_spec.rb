@@ -70,7 +70,7 @@ describe StudentEnrollment do
       course.allow_final_grade_override = true
       course.save!
 
-      course.enrollment_term.update!(grading_period_group: grading_period_group)
+      course.enrollment_term.update!(grading_period_group:)
       course.recompute_student_scores(run_immediately: true)
     end
 
@@ -119,7 +119,7 @@ describe StudentEnrollment do
       )
 
       aggregate_failures do
-        expect(grade_change_event).not_to be nil
+        expect(grade_change_event).not_to be_nil
         expect(grade_change_event.course_id).to eq enrollment.course_id
         expect(grade_change_event.grading_period).to eq grading_period
         expect(grade_change_event.student).to eq student
@@ -130,12 +130,12 @@ describe StudentEnrollment do
 
     it "does not record a grade change event if record_grade_change is true but no updating_user is given" do
       enrollment.update_override_score(override_score: 90.0, updating_user: nil, record_grade_change: true)
-      expect(grade_change_event).to be nil
+      expect(grade_change_event).to be_nil
     end
 
     it "does not record a grade change event if record_grade_change is false" do
       enrollment.update_override_score(override_score: 90.0, updating_user: teacher, record_grade_change: false)
-      expect(grade_change_event).to be nil
+      expect(grade_change_event).to be_nil
     end
 
     it "does not record a grade change if the override score did not actually change" do
@@ -162,7 +162,7 @@ describe StudentEnrollment do
 
     it "does nothing if course paces aren't turned on" do
       @enrollment.update start_at: 1.day.from_now
-      expect(Delayed::Job.where(singleton: "course_pace_publish:#{@course_pace.id}")).not_to exist
+      expect(Delayed::Job.where(singleton: "course_pace_publish:#{@course_pace.global_id}")).not_to exist
     end
 
     context "with course paces enabled" do
@@ -173,20 +173,20 @@ describe StudentEnrollment do
 
       it "queues an update for a new student enrollment" do
         student_in_course(active_all: true, user: user_with_pseudonym)
-        expect(Delayed::Job.where(singleton: "course_pace_publish:#{@course_pace.id}")).to exist
+        expect(Delayed::Job.where(singleton: "course_pace_publish:#{@course_pace.global_id}")).to exist
       end
 
       it "queues an update for a student enrollment that goes from deleted to invited" do
         @enrollment.destroy
-        expect(Delayed::Job.where(singleton: "course_pace_publish:#{@course_pace.id}")).not_to exist
+        Delayed::Job.where(singleton: "course_pace_publish:#{@course_pace.global_id}").last.destroy
         @enrollment.update(workflow_state: "invited")
-        expect(Delayed::Job.where(singleton: "course_pace_publish:#{@course_pace.id}")).to exist
+        expect(Delayed::Job.where(singleton: "course_pace_publish:#{@course_pace.global_id}")).to exist
       end
 
       it "doesn't queue an update if the course pace isn't published" do
         @course_pace.update workflow_state: "unpublished"
         student_in_course(active_all: true, user: user_with_pseudonym)
-        expect(Delayed::Job.where(singleton: "course_pace_publish:#{@course_pace.id}")).not_to exist
+        expect(Delayed::Job.where(singleton: "course_pace_publish:#{@course_pace.global_id}")).not_to exist
       end
 
       it "publishes a student course pace (alone) if it exists" do
@@ -194,14 +194,14 @@ describe StudentEnrollment do
         student_course_pace.publish
         @enrollment.start_at = 2.days.from_now
         @enrollment.save!
-        expect(Delayed::Job.where(singleton: "course_pace_publish:#{@course_pace.id}")).not_to exist
-        expect(Delayed::Job.where(singleton: "course_pace_publish:#{student_course_pace.id}")).to exist
+        expect(Delayed::Job.where(singleton: "course_pace_publish:#{@course_pace.global_id}")).not_to exist
+        expect(Delayed::Job.where(singleton: "course_pace_publish:#{student_course_pace.global_id}")).to exist
       end
 
       it "doesn't queue an update for irrelevant changes" do
         @enrollment.last_attended_at = 1.day.ago
         @enrollment.save!
-        expect(Delayed::Job.where(singleton: "course_pace_publish:#{@course_pace.id}")).not_to exist
+        expect(Delayed::Job.where(singleton: "course_pace_publish:#{@course_pace.global_id}")).not_to exist
       end
 
       it "queues only one update when multiple enrollments are created" do
@@ -211,7 +211,48 @@ describe StudentEnrollment do
 
       it "doesn't queue an update for non-student-enrollment creation" do
         ta_in_course(active_all: true, user: user_with_pseudonym)
-        expect(Delayed::Job.where(singleton: "course_pace_publish:#{@course_pace.id}")).not_to exist
+        expect(Delayed::Job.where(singleton: "course_pace_publish:#{@course_pace.global_id}")).not_to exist
+      end
+
+      describe "section paces" do
+        before :once do
+          @section1 = @course.course_sections.create! name: "section 1"
+          @section2 = @course.course_sections.create! name: "section 2"
+          @published_section_pace = @course.course_paces.create!(course_section_id: @section1.id)
+          @published_section_pace.publish
+          @unpublished_section_pace = @course.course_paces.create!(course_section_id: @section2.id)
+        end
+
+        it "queue an update for the section pace if it is published" do
+          student_in_section(@section1)
+          expect(Delayed::Job.where(singleton: "course_pace_publish:#{@course_pace.global_id}")).not_to exist
+          expect(Delayed::Job.where(singleton: "course_pace_publish:#{@published_section_pace.global_id}")).to exist
+        end
+
+        it "queue an update for the default course pace if the section pace isn't published" do
+          student_in_section(@section2)
+          expect(Delayed::Job.where(singleton: "course_pace_publish:#{@unpublished_section_pace.global_id}")).not_to exist
+          expect(Delayed::Job.where(singleton: "course_pace_publish:#{@course_pace.global_id}")).to exist
+        end
+
+        it "queue a proper publish in the case of deletions" do
+          @unpublished_section_pace.publish
+          student = student_in_section(@section1)
+          @course.enroll_user(student, "StudentEnrollment", section: @section2, allow_multiple_enrollments: true)
+          Delayed::Job.where(singleton: "course_pace_publish:#{@published_section_pace.global_id}").last.destroy
+          expect(Delayed::Job.where(singleton: "course_pace_publish:#{@published_section_pace.global_id}")).not_to exist
+          StudentEnrollment.find_by(course_section_id: @section2.id).update! workflow_state: "deleted"
+          expect(Delayed::Job.where(singleton: "course_pace_publish:#{@published_section_pace.global_id}")).to exist
+        end
+
+        it "logs a stat if a student is added to multiple sections that have published paces" do
+          @unpublished_section_pace.publish
+          allow(InstStatsd::Statsd).to receive(:increment).and_call_original
+          student = student_in_section(@section1)
+          expect(InstStatsd::Statsd).not_to have_received(:increment).with("course_pacing.student_with_multiple_sections_with_paces")
+          student_in_section(@section2, user: student, allow_multiple_enrollments: true)
+          expect(InstStatsd::Statsd).to have_received(:increment).with("course_pacing.student_with_multiple_sections_with_paces").at_least(:once)
+        end
       end
     end
   end

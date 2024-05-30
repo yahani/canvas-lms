@@ -17,8 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_dependency "sis/enrollment_importer"
-
 module SIS
   describe EnrollmentImporter do
     let(:user_id) { "5235536377654" }
@@ -27,9 +25,9 @@ module SIS
 
     let(:enrollment) do
       SIS::Models::Enrollment.new(
-        course_id: course_id,
-        section_id: section_id,
-        user_id: user_id,
+        course_id:,
+        section_id:,
+        user_id:,
         role: "student",
         status: "active",
         start_date: Time.zone.today,

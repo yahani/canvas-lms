@@ -17,13 +17,14 @@
  */
 
 import $ from 'jquery'
+import {raw} from '@instructure/html-escape'
 
 $(document).ready(() => {
   const $start_debugging = $('.start_debugging'),
     $stop_debugging = $('.stop_debugging'),
     $refresh_debugging = $('.refresh_debugging')
 
-  const stop_debugging = function($link) {
+  const stop_debugging = function ($link) {
     const $container = $link.closest('div.debugging')
     $container.find('.start_debugging').show()
     $container.find('.refresh_debugging').hide()
@@ -33,7 +34,7 @@ $(document).ready(() => {
     debug_data.hide()
   }
 
-  const load_debug_data = function($link, new_debug_session) {
+  const load_debug_data = function ($link, new_debug_session) {
     const url = $link.attr('href')
     let method = 'GET'
     let debug_data
@@ -44,7 +45,7 @@ $(document).ready(() => {
       if (data) {
         if (data.debugging) {
           debug_data = $link.closest('div.debugging').find('.debug_data')
-          debug_data.html($.raw(data.debug_data))
+          debug_data.html(raw(data.debug_data))
           debug_data.show()
         } else {
           stop_debugging()
@@ -74,6 +75,6 @@ $(document).ready(() => {
     stop_debugging($link)
 
     const url = $link.attr('href')
-    $.ajaxJSON(url, 'DELETE', {}, data => {})
+    $.ajaxJSON(url, 'DELETE', {}, _data => {})
   })
 })

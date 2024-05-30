@@ -39,8 +39,8 @@ describe "user_content post processing" do
     @course.wiki_pages.create!(title: page_title, body: page_content)
   end
 
-  def wait_for_loading_image(&block)
-    wait_for_transient_element(".loading_image_holder", &block)
+  def wait_for_loading_image(&)
+    wait_for_transient_element(".loading_image_holder", &)
   end
 
   describe "file downloads" do
@@ -59,12 +59,12 @@ describe "user_content post processing" do
       # the file link w/o /download
       file_link1 = f("a#link1")
       expect(file_link1).to be_displayed
-      expect(file_link1.attribute("class")).to eq("file_preview_link")
+      expect(file_link1.attribute("class")).to include("file_preview_link")
       expect(file_link1.attribute("href")).to end_with "#{@file_url}?wrap=1&verifier=#{@file.uuid}"
 
       file_link2 = f("a#link2")
       expect(file_link2).to be_displayed
-      expect(file_link2.attribute("class")).to eq("file_preview_link")
+      expect(file_link2.attribute("class")).to include("file_preview_link")
       expect(
         file_link2.attribute("href")
       ).to end_with "#{@file_url}/download?wrap=1&verifier=#{@file.uuid}"
@@ -282,7 +282,7 @@ describe "user_content post processing" do
       browser_tabs = driver.window_handles
       expect(browser_tabs.length).to eq(1)
 
-      modifier_key = driver.capabilities.platform.include?("mac") ? :meta : :control
+      modifier_key = driver.capabilities[:platform_name].include?("mac") ? :meta : :control
       file_link = f("a#thelink")
       driver.action.key_down(modifier_key).click(file_link).key_up(modifier_key).perform
 
@@ -307,7 +307,7 @@ describe "user_content post processing" do
       browser_tabs = driver.window_handles
       expect(browser_tabs.length).to eq(1)
 
-      modifier_key = driver.capabilities.platform.include?("mac") ? :meta : :control
+      modifier_key = driver.capabilities[:platform_name].include?("mac") ? :meta : :control
       file_link = f("a#thelink")
       driver.action.key_down(modifier_key).click(file_link).key_up(modifier_key).perform
 

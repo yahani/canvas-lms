@@ -16,33 +16,28 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 //
 
-import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection.coffee'
+import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection'
 
 export default class GradeChangeLoggingCollection extends PaginatedCollection {
   url() {
-    // TODO remove this check after OSS instances have been given a path to migrate from cassandra auditors
-    if (ENV.enhanced_grade_change_query) {
-      return '/api/v1/audit/grade_change'
-    } else {
-      return `/api/v1/audit/grade_change/${this.options.params.type}/${this.options.params.id}`
-    }
+    return '/api/v1/audit/grade_change'
   }
 }
 GradeChangeLoggingCollection.prototype.sideLoad = {
   grader: {
     foreignKey: 'grader',
-    collection: 'users'
+    collection: 'users',
   },
   student: {
     foreignKey: 'student',
-    collection: 'users'
+    collection: 'users',
   },
   course: {
     foreignKey: 'course',
-    collection: 'courses'
+    collection: 'courses',
   },
   assignment: {
     foreignKey: 'assignment',
-    collection: 'assignments'
-  }
+    collection: 'assignments',
+  },
 }

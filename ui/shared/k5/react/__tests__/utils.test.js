@@ -32,7 +32,7 @@ import {
   fetchImportantInfos,
   parseAnnouncementDetails,
   groupAnnouncementsByHomeroom,
-  groupImportantDates
+  groupImportantDates,
 } from '../utils'
 
 import {MOCK_ASSIGNMENTS, MOCK_EVENTS} from './fixtures'
@@ -46,6 +46,21 @@ const APPS_URL = '/api/v1/external_tools/visible_course_nav_tools?context_codes[
 const CONVERSATIONS_URL = '/api/v1/conversations'
 const getSyllabusUrl = courseId => encodeURI(`/api/v1/courses/${courseId}?include[]=syllabus_body`)
 
+const DEFAULT_GRADING_SCHEME = [
+  ['A', 0.94],
+  ['A-', 0.9],
+  ['B+', 0.87],
+  ['B', 0.84],
+  ['B-', 0.8],
+  ['C+', 0.77],
+  ['C', 0.74],
+  ['C-', 0.7],
+  ['D+', 0.67],
+  ['D', 0.64],
+  ['D-', 0.61],
+  ['F', 0.0],
+]
+
 afterEach(() => {
   fetchMock.restore()
 })
@@ -56,11 +71,11 @@ describe('fetchLatestAnnouncement', () => {
       ANNOUNCEMENT_URL,
       JSON.stringify([
         {
-          title: 'I am first'
+          title: 'I am first',
         },
         {
-          title: 'I am not'
-        }
+          title: 'I am not',
+        },
       ])
     )
     const announcement = await fetchLatestAnnouncement('test')
@@ -86,11 +101,11 @@ describe('fetchCourseInstructors', () => {
       USERS_URL,
       JSON.stringify([
         {
-          id: 14
+          id: 14,
         },
         {
-          id: 15
-        }
+          id: 15,
+        },
       ])
     )
     const instructors = await fetchCourseInstructors('test')
@@ -134,19 +149,19 @@ describe('transformGrades', () => {
         current_period_computed_current_grade: 'B-',
         computed_current_score: 89,
         computed_current_grade: 'B+',
-        type: 'student'
-      }
+        type: 'student',
+      },
     ],
     grading_periods: [
       {
         id: '1',
-        title: 'The first one'
+        title: 'The first one',
       },
       {
         id: '2',
-        title: 'The second one'
-      }
-    ]
+        title: 'The second one',
+      },
+    ],
   }
 
   it('translates courses to just course and grade-relevant properties', async () => {
@@ -164,12 +179,12 @@ describe('transformGrades', () => {
         gradingPeriods: [
           {
             id: '1',
-            title: 'The first one'
+            title: 'The first one',
           },
           {
             id: '2',
-            title: 'The second one'
-          }
+            title: 'The second one',
+          },
         ],
         hasGradingPeriods: true,
         score: 80,
@@ -187,10 +202,10 @@ describe('transformGrades', () => {
             current_period_computed_current_grade: 'B-',
             computed_current_score: 89,
             computed_current_grade: 'B+',
-            type: 'student'
-          }
-        ]
-      }
+            type: 'student',
+          },
+        ],
+      },
     ])
   })
 
@@ -223,10 +238,10 @@ describe('transformGrades', () => {
             current_period_computed_current_grade: 'B-',
             computed_current_score: 89,
             computed_current_grade: 'B+',
-            type: 'student'
-          }
-        ]
-      }
+            type: 'student',
+          },
+        ],
+      },
     ])
   })
 
@@ -243,10 +258,10 @@ describe('transformGrades', () => {
             current_period_computed_current_grade: 'B-',
             computed_current_score: 89,
             computed_current_grade: 'B+',
-            type: 'student'
-          }
-        ]
-      }
+            type: 'student',
+          },
+        ],
+      },
     ]
 
     const courseGrades = transformGrades(courseWithTotals)
@@ -263,12 +278,12 @@ describe('transformGrades', () => {
         gradingPeriods: [
           {
             id: '1',
-            title: 'The first one'
+            title: 'The first one',
           },
           {
             id: '2',
-            title: 'The second one'
-          }
+            title: 'The second one',
+          },
         ],
         hasGradingPeriods: true,
         score: 80,
@@ -286,10 +301,10 @@ describe('transformGrades', () => {
             current_period_computed_current_grade: 'B-',
             computed_current_score: 89,
             computed_current_grade: 'B+',
-            type: 'student'
-          }
-        ]
-      }
+            type: 'student',
+          },
+        ],
+      },
     ])
   })
 })
@@ -299,10 +314,10 @@ describe('fetchGradesForGradingPeriod', () => {
     course_id: '1',
     grades: {
       current_score: 76,
-      current_grade: 'C'
+      current_grade: 'C',
     },
     role: 'StudentEnrollment',
-    root_account_id: '1'
+    root_account_id: '1',
   }
 
   it('translates grading period grades to just the ones we care about', async () => {
@@ -312,8 +327,8 @@ describe('fetchGradesForGradingPeriod', () => {
       {
         courseId: '1',
         score: 76,
-        grade: 'C'
-      }
+        grade: 'C',
+      },
     ])
   })
 
@@ -324,8 +339,8 @@ describe('fetchGradesForGradingPeriod', () => {
       {
         courseId: '1',
         score: undefined,
-        grade: undefined
-      }
+        grade: undefined,
+      },
     ])
   })
 })
@@ -336,11 +351,11 @@ describe('fetchCourseApps', () => {
       APPS_URL,
       JSON.stringify([
         {
-          id: 1
+          id: 1,
         },
         {
-          id: 2
-        }
+          id: 2,
+        },
       ])
     )
     const apps = await fetchCourseApps(['test'])
@@ -377,8 +392,8 @@ describe('getAssignmentGroupTotals', () => {
               grade: '7.0',
               late: false,
               excused: false,
-              missing: false
-            }
+              missing: false,
+            },
           },
           {
             id: 150,
@@ -390,17 +405,61 @@ describe('getAssignmentGroupTotals', () => {
               grade: '5.0',
               late: false,
               excused: false,
-              missing: false
-            }
-          }
-        ]
-      }
+              missing: false,
+            },
+          },
+        ],
+      },
     ]
     const totals = getAssignmentGroupTotals(data)
     expect(totals.length).toBe(1)
     expect(totals[0].id).toBe('49')
     expect(totals[0].name).toBe('Assignments')
     expect(totals[0].score).toBe('80.00%')
+  })
+
+  it('returns an array of objects that have id, name, and letter grade as score when Restrict Quantitative Data', () => {
+    const data = [
+      {
+        id: '49',
+        name: 'Assignments',
+        rules: {},
+        group_weight: 0.0,
+        assignments: [
+          {
+            id: 149,
+            name: '1',
+            points_possible: 10.0,
+            grading_type: 'points',
+            submission: {
+              score: 7.0,
+              grade: '7.0',
+              late: false,
+              excused: false,
+              missing: false,
+            },
+          },
+          {
+            id: 150,
+            name: '2',
+            points_possible: 5.0,
+            grading_type: 'points',
+            submission: {
+              score: 5.0,
+              grade: '5.0',
+              late: false,
+              excused: false,
+              missing: false,
+            },
+          },
+        ],
+      },
+    ]
+    const totals = getAssignmentGroupTotals(data, null, null, true, DEFAULT_GRADING_SCHEME)
+    expect(totals.length).toBe(1)
+    expect(totals[0].id).toBe('49')
+    expect(totals[0].name).toBe('Assignments')
+    expect(totals[0].score).toBe('B-')
   })
 
   it('returns n/a for assignment groups with no assignments', () => {
@@ -410,8 +469,8 @@ describe('getAssignmentGroupTotals', () => {
         name: 'Assignments',
         rules: {},
         group_weight: 0.0,
-        assignments: []
-      }
+        assignments: [],
+      },
     ]
     const totals = getAssignmentGroupTotals(data)
     expect(totals[0].score).toBe('n/a')
@@ -433,10 +492,10 @@ describe('getAssignmentGroupTotals', () => {
             submission: {
               score: 7.0,
               grade: '7.0',
-              grading_period_id: 1
-            }
-          }
-        ]
+              grading_period_id: 1,
+            },
+          },
+        ],
       },
       {
         id: '55',
@@ -452,11 +511,11 @@ describe('getAssignmentGroupTotals', () => {
             submission: {
               score: 7.0,
               grade: '7.0',
-              grading_period_id: 2
-            }
-          }
-        ]
-      }
+              grading_period_id: 2,
+            },
+          },
+        ],
+      },
     ]
     const totals = getAssignmentGroupTotals(data, 1)
     expect(totals.length).toBe(1)
@@ -477,9 +536,9 @@ describe('getAssignmentGrades', () => {
             html_url: 'http://localhost/1',
             due_at: null,
             points_possible: 10.0,
-            grading_type: 'points'
-          }
-        ]
+            grading_type: 'points',
+          },
+        ],
       },
       {
         id: '50',
@@ -491,10 +550,10 @@ describe('getAssignmentGrades', () => {
             html_url: 'http://localhost/2',
             due_at: '2020-04-18T05:59:59Z',
             points_possible: 10.0,
-            grading_type: 'points'
-          }
-        ]
-      }
+            grading_type: 'points',
+          },
+        ],
+      },
     ]
     const totals = getAssignmentGrades(data)
     expect(totals.length).toBe(2)
@@ -514,11 +573,11 @@ describe('getAssignmentGrades', () => {
             points_possible: 10.0,
             grading_type: 'points',
             submission: {
-              read_state: 'unread'
-            }
-          }
-        ]
-      }
+              read_state: 'unread',
+            },
+          },
+        ],
+      },
     ]
     const totals = getAssignmentGrades(data)
     expect(totals[0].unread).toBeTruthy()
@@ -534,22 +593,22 @@ describe('getAssignmentGrades', () => {
             submission: {
               submission_comments: [
                 {
-                  id: 1
-                }
-              ]
-            }
+                  id: 1,
+                },
+              ],
+            },
           },
           {
             id: 150,
             submission: {
-              submission_comments: []
-            }
+              submission_comments: [],
+            },
           },
           {
-            id: 151
-          }
-        ]
-      }
+            id: 151,
+          },
+        ],
+      },
     ]
     const totals = getAssignmentGrades(data)
     expect(totals.find(({id}) => id === 149).hasComments).toBe(true)
@@ -565,11 +624,42 @@ describe('getTotalGradeStringFromEnrollments', () => {
         user_id: '2',
         grades: {
           current_score: null,
-          current_grade: null
-        }
-      }
+          current_grade: null,
+        },
+      },
     ]
     expect(getTotalGradeStringFromEnrollments(enrollments, '2')).toBe('n/a')
+  })
+
+  it('returns just the B Letter Grade if Restrict Quantitative Data is true', () => {
+    const enrollments = [
+      {
+        user_id: '2',
+        grades: {
+          current_score: 84,
+          current_grade: null,
+        },
+      },
+    ]
+    expect(
+      getTotalGradeStringFromEnrollments(enrollments, '2', false, true, DEFAULT_GRADING_SCHEME)
+    ).toBe('B')
+  })
+
+  it('returns just the F Letter Grade if Restrict Quantitative Data is true', () => {
+    const enrollments = [
+      {
+        user_id: '2',
+        grades: {
+          current_score: 0,
+          current_grade: null,
+        },
+      },
+    ]
+
+    expect(
+      getTotalGradeStringFromEnrollments(enrollments, '2', false, true, DEFAULT_GRADING_SCHEME)
+    ).toBe('F')
   })
 
   it("returns just the percent with 2 decimals if there's no grade", () => {
@@ -578,10 +668,11 @@ describe('getTotalGradeStringFromEnrollments', () => {
         user_id: '2',
         grades: {
           current_score: 84,
-          current_grade: null
-        }
-      }
+          current_grade: null,
+        },
+      },
     ]
+
     expect(getTotalGradeStringFromEnrollments(enrollments, '2')).toBe('84.00%')
   })
 
@@ -591,9 +682,9 @@ describe('getTotalGradeStringFromEnrollments', () => {
         user_id: '2',
         grades: {
           current_score: 87.34,
-          current_grade: 'B+'
-        }
-      }
+          current_grade: 'B+',
+        },
+      },
     ]
     expect(getTotalGradeStringFromEnrollments(enrollments, '2')).toBe('87.34% (B+)')
   })
@@ -603,21 +694,21 @@ describe('getTotalGradeStringFromEnrollments', () => {
       {
         user_id: '1',
         grades: {
-          current_score: 1
-        }
+          current_score: 1,
+        },
       },
       {
         user_id: '2',
         grades: {
-          current_score: 2
-        }
+          current_score: 2,
+        },
       },
       {
         user_id: '3',
         grades: {
-          current_score: 3
-        }
-      }
+          current_score: 3,
+        },
+      },
     ]
     expect(getTotalGradeStringFromEnrollments(enrollments, '2')).toBe('2.00%')
   })
@@ -631,13 +722,13 @@ describe('fetchImportantInfos', () => {
       {
         id: '32',
         shortName: 'Course 1',
-        canManage: true
+        canManage: true,
       },
       {
         id: '35',
         shortName: 'Course 2',
-        canManage: false
-      }
+        canManage: false,
+      },
     ])
 
     expect(response[0].courseId).toBe('32')
@@ -657,8 +748,8 @@ describe('fetchImportantInfos', () => {
       {
         id: '32',
         shortName: 'Course 1',
-        canManage: true
-      }
+        canManage: true,
+      },
     ])
     expect(response.length).toBe(0)
   })
@@ -671,17 +762,17 @@ describe('parseAnnouncementDetails', () => {
     html_url: 'http://localhost:3000/courses/78/discussion_topics/72',
     id: '72',
     permissions: {
-      update: true
+      update: true,
     },
     attachments: [
       {
         id: '409',
         display_name: 'File.pdf',
         filename: 'file12.pdf',
-        url: 'http://localhost:3000/files/longpath'
-      }
+        url: 'http://localhost:3000/files/longpath',
+      },
     ],
-    posted_at: '2021-05-14T17:06:21-06:00'
+    posted_at: '2021-05-14T17:06:21-06:00',
   }
 
   const course = {
@@ -689,7 +780,7 @@ describe('parseAnnouncementDetails', () => {
     shortName: 'Reading',
     href: 'http://localhost:3000/courses/78',
     canManage: false,
-    published: true
+    published: true,
   }
 
   it('filters and renames attributes in received object', () => {
@@ -733,30 +824,30 @@ describe('groupAnnouncementsByHomeroom', () => {
   const announcements = [
     {
       id: '10',
-      context_code: 'course_1'
+      context_code: 'course_1',
     },
     {
       id: '11',
       context_code: 'course_2',
       permissions: {
-        update: false
+        update: false,
       },
-      attachments: []
+      attachments: [],
     },
     {
       id: '12',
-      context_code: 'course_3'
-    }
+      context_code: 'course_3',
+    },
   ]
   const courses = [
     {
       id: '1',
-      isHomeroom: false
+      isHomeroom: false,
     },
     {
       id: '2',
-      isHomeroom: true
-    }
+      isHomeroom: true,
+    },
   ]
 
   it('groups returned announcements by whether they are associated with a homeroom or not', () => {
@@ -783,7 +874,7 @@ describe('groupAnnouncementsByHomeroom', () => {
     const emptyGroups = {true: [], false: []}
     expect(groupAnnouncementsByHomeroom([], courses)).toEqual({
       true: [{courseId: '2'}],
-      false: []
+      false: [],
     })
     expect(groupAnnouncementsByHomeroom(announcements, [])).toEqual(emptyGroups)
     expect(groupAnnouncementsByHomeroom()).toEqual(emptyGroups)

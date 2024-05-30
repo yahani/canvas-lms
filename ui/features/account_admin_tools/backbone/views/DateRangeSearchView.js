@@ -18,7 +18,7 @@
 import Backbone from '@canvas/backbone'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import template from '../../jst/dateRangeSearch.handlebars'
-import '@canvas/datetime'
+import '@canvas/datetime/jquery'
 
 const I18n = useI18nScope('user_date_range_search')
 
@@ -46,8 +46,8 @@ export default class DateRangeSearchView extends Backbone.View {
       errors.end_time = [
         {
           type: 'invalid',
-          message: I18n.t('cant_come_before_from', "'To Date' can't come before 'From Date'")
-        }
+          message: I18n.t('cant_come_before_from', "'To Date' can't come before 'From Date'"),
+        },
       ]
     }
     return errors

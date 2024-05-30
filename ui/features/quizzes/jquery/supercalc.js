@@ -19,17 +19,17 @@
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import calcCmd from './calcCmd'
-import htmlEscape from 'html-escape'
-import '@canvas/jquery/jquery.instructure_misc_helpers'/* /\$\.raw/ */
-import '@canvas/jquery/jquery.instructure_misc_plugins'/* showIf */
+import htmlEscape from '@instructure/html-escape'
+import '@canvas/jquery/jquery.instructure_misc_helpers' /* /\$\.raw/ */
+import '@canvas/jquery/jquery.instructure_misc_plugins' /* showIf */
 import 'jqueryui/sortable'
 
 const I18n = useI18nScope('calculator')
 
-const generateFinds = function($table) {
+const generateFinds = function ($table) {
   const finds = {}
   finds.formula_rows = $table.find('.formula_row')
-  finds.formula_rows.each(function(i) {
+  finds.formula_rows.each(function (_i) {
     this.formula = $(this).find('.formula')
     this.status = $(this).find('.status')
     $(this).data('formula', $(this).find('.formula'))
@@ -40,14 +40,14 @@ const generateFinds = function($table) {
   finds.last_row_details = $table.find('.last_row_details')
   return finds
 }
-$.fn.superCalc = function(options, more_options) {
-  if (options == 'recalculate') {
+$.fn.superCalc = function (options, more_options) {
+  if (options === 'recalculate') {
     $(this).triggerHandler('calculate', more_options)
-  } else if (options == 'clear') {
+  } else if (options === 'clear') {
     calcCmd.clearMemory()
-  } else if (options == 'cache_finds') {
+  } else if (options === 'cache_finds') {
     $(this).data('cached_finds', generateFinds($(this).data('table')))
-  } else if (options == 'clear_cached_finds') {
+  } else if (options === 'clear_cached_finds') {
     $(this).data('cached_finds', null)
   } else {
     options = options || {}
@@ -98,26 +98,24 @@ $.fn.superCalc = function(options, more_options) {
     $table.find('tfoot tr:last td:first').append($input.hide())
     $entryBox.data('supercalc_options', options)
     $entryBox.data('supercalc_answer', $input)
-    $table.delegate('.save_formula_button', 'click', () => {
+    $table.on('click', '.save_formula_button', () => {
       $displayBox.triggerHandler('keypress', true)
     })
-    $table.delegate('.delete_formula_row_link', 'click', event => {
+    $table.on('click', '.delete_formula_row_link', event => {
       event.preventDefault()
-      $(event.target)
-        .parents('tr')
-        .remove()
+      $(event.target).parents('tr').remove()
       $entryBox.triggerHandler('calculate')
     })
     $table.find('tbody').sortable({
       items: '.formula_row',
       update() {
         $entryBox.triggerHandler('calculate')
-      }
+      },
     })
-    $table.delegate('.round', 'change', () => {
+    $table.on('change', '.round', () => {
       $entryBox.triggerHandler('calculate')
     })
-    $entryBox.bind('calculate', function(event, no_dom) {
+    $entryBox.bind('calculate', function (event, no_dom) {
       calcCmd.clearMemory()
       const finds = $(this).data('cached_finds') || generateFinds($table)
       if (options.pre_process && $.isFunction(options.pre_process)) {
@@ -128,21 +126,27 @@ $.fn.superCalc = function(options, more_options) {
           }
           try {
             calcCmd.compute(lines[idx])
-          } catch (e) {}
+          } catch (e) {
+            // no-op
+          }
         }
       }
-      finds.formula_rows.each(function() {
+      finds.formula_rows.each(function () {
         const formula_text = this.formula.html()
         $entryBox.val(formula_text)
         let res = null
         try {
           const val = calcCmd.computeValue(formula_text)
-          const decimals = finds.round.val() || 0
+          // we'll round using decimals but because of javascript imprecision
+          // let's truncate with 2 extra decimals
+          const decimals = parseInt(finds.round.val() || 0, 10)
+          const preresult = val.toFixed(decimals + 2)
+          // then replace the last decimal with number 1
           res =
             '= ' +
-            I18n.n(parseFloat(val.toFixed(decimals + 1)).toFixed(decimals), {
+            I18n.n(parseFloat(preresult.substr(0, preresult.length - 1) + '1').toFixed(decimals), {
               precision: 5,
-              strip_insignificant_zeros: true
+              strip_insignificant_zeros: true,
             })
         } catch (e) {
           res = e.toString()
@@ -154,10 +158,7 @@ $.fn.superCalc = function(options, more_options) {
       })
       if (!no_dom) {
         if (finds.formula_rows.length > 1) {
-          finds.formula_rows
-            .removeClass('last_row')
-            .filter(':last')
-            .addClass('last_row')
+          finds.formula_rows.removeClass('last_row').filter(':last').addClass('last_row')
         }
         finds.last_row_details.showIf(finds.formula_rows.length > 1)
         finds.status
@@ -175,7 +176,7 @@ $.fn.superCalc = function(options, more_options) {
     })
     $displayBox.bind('keypress', (event, enter) => {
       $entryBox.val($displayBox.val())
-      if (event.keyCode == 13 || (enter && $displayBox.val())) {
+      if (event.keyCode === 13 || (enter && $displayBox.val())) {
         event.preventDefault()
         event.stopPropagation()
         const $tr = $(

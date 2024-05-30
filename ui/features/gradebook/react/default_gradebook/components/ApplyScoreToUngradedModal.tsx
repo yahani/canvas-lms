@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -55,7 +56,7 @@ type Props = {
   open: boolean
 }
 
-const ApplyScoreToUngradedModal: React.FC<Props> = ({assignmentGroup, onApply, onClose, open}) => {
+const ApplyScoreToUngradedModal = ({assignmentGroup, onApply, onClose, open}: Props) => {
   const [markAsMissing, setMarkAsMissing] = useState(false)
   const [artifactScope, setArtifactScope] = useState(APPLY_TO_PAST_DUE)
   const [percent, setPercent] = useState('')
@@ -79,7 +80,7 @@ const ApplyScoreToUngradedModal: React.FC<Props> = ({assignmentGroup, onApply, o
       assignmentGroupId: assignmentGroup?.id,
       markAsMissing,
       onlyPastDue: artifactScope === APPLY_TO_PAST_DUE,
-      value: percent.toUpperCase() === 'EX' ? ('excused' as const) : parsedValue
+      value: percent.toUpperCase() === 'EX' ? ('excused' as const) : parsedValue,
     }
 
     onApply(args)
@@ -88,9 +89,13 @@ const ApplyScoreToUngradedModal: React.FC<Props> = ({assignmentGroup, onApply, o
   return (
     <Modal label={I18n.t('Apply Score to Ungraded')} open={open} size="small">
       <Modal.Header>
-        <CloseButton placement="end" offset="medium" variant="icon" onClick={onClose}>
-          {I18n.t('Close')}
-        </CloseButton>
+        <CloseButton
+          placement="end"
+          offset="medium"
+          color="primary"
+          onClick={onClose}
+          screenReaderLabel={I18n.t('Close')}
+        />
         <Heading>{I18n.t('Apply Score to Ungraded')}</Heading>
       </Modal.Header>
       <Modal.Body>
@@ -120,7 +125,7 @@ const ApplyScoreToUngradedModal: React.FC<Props> = ({assignmentGroup, onApply, o
         <RadioInputGroup
           description={I18n.t('Apply to:')}
           name="artifactScope"
-          onChange={(_event: Event, value: string) => {
+          onChange={(_event, value) => {
             setArtifactScope(value)
           }}
           value={artifactScope}
@@ -139,7 +144,7 @@ const ApplyScoreToUngradedModal: React.FC<Props> = ({assignmentGroup, onApply, o
         <Button
           interaction={isCurrentInputValid ? 'enabled' : 'disabled'}
           onClick={handleApply}
-          variant="primary"
+          color="primary"
         >
           {I18n.t('Apply Score')}
         </Button>
@@ -152,9 +157,9 @@ export default ApplyScoreToUngradedModal
 ApplyScoreToUngradedModal.propTypes = {
   assignmentGroup: shape({
     id: string.isRequired,
-    name: string.isRequired
+    name: string.isRequired,
   }),
   onApply: func.isRequired,
   onClose: func.isRequired,
-  open: bool.isRequired
+  open: bool.isRequired,
 }

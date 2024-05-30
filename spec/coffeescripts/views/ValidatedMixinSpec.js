@@ -17,7 +17,8 @@
  */
 
 import $ from 'jquery'
-import ValidatedMixin from '@canvas/forms/backbone/views/ValidatedMixin.coffee'
+import 'jquery-migrate'
+import ValidatedMixin from '@canvas/forms/backbone/views/ValidatedMixin'
 import RichContentEditor from '@canvas/rce/RichContentEditor'
 
 let textarea = null
@@ -31,7 +32,7 @@ QUnit.module('ValidatedMixin', {
   teardown() {
     textarea.remove()
     $('#fixtures').empty()
-  }
+  },
 })
 
 test('it can find tinymce instances as fields', assert => {
@@ -41,7 +42,7 @@ test('it can find tinymce instances as fields', assert => {
     // eslint-disable-next-line promise/catch-or-return
     tinymce
       .init({
-        selector: '#fixtures textarea#a42'
+        selector: '#fixtures textarea#a42',
       })
       .then(() => {
         const element = ValidatedMixin.findField('message')

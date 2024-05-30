@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -19,15 +20,15 @@
 import React, {useEffect, useRef, useState} from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
 
-import {ApplyTheme} from '@instructure/ui-themeable'
-import {Button} from '@instructure/ui-buttons'
+import {InstUISettingsProvider} from '@instructure/emotion'
+import {IconButton} from '@instructure/ui-buttons'
 import {Flex} from '@instructure/ui-flex'
 import {Heading} from '@instructure/ui-heading'
 import {
   IconMiniArrowDownLine,
-  IconMiniArrowRightLine,
-  IconWarningLine,
-  IconInfoLine
+  IconMiniArrowEndLine,
+  IconWarningBorderlessLine,
+  IconInfoLine,
 } from '@instructure/ui-icons'
 import {Table} from '@instructure/ui-table'
 import {ToggleDetails} from '@instructure/ui-toggle-details'
@@ -36,17 +37,30 @@ import {View} from '@instructure/ui-view'
 
 import AssignmentRow from './assignment_row'
 import BlackoutDateRow from './blackout_date_row'
-import {ModuleWithDueDates, CoursePace, ResponsiveSizes} from '../../types'
+import {ModuleWithDueDates, ResponsiveSizes} from '../../types'
 
 const I18n = useI18nScope('course_paces_module')
 
-// Doing this to avoid TS2339 errors-- remove once we're on InstUI 8
-const {Body, ColHeader, Head, Row} = Table as any
+const componentOverrides = {
+  Button: {
+    borderRadius: '0',
+    mediumPaddingTop: '1rem',
+    mediumPaddingBottom: '1rem',
+  },
+  'Table.ColHeader': {
+    padding: '0',
+  },
+  ToggleDetails: {
+    iconMargin: '0.5rem',
+    filledBorderRadius: '0',
+    filledPadding: '2rem',
+    togglePadding: '0',
+  },
+}
 
-interface PassedProps {
+type PassedProps = {
   readonly index: number
   readonly module: ModuleWithDueDates
-  readonly coursePace: CoursePace
   readonly responsiveSize: ResponsiveSizes
   readonly showProjections: boolean
   readonly compression: number
@@ -54,11 +68,10 @@ interface PassedProps {
 
 type ComponentProps = PassedProps
 
-export const Module: React.FC<ComponentProps> = props => {
+export const Module = (props: ComponentProps) => {
   const [actuallyExpanded, setActuallyExpanded] = useState(props.showProjections)
   const [datesVisible, setDatesVisible] = useState(props.showProjections)
   const wasExpanded = useRef(props.showProjections)
-  const isStudentPace = props.coursePace.context_type === 'Enrollment'
   const isTableStacked = props.responsiveSize === 'small'
 
   useEffect(() => {
@@ -83,48 +96,61 @@ export const Module: React.FC<ComponentProps> = props => {
     )
   }
 
+  const compressionTipText = I18n.t(
+    'Due Dates are being compressed based on your start and end dates'
+  )
+  const timezoneTipText = I18n.t('Dates shown in Course Time Zone')
+  const daysTipText = I18n.t('Changing course pacing days may modify due dates')
+  const tipEvents = ['click', 'hover', 'focus']
+
   const renderDateColHeader = () => {
     if (!props.showProjections && !actuallyExpanded && !datesVisible) return null
     return (
-      <ColHeader width={actuallyExpanded ? 'auto' : '0'} id={`module-${props.module.id}-duration`}>
+      <Table.ColHeader
+        data-testid="pp-due-date-columnheader"
+        width={actuallyExpanded ? 'auto' : '0'}
+        id={`module-${props.module.id}-duration`}
+      >
         <Flex
           as="div"
           aria-labelledby="due-date-column-title"
-          alignItems="end"
+          alignItems="center"
           justifyItems="center"
           padding={headerPadding}
         >
-          <View id="due-date-column-title">{I18n.t('Due Date')}</View>
           {props.compression > 0 && (
-            <Tooltip
-              renderTip={I18n.t(
-                'Due Dates are being compressed based on your start and end dates.'
-              )}
-              placement="top"
-              on={['click', 'hover', 'focus']}
-            >
-              <View
-                data-testid="duedate-tooltip"
-                as="div"
-                margin="0 0 0 x-small"
-                tabIndex="0"
-                role="button"
+            <Tooltip renderTip={compressionTipText} placement="top" on={tipEvents}>
+              <IconButton
+                withBorder={false}
+                withBackground={false}
+                size="small"
+                screenReaderLabel={I18n.t('Toggle due date compression tooltip')}
               >
-                <IconWarningLine color="error" title={I18n.t('warning')} />
-              </View>
+                <IconWarningBorderlessLine color="error" title={I18n.t('warning')} />
+              </IconButton>
             </Tooltip>
           )}
+          <View id="due-date-column-title" as="span">
+            {I18n.t('Due Date')}
+          </View>
+          <Tooltip renderTip={timezoneTipText} placement="top" on={tipEvents}>
+            <IconButton
+              withBorder={false}
+              withBackground={false}
+              size="small"
+              screenReaderLabel={I18n.t('Toggle tooltip')}
+            >
+              <IconInfoLine />
+            </IconButton>
+          </Tooltip>
         </Flex>
-      </ColHeader>
+      </Table.ColHeader>
     )
   }
 
   const renderAssignmentRow = item => {
-    // Scoping the key this way guarantees a new AssignmentRow is rendered when date that impacts it changes
-    // This is necessary because the AssignmentRow maintains the duration in local state,
-    // and applying updates with componentWillReceiveProps makes it buggy (because the Redux updates can be slow, causing changes to
-    // get reverted as you type).
-    const key = `${props.module.moduleKey}-${item.id}|${item.module_item_id}|${props.compression}|${props.coursePace.updated_at}`
+    // Scoping the key this way keeps a single reference on the table, regardless of whether the pace exists or not
+    const key = `assignment-row-${item.module_item_id}`
     return (
       <AssignmentRow
         key={key}
@@ -162,87 +188,70 @@ export const Module: React.FC<ComponentProps> = props => {
       className={`course-paces-module-table ${actuallyExpanded ? 'actually-expanded' : ''}`}
       margin="0 0 medium"
     >
-      <ApplyTheme
-        theme={{
-          [(Button as any).theme]: {
-            borderRadius: '0',
-            mediumPaddingTop: '1rem',
-            mediumPaddingBottom: '1rem'
-          },
-          [(ColHeader as any).theme]: {
-            padding: '0'
-          }
-        }}
-      >
+      <InstUISettingsProvider theme={{componentOverrides}}>
         <ToggleDetails
           summary={renderModuleHeader()}
-          icon={() => <IconMiniArrowRightLine />}
+          icon={() => <IconMiniArrowEndLine />}
           iconExpanded={() => <IconMiniArrowDownLine />}
           variant="filled"
-          defaultExpanded
+          defaultExpanded={true}
           size="large"
-          theme={{
-            iconMargin: '0.5rem',
-            filledBorderRadius: '0',
-            filledPadding: '2rem',
-            togglePadding: '0'
-          }}
         >
           <View as="div" borderWidth="0 small">
             <Table
               caption={`${props.index}. ${props.module.name}`}
               layout={isTableStacked ? 'stacked' : 'auto'}
             >
-              <Head>
-                <Row>
-                  <ColHeader id={`module-${props.module.id}-assignments`} width="100%">
+              <Table.Head>
+                <Table.Row>
+                  <Table.ColHeader id={`module-${props.module.id}-assignments`} width="100%">
                     <View as="div" padding={headerPadding}>
                       {I18n.t('Item')}
                     </View>
-                  </ColHeader>
-                  <ColHeader
+                  </Table.ColHeader>
+                  <Table.ColHeader
                     id={`module-${props.module.id}-days`}
                     data-testid="pp-duration-columnheader"
                   >
                     <Flex
                       as="div"
                       aria-labelledby="days-column-title"
-                      alignItems="end"
-                      justifyItems={isStudentPace ? 'center' : 'start'}
+                      alignItems="center"
+                      justifyItems="center"
                       padding={headerPadding}
-                      margin={`0 0 0 ${isStudentPace || isTableStacked ? '0' : 'xx-small'}`}
                     >
-                      <View id="days-column-title">{I18n.t('Days')}</View>
-                      <Tooltip
-                        renderTip={I18n.t('Changing course pacing days may modify due dates.')}
-                        placement="top"
-                        on={['click', 'hover', 'focus']}
-                      >
-                        <View
-                          data-testid="days-tooltip"
-                          as="div"
-                          margin="0 0 0 x-small"
-                          tabIndex="0"
-                          role="button"
+                      <View id="days-column-title" as="span">
+                        {I18n.t('Days')}
+                      </View>
+                      <Tooltip renderTip={daysTipText} placement="top" on={tipEvents}>
+                        <IconButton
+                          withBorder={false}
+                          withBackground={false}
+                          size="small"
+                          screenReaderLabel={I18n.t('Toggle tooltip')}
                         >
-                          <IconInfoLine color="brand" title={I18n.t('info')} />
-                        </View>
+                          <IconInfoLine />
+                        </IconButton>
                       </Tooltip>
                     </Flex>
-                  </ColHeader>
+                  </Table.ColHeader>
                   {renderDateColHeader()}
-                  <ColHeader id={`module-${props.module.id}-status`} textAlign="center">
+                  <Table.ColHeader
+                    data-testid="pp-status-columnheader"
+                    id={`module-${props.module.id}-status`}
+                    textAlign="center"
+                  >
                     <Flex as="div" alignItems="end" justifyItems="center" padding={headerPadding}>
                       {I18n.t('Status')}
                     </Flex>
-                  </ColHeader>
-                </Row>
-              </Head>
-              <Body>{renderRows()}</Body>
+                  </Table.ColHeader>
+                </Table.Row>
+              </Table.Head>
+              <Table.Body>{renderRows()}</Table.Body>
             </Table>
           </View>
         </ToggleDetails>
-      </ApplyTheme>
+      </InstUISettingsProvider>
     </View>
   )
 }

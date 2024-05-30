@@ -64,6 +64,7 @@ export const CREATE_CONVERSATION = gql`
   mutation CreateConversation(
     $attachmentIds: [ID!]
     $body: String!
+    $bulkMessage: Boolean
     $contextCode: String
     $conversationId: ID
     $groupConversation: Boolean
@@ -78,6 +79,7 @@ export const CREATE_CONVERSATION = gql`
       input: {
         attachmentIds: $attachmentIds
         body: $body
+        bulkMessage: $bulkMessage
         contextCode: $contextCode
         conversationId: $conversationId
         groupConversation: $groupConversation
@@ -166,4 +168,41 @@ export const CREATE_SUBMISSION_COMMENT = gql`
   }
   ${Error.fragment}
   ${SubmissionComment.fragment}
+`
+
+export const UPDATE_SUBMISSIONS_READ_STATE = gql`
+  mutation UpdateSubmissionsReadState($submissionIds: [ID!]!, $read: Boolean!) {
+    updateSubmissionsReadState(input: {submissionIds: $submissionIds, read: $read}) {
+      submissions {
+        _id
+        readState
+      }
+      errors {
+        ...Error
+      }
+    }
+  }
+  ${Error.fragment}
+`
+
+export const CREATE_USER_INBOX_LABEL = gql`
+  mutation CreateUserInboxLabel($names: [String!]!) {
+    createUserInboxLabel(input: {names: $names}) {
+      errors {
+        message
+      }
+      inboxLabels
+    }
+  }
+`
+
+export const DELETE_USER_INBOX_LABEL = gql`
+  mutation DeleteUserInboxLabel($names: [String!]!) {
+    deleteUserInboxLabel(input: {names: $names}) {
+      errors {
+        message
+      }
+      inboxLabels
+    }
+  }
 `

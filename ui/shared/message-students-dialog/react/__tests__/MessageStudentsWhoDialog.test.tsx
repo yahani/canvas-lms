@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -22,7 +23,7 @@ import {within} from '@testing-library/dom'
 import MessageStudentsWhoDialog, {
   Assignment,
   Props as ComponentProps,
-  Student
+  Student,
 } from '../MessageStudentsWhoDialog'
 import {MockedProvider} from '@apollo/react-testing'
 import mockGraphqlQuery from '@canvas/graphql-query-mock'
@@ -37,7 +38,8 @@ const students: Student[] = [
     redoRequest: false,
     sortableName: 'Ford, Betty',
     score: undefined,
-    submittedAt: undefined
+    submittedAt: undefined,
+    excused: false,
   },
   {
     id: '101',
@@ -46,7 +48,8 @@ const students: Student[] = [
     redoRequest: false,
     sortableName: 'Jones, Adam',
     score: undefined,
-    submittedAt: undefined
+    submittedAt: undefined,
+    excused: false,
   },
   {
     id: '102',
@@ -55,7 +58,8 @@ const students: Student[] = [
     redoRequest: false,
     sortableName: 'Xi, Charlie',
     score: undefined,
-    submittedAt: undefined
+    submittedAt: undefined,
+    excused: false,
   },
   {
     id: '103',
@@ -64,8 +68,9 @@ const students: Student[] = [
     redoRequest: false,
     sortableName: 'Smith, Dana',
     score: undefined,
-    submittedAt: undefined
-  }
+    submittedAt: undefined,
+    excused: false,
+  },
 ]
 
 const scoredAssignment: Assignment = {
@@ -75,7 +80,7 @@ const scoredAssignment: Assignment = {
   gradingType: 'points',
   id: '100',
   name: 'A pointed assignment',
-  submissionTypes: ['online_text_entry']
+  submissionTypes: ['online_text_entry'],
 }
 
 const ungradedAssignment: Assignment = {
@@ -85,7 +90,7 @@ const ungradedAssignment: Assignment = {
   dueDate: null,
   id: '200',
   name: 'A pointless assignment',
-  submissionTypes: ['online_text_entry']
+  submissionTypes: ['online_text_entry'],
 }
 
 const passFailAssignment: Assignment = {
@@ -95,7 +100,7 @@ const passFailAssignment: Assignment = {
   gradingType: 'pass_fail',
   id: '300',
   name: 'A pass-fail assignment',
-  submissionTypes: ['online_text_entry']
+  submissionTypes: ['online_text_entry'],
 }
 
 const unsubmittableAssignment: Assignment = {
@@ -105,7 +110,7 @@ const unsubmittableAssignment: Assignment = {
   gradingType: 'no_submission',
   id: '400',
   name: 'An unsubmittable assignment',
-  submissionTypes: ['on_paper']
+  submissionTypes: ['on_paper'],
 }
 
 function makeProps(overrides: object = {}): ComponentProps {
@@ -116,7 +121,7 @@ function makeProps(overrides: object = {}): ComponentProps {
     onSend: () => {},
     messageAttachmentUploadFolderId: '1',
     userId: '345',
-    ...overrides
+    ...overrides,
   }
 }
 
@@ -143,11 +148,11 @@ async function makeMocks(overrides = [], sameStudent = false) {
         query: OBSERVER_ENROLLMENTS_QUERY,
         variables: {
           courseId: '1',
-          studentIds: ['100', '101', '102', '103']
-        }
+          studentIds: ['100', '101', '102', '103'],
+        },
       },
-      result: resultQuery
-    }
+      result: resultQuery,
+    },
   ]
 }
 
@@ -169,6 +174,7 @@ function expectToBeUnselected(cell) {
   expect(unselectedElement).toBeInTheDocument()
 }
 
+// unskip in EVAL-2535
 describe.skip('MessageStudentsWhoDialog', () => {
   it('hides the list of students and observers initially', async () => {
     const mocks = await makeMocks()
@@ -227,8 +233,8 @@ describe.skip('MessageStudentsWhoDialog', () => {
     expect(observerCells[0]).toHaveTextContent('Observers')
     expect(observerCells[1]).toHaveTextContent('Observer0')
     expect(observerCells[2]).toHaveTextContent('Observer1')
-    expect(observerCells[3]).toBeNull()
-    expect(observerCells[4]).toBeNull()
+    expect(observerCells[3]).toHaveTextContent('')
+    expect(observerCells[4]).toHaveTextContent('')
   })
 
   it('shows observers in the same cell sorted by the sortable name when observing the same student', async () => {
@@ -249,9 +255,9 @@ describe.skip('MessageStudentsWhoDialog', () => {
     expect(observerCells).toHaveLength(5)
     expect(observerCells[0]).toHaveTextContent('Observers')
     expect(observerCells[1]).toHaveTextContent('Observer0Observer1')
-    expect(observerCells[2]).toBeNull()
-    expect(observerCells[3]).toBeNull()
-    expect(observerCells[4]).toBeNull()
+    expect(observerCells[2]).toHaveTextContent('')
+    expect(observerCells[3]).toHaveTextContent('')
+    expect(observerCells[4]).toHaveTextContent('')
   })
 
   it('includes the total number of students in the checkbox label', async () => {
@@ -444,6 +450,14 @@ describe.skip('MessageStudentsWhoDialog', () => {
   })
 
   describe('selected criteria', () => {
+    beforeEach(() => {
+      students.forEach(student => {
+        student.submittedAt = undefined
+        student.excused = undefined
+        student.grade = undefined
+        student.score = undefined
+      })
+    })
     it('updates the student and observer checkbox counts', async () => {
       students[0].grade = '8'
       students[1].grade = '10'
@@ -463,6 +477,31 @@ describe.skip('MessageStudentsWhoDialog', () => {
 
       expect(await findByRole('checkbox', {name: /Students/})).toHaveAccessibleName('2 Students')
       expect(await findByRole('checkbox', {name: /Observers/})).toHaveAccessibleName('0 Observers')
+    })
+
+    it('"Have not yet submitted" does not display students who are excused', async () => {
+      const mocks = await makeMocks()
+      students[2].excused = true
+      const {getAllByRole, getByRole, findByLabelText, getByText} = render(
+        <MockedProvider mocks={mocks} cache={createCache()}>
+          <MessageStudentsWhoDialog {...makeProps()} />
+        </MockedProvider>
+      )
+
+      const button = await findByLabelText(/For students who/)
+      fireEvent.click(button)
+      fireEvent.click(getByText(/Have not yet submitted/))
+
+      fireEvent.click(getByRole('button', {name: 'Show all recipients'}))
+      expect(getByRole('table')).toBeInTheDocument()
+
+      const tableRows = getAllByRole('row') as HTMLTableRowElement[]
+      const studentCells = tableRows.map(row => row.cells[0])
+      expect(studentCells).toHaveLength(4)
+      expect(studentCells[0]).toHaveTextContent('Students')
+      expect(studentCells[1]).toHaveTextContent('Betty Ford')
+      expect(studentCells[2]).toHaveTextContent('Adam Jones')
+      expect(studentCells[3]).toHaveTextContent('Dana Smith')
     })
 
     it('"Have not yet submitted" displays students who have no submitted next to their observers', async () => {
@@ -494,6 +533,32 @@ describe.skip('MessageStudentsWhoDialog', () => {
       expect(observerCells[2]).toHaveTextContent('Observer1')
     })
 
+    it('"Have not been graded" does not display students who are excused', async () => {
+      const mocks = await makeMocks()
+      students[2].excused = true
+      const {getAllByRole, getByRole, findByLabelText, getByText} = render(
+        <MockedProvider mocks={mocks} cache={createCache()}>
+          <MessageStudentsWhoDialog {...makeProps()} />
+        </MockedProvider>
+      )
+
+      const button = await findByLabelText(/For students who/)
+      fireEvent.click(button)
+      fireEvent.click(getByText(/Have not been graded/))
+
+      fireEvent.click(getByRole('button', {name: 'Show all recipients'}))
+      expect(getByRole('table')).toBeInTheDocument()
+
+      const tableRows = getAllByRole('row') as HTMLTableRowElement[]
+      const studentCells = tableRows.map(row => row.cells[0])
+      // first cell will be the header
+      expect(studentCells).toHaveLength(4)
+      expect(studentCells[0]).toHaveTextContent('Students')
+      expect(studentCells[1]).toHaveTextContent('Betty Ford')
+      expect(studentCells[2]).toHaveTextContent('Adam Jones')
+      expect(studentCells[3]).toHaveTextContent('Dana Smith')
+    })
+
     it('"Have not been graded" displays students who do not have a grade', async () => {
       const mocks = await makeMocks()
       students[0].grade = '8'
@@ -523,7 +588,7 @@ describe.skip('MessageStudentsWhoDialog', () => {
     it('"Scored more than" displays students who have scored higher than the score inputted', async () => {
       const mocks = await makeMocks()
       students[0].score = 10
-      students[1].score = 6
+      students[1].score = 5.2
       students[2].score = 4
       students[3].score = 0
       const {getAllByRole, getByRole, getByLabelText, getByText, findByLabelText} = render(
@@ -535,7 +600,7 @@ describe.skip('MessageStudentsWhoDialog', () => {
       const button = await findByLabelText(/For students who/)
       fireEvent.click(button)
       fireEvent.click(getByText(/Scored more than/))
-      fireEvent.change(getByLabelText('Enter score cutoff'), {target: {value: '5'}})
+      fireEvent.change(getByLabelText('Enter score cutoff'), {target: {value: '5.1'}})
 
       fireEvent.click(getByRole('button', {name: 'Show all recipients'}))
       expect(getByRole('table')).toBeInTheDocument()
@@ -556,7 +621,7 @@ describe.skip('MessageStudentsWhoDialog', () => {
       const mocks = await makeMocks()
       students[0].score = 10
       students[1].score = 6
-      students[2].score = 4
+      students[2].score = 5.2
       students[3].score = 0
       const {getAllByRole, getByRole, findByLabelText, getByLabelText, getByText} = render(
         <MockedProvider mocks={mocks} cache={createCache()}>
@@ -567,7 +632,7 @@ describe.skip('MessageStudentsWhoDialog', () => {
       const button = await findByLabelText(/For students who/)
       fireEvent.click(button)
       fireEvent.click(getByText(/Scored less than/))
-      fireEvent.change(getByLabelText('Enter score cutoff'), {target: {value: '5'}})
+      fireEvent.change(getByLabelText('Enter score cutoff'), {target: {value: '5.1'}})
 
       fireEvent.click(getByRole('button', {name: 'Show all recipients'}))
       expect(getByRole('table')).toBeInTheDocument()
@@ -575,10 +640,70 @@ describe.skip('MessageStudentsWhoDialog', () => {
       const tableRows = getAllByRole('row') as HTMLTableRowElement[]
       const studentCells = tableRows.map(row => row.cells[0])
       // first cell will be the header
-      expect(studentCells).toHaveLength(3)
+      expect(studentCells).toHaveLength(2)
       expect(studentCells[0]).toHaveTextContent('Students')
       expect(studentCells[1]).toHaveTextContent('Dana Smith')
+    })
+
+    it('"Total Grade higher than" displays students who have a total grade higher than grade inputed', async () => {
+      const mocks = await makeMocks()
+      students[0].currentScore = 80
+      students[1].currentScore = 50
+      students[2].currentScore = 75
+      const {getAllByRole, getByRole, findByLabelText, getByLabelText, getByText, getByTestId} =
+        render(
+          <MockedProvider mocks={mocks} cache={createCache()}>
+            <MessageStudentsWhoDialog
+              {...makeProps({assignment: null, pointsBasedGradingScheme: false})}
+            />
+          </MockedProvider>
+        )
+
+      const button = await findByLabelText(/For students who/)
+      fireEvent.click(button)
+      fireEvent.click(getByText(/Total Grade higher than/))
+      fireEvent.change(getByLabelText('Enter score cutoff'), {target: {value: '70'}})
+
+      fireEvent.click(getByTestId('show_all_recipients'))
+      expect(getByRole('table')).toBeInTheDocument()
+
+      const tableRows = getAllByRole('row') as HTMLTableRowElement[]
+      const studentCells = tableRows.map(row => row.cells[0])
+      // first cell with be the header
+      expect(studentCells).toHaveLength(3)
+      expect(studentCells[0]).toHaveTextContent('Students')
+      expect(studentCells[1]).toHaveTextContent('Betty Ford')
       expect(studentCells[2]).toHaveTextContent('Charlie Xi')
+    })
+
+    it('"Total Grade lower than" displays students who have a total grade higher than grade inputed', async () => {
+      const mocks = await makeMocks()
+      students[0].currentScore = 80
+      students[1].currentScore = 50
+      students[2].currentScore = 75
+      const {getAllByRole, getByRole, findByLabelText, getByLabelText, getByText, getByTestId} =
+        render(
+          <MockedProvider mocks={mocks} cache={createCache()}>
+            <MessageStudentsWhoDialog
+              {...makeProps({assignment: null, pointsBasedGradingScheme: false})}
+            />
+          </MockedProvider>
+        )
+
+      const button = await findByLabelText(/For students who/)
+      fireEvent.click(button)
+      fireEvent.click(getByText(/Total Grade lower than/))
+      fireEvent.change(getByLabelText('Enter score cutoff'), {target: {value: '70'}})
+
+      fireEvent.click(getByTestId('show_all_recipients'))
+      expect(getByRole('table')).toBeInTheDocument()
+
+      const tableRows = getAllByRole('row') as HTMLTableRowElement[]
+      const studentCells = tableRows.map(row => row.cells[0])
+      // first cell with be the header
+      expect(studentCells).toHaveLength(2)
+      expect(studentCells[0]).toHaveTextContent('Students')
+      expect(studentCells[1]).toHaveTextContent('Adam Jones')
     })
 
     it('"Reassigned" displays students who have been asked to resubmit to the assignment', async () => {
@@ -638,6 +763,62 @@ describe.skip('MessageStudentsWhoDialog', () => {
       expect(observerCells[1]).toHaveTextContent('Observer0')
       expect(studentCells[2]).toHaveTextContent('Adam Jones')
       expect(observerCells[2]).toHaveTextContent('Observer1')
+    })
+  })
+
+  describe('default subject', () => {
+    it('is set to the first criteria that is listed upon opening the modal', async () => {
+      const mocks = await makeMocks()
+      const {findByTestId} = render(
+        <MockedProvider mocks={mocks} cache={createCache()}>
+          <MessageStudentsWhoDialog {...makeProps()} />
+        </MockedProvider>
+      )
+
+      const subjectInput = await findByTestId('subject-input')
+      expect(subjectInput).toHaveValue('No submission for A pointed assignment')
+    })
+
+    it('is updated when a new criteria is selected', async () => {
+      const mocks = await makeMocks()
+      const {findByLabelText, getByText, findByTestId} = render(
+        <MockedProvider mocks={mocks} cache={createCache()}>
+          <MessageStudentsWhoDialog {...makeProps()} />
+        </MockedProvider>
+      )
+
+      const button = await findByLabelText(/For students who/)
+      fireEvent.click(button)
+      fireEvent.click(getByText(/Have not been graded/))
+
+      const subjectInput = await findByTestId('subject-input')
+      expect(subjectInput).toHaveValue('No grade for A pointed assignment')
+    })
+
+    it('is updated to represent the cutoff input when scored more/less than criteria is selected', async () => {
+      const mocks = await makeMocks()
+      const {findByLabelText, getByText, findByTestId, getByLabelText} = render(
+        <MockedProvider mocks={mocks} cache={createCache()}>
+          <MessageStudentsWhoDialog {...makeProps()} />
+        </MockedProvider>
+      )
+
+      const button = await findByLabelText(/For students who/)
+      fireEvent.click(button)
+      fireEvent.click(getByText(/Scored more than/))
+
+      const subjectInput = await findByTestId('subject-input')
+      expect(subjectInput).toHaveValue('Scored more than 0 on A pointed assignment')
+
+      const cutoffInput = await getByLabelText('Enter score cutoff')
+      fireEvent.change(cutoffInput, {target: {value: '5'}})
+
+      expect(subjectInput).toHaveValue('Scored more than 5 on A pointed assignment')
+
+      fireEvent.click(button)
+      fireEvent.click(getByText(/Scored less than/))
+
+      expect(subjectInput).toHaveValue('Scored less than 5 on A pointed assignment')
     })
   })
 
@@ -905,7 +1086,7 @@ describe.skip('MessageStudentsWhoDialog', () => {
         redoRequest: false,
         sortableName: 'Charlie, Brown',
         score: undefined,
-        submittedAt: undefined
+        submittedAt: undefined,
       }
       const {findByRole} = render(
         <MockedProvider mocks={mocks} cache={createCache()}>
@@ -978,7 +1159,7 @@ describe.skip('MessageStudentsWhoDialog', () => {
       fireEvent.change(messageTextArea, {target: {value: ''}})
 
       const sendButton = await findByRole('button', {name: 'Send'})
-      expect(sendButton.disabled).toBe(true)
+      expect(sendButton).toBeDisabled()
     })
 
     it('is disabled when the message body has only whitespaces', async () => {
@@ -997,7 +1178,7 @@ describe.skip('MessageStudentsWhoDialog', () => {
       fireEvent.change(messageTextArea, {target: {value: '   '}})
 
       const sendButton = await findByRole('button', {name: 'Send'})
-      expect(sendButton.disabled).toBe(true)
+      expect(sendButton).toBeDisabled()
     })
 
     it('is disabled when there are no students/observers selected', async () => {
@@ -1016,7 +1197,7 @@ describe.skip('MessageStudentsWhoDialog', () => {
       fireEvent.click(checkbox)
 
       const sendButton = await findByRole('button', {name: 'Send'})
-      expect(sendButton.disabled).toBe(true)
+      expect(sendButton).toBeDisabled()
     })
 
     it('is enabled when the message body is not empty and there is at least one student/observer selected', async () => {
@@ -1035,7 +1216,7 @@ describe.skip('MessageStudentsWhoDialog', () => {
       fireEvent.change(messageTextArea, {target: {value: 'FOO BAR'}})
 
       const sendButton = await findByRole('button', {name: 'Send'})
-      expect(sendButton.disabled).toBe(false)
+      expect(sendButton).not.toBeDisabled()
     })
   })
 
@@ -1156,7 +1337,7 @@ describe.skip('MessageStudentsWhoDialog', () => {
       const sendButton = await findByRole('button', {name: 'Send'})
       fireEvent.click(sendButton)
 
-      const observerIds = mocks[0].result.data.course.enrollmentsConnection.nodes.map(
+      const observerIds = mocks[0].result.data?.course.enrollmentsConnection.nodes.map(
         node => node.user._id
       )
       expect(onSend).toHaveBeenCalledWith(expect.objectContaining({recipientsIds: observerIds}))

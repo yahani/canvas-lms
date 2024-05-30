@@ -65,7 +65,7 @@ module CC
         elsif tool.url&.include?("https://")
           blti_node.blti :secure_launch_url, tool.url
         end
-        blti_node.blti(:icon, tool.settings[:icon_url]) if tool.settings[:icon_url]
+        blti_node.blti(:icon, tool.icon_url) if tool.icon_url
 
         blti_node.blti :vendor do |v_node|
           v_node.lticp :code, "unknown"
@@ -84,6 +84,7 @@ module CC
           ext_node.lticm(:property, tool.tool_id, "name" => "tool_id") if tool.tool_id
           ext_node.lticm :property, tool.workflow_state, "name" => "privacy_level"
           ext_node.lticm(:property, tool.domain, "name" => "domain") unless tool.domain.blank?
+          ext_node.lticm(:property, tool.lti_version, "name" => "lti_version")
 
           [:selection_width, :selection_height].each do |key|
             ext_node.lticm(:property, tool.settings[key], "name" => key) if tool.settings[key].present?

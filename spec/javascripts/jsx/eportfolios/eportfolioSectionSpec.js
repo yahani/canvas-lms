@@ -16,8 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import $ from 'jquery'
-import {fetchContent} from 'ui/features/eportfolio/jquery/eportfolio_section.js'
+import {fetchContent} from 'ui/features/eportfolio/jquery/eportfolio_section'
 import fixtures from 'helpers/fixtures'
 
 let $section = null
@@ -39,7 +38,7 @@ QUnit.module('EportfolioSection -> fetchContent', {
 
   teardown() {
     fixtures.teardown()
-  }
+  },
 })
 
 test('grabs section content for rich_text type', () => {

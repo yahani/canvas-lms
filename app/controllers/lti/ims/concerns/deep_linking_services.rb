@@ -19,9 +19,19 @@
 
 module Lti::IMS::Concerns
   module DeepLinkingServices
-    extend ActiveSupport::Concern
-
     CLAIM_PREFIX = "https://purl.imsglobal.org/spec/lti-dl/claim/"
+
+    def return_url_parameters
+      @return_url_parameters ||= return_url_data.data
+    end
+
+    def return_url_data
+      @return_url_data ||= Lti::DeepLinkingData.from_jwt(params[:data])
+    end
+
+    def validate_return_url_data
+      render_error({ errors: return_url_data.errors }) unless return_url_data.valid?
+    end
 
     def validate_jwt
       render_error(deep_linking_jwt.errors) and return unless deep_linking_jwt.valid?
@@ -32,6 +42,7 @@ module Lti::IMS::Concerns
     end
 
     def render_error(errors)
+      InstStatsd::Statsd.increment("canvas.deep_linking_controller.request_error", tags: { code: 400 })
       render json: errors, status: :bad_request
     end
 
@@ -53,6 +64,10 @@ module Lti::IMS::Concerns
 
     def lti_resource_links
       content_items.filter { |item| item[:type] == "ltiResourceLink" }
+    end
+
+    def for_placement?(placement)
+      return_url_parameters[:placement]&.to_sym == placement
     end
 
     class DeepLinkingJwt

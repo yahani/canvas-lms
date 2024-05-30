@@ -18,17 +18,18 @@
 
 import {createStore, applyMiddleware} from 'redux'
 import {composeWithDevTools} from 'redux-devtools-extension/developmentOnly'
-import thunkMiddleware from 'redux-thunk'
+import {thunk} from 'redux-thunk'
 import defaultReducers from '../reducers/reducers'
+// @ts-expect-error
+import {createLogger} from 'redux-logger'
 
 export default (reducers = defaultReducers) => {
-  const middlewares: any[] = [thunkMiddleware]
+  const middlewares: any[] = [thunk]
 
   if (process.env.NODE_ENV === `development`) {
-    const {createLogger} = require(`redux-logger`) // tslint:disable-line
     const logger = createLogger({
       diff: true,
-      duration: true
+      duration: true,
     })
     middlewares.push(logger)
   }

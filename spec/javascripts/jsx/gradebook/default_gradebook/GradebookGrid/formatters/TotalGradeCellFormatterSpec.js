@@ -18,7 +18,7 @@
 
 import {
   createGradebook,
-  setFixtureHtml
+  setFixtureHtml,
 } from 'ui/features/gradebook/react/default_gradebook/__tests__/GradebookSpecHelper'
 import TotalGradeCellFormatter from 'ui/features/gradebook/react/default_gradebook/GradebookGrid/formatters/TotalGradeCellFormatter'
 
@@ -35,12 +35,14 @@ QUnit.module('GradebookGrid TotalGradeCellFormatter', hooks => {
     gradebook = createGradebook({
       grading_standard: [
         ['A', 0.9],
-        ['B', 0.8],
+        ['B-', 0.8],
         ['C', 0.7],
         ['D', 0.6],
-        ['<b>F</b>', 0.0]
+        ['<b>F</b>', 0.0],
       ],
-      show_total_grade_as_points: true
+      grading_standard_points_based: false,
+      grading_standard_scaling_factor: 1.0,
+      show_total_grade_as_points: true,
     })
     sinon.stub(gradebook, 'getTotalPointsPossible').returns(10)
     sinon.stub(gradebook, 'listInvalidAssignmentGroups').returns([])
@@ -172,7 +174,7 @@ QUnit.module('GradebookGrid TotalGradeCellFormatter', hooks => {
   test('renders a warning when there are multiple invalid assignment groups', () => {
     gradebook.listInvalidAssignmentGroups.returns([
       {id: '2401', name: 'Math'},
-      {id: '2402', name: '<English>'}
+      {id: '2402', name: '<English>'},
     ])
     equal(
       getTooltip(),
@@ -190,8 +192,8 @@ QUnit.module('GradebookGrid TotalGradeCellFormatter', hooks => {
     strictEqual(renderCell().querySelectorAll('i.icon-warning').length, 1)
   })
 
-  test('renders a letter grade when using a grading standard', () => {
-    equal(renderCell().querySelector('.letter-grade-points').innerText, 'B')
+  test('renders a letter grade (with trailing en-dashes replaced with minus) when using a grading standard', () => {
+    equal(renderCell().querySelector('.letter-grade-points').innerText, 'B−')
   })
 
   test('escapes the value of the letter grade when using a grading standard', () => {
@@ -200,8 +202,9 @@ QUnit.module('GradebookGrid TotalGradeCellFormatter', hooks => {
   })
 
   test('does not render a letter grade when not using a grading standard', () => {
-    gradebook.options.grading_standard = null
+    sinon.stub(gradebook, 'getCourseGradingScheme').returns(null)
     strictEqual(renderCell().querySelector('.letter-grade-points'), null)
+    gradebook.getCourseGradingScheme.restore()
   })
 
   test('does not render a letter grade when the grade has zero points possible', () => {

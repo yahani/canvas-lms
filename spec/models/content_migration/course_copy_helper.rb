@@ -62,6 +62,7 @@ shared_context "course copy" do
 
   def run_import(export_attachment_id)
     @cm.set_default_settings
+    @cm.source_course = nil
     @cm.migration_type = "canvas_cartridge_importer"
     worker = CC::Importer::CCWorker.new
     @cm.attachment_id = export_attachment_id
@@ -71,14 +72,17 @@ shared_context "course copy" do
     @copy_to.reload
   end
 
-  def run_export_and_import(&block)
-    export = run_export(&block)
+  def run_export_and_import(&)
+    export = run_export(&)
     run_import(export.attachment_id)
+    expect(@cm.reload.source_course).to eq @copy_from
   end
 
   def make_grading_standard(context, opts = {})
     gs = context.grading_standards.new
     gs.title = opts[:title] || "Standard eh"
+    gs.points_based = opts[:points_based] || false
+    gs.scaling_factor = opts[:scaling_factor] || 1.0
     gs.data = [["A", 0.93], ["A-", 0.89], ["B+", 0.85], ["B", 0.83], ["B!-", 0.80], ["C+", 0.77], ["C", 0.74], ["C-", 0.70], ["D+", 0.67], ["D", 0.64], ["D-", 0.61], ["F", 0]]
     gs.save!
     gs

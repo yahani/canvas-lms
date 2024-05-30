@@ -17,9 +17,9 @@
 
 import I18n from '@canvas/i18n'
 import Ember from 'ember'
-import round from 'round'
-import {scoreToGrade} from '@canvas/grading/GradingSchemeHelper'
-import {scoreToPercentage} from '@canvas/grading/GradeCalculationHelper'
+import round from '@canvas/round'
+import {scoreToGrade} from '@instructure/grading-utils'
+import {scoreToPercentage, scoreToScaledPoints} from '@canvas/grading/GradeCalculationHelper'
 
 const AssignmentSubtotalGradesComponent = Ember.Component.extend({
   tagName: '',
@@ -30,7 +30,7 @@ const AssignmentSubtotalGradesComponent = Ember.Component.extend({
   hasGrade: Ember.computed.bool('values.possible'),
   hasWeightedGroups: Ember.computed.equal('weightingScheme', 'percent'),
 
-  letterGrade: function() {
+  letterGrade: function () {
     const standard = this.get('gradingStandard')
     if (!standard || !this.get('hasGrade')) {
       return null
@@ -39,35 +39,53 @@ const AssignmentSubtotalGradesComponent = Ember.Component.extend({
     return scoreToGrade(percentage, standard)
   }.property('gradingStandard', 'hasGrade'),
 
-  values: function() {
+  values: function () {
     const student = this.get('student')
     return Ember.get(student, `${this.get('subtotal.key')}`)
   }.property('subtotal', 'student', 'student.total_grade'),
 
-  points: function() {
+  points: function () {
     const values = this.get('values')
     return `${I18n.n(round(values.score, round.DEFAULT))} / ${I18n.n(
       round(values.possible, round.DEFAULT)
     )}`
   }.property('values'),
 
-  rawPercent: function() {
+  rawPercent: function () {
     const values = this.get('values')
     return scoreToPercentage(values.score, values.possible)
   }.property('values'),
 
-  percent: function() {
-    return I18n.n(round(this.get('rawPercent'), round.DEFAULT), {percentage: true})
+  percent: function () {
+    let scoreText = I18n.n(round(this.get('rawPercent'), round.DEFAULT), {percentage: true})
+
+    if (this.get('gradingStandard') && this.get('gradingStandardPointsBased')) {
+      const scalingFactor = this.get('gradingStandardScalingFactor')
+      const values = this.get('values')
+      if (values.possible) {
+        const scaledPossible = I18n.n(scalingFactor, {
+          precision: 1,
+        })
+        const scaledScore = I18n.n(
+          scoreToScaledPoints(values.score, values.possible, scalingFactor),
+          {
+            precision: 1,
+          }
+        )
+        scoreText = `${scaledScore} / ${scaledPossible}`
+      }
+    }
+    return scoreText
   }.property('values'),
 
-  scoreDetail: function() {
+  scoreDetail: function () {
     const points = this.get('points')
     return `(${points})`
   }.property('points'),
 
-  weight: function() {
+  weight: function () {
     return I18n.n(this.get('subtotal').weight, {percentage: true})
-  }.property('subtotal')
+  }.property('subtotal'),
 })
 
 export default AssignmentSubtotalGradesComponent

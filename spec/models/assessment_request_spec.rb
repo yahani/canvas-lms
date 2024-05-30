@@ -50,7 +50,7 @@ describe AssessmentRequest do
       @notification_name = "Peer Review Invitation"
       notification = Notification.create!(name: @notification_name, category: "Invitation")
       NotificationPolicy.create!(
-        notification: notification,
+        notification:,
         communication_channel: @student.communication_channel,
         frequency: "immediately"
       )
@@ -84,7 +84,7 @@ describe AssessmentRequest do
       @notification_name = "Rubric Assessment Submission Reminder"
       notification = Notification.create!(name: @notification_name, category: "Invitation")
       NotificationPolicy.create!(
-        notification: notification,
+        notification:,
         communication_channel: @student.communication_channel,
         frequency: "immediately"
       )
@@ -200,6 +200,81 @@ describe AssessmentRequest do
 
     it "returns true if the rubric association exists and is active" do
       expect(@request).to be_active_rubric_association
+    end
+  end
+
+  describe "#available?" do
+    before :once do
+      @assignment.update!(peer_reviews: true, submission_types: "online_text_entry")
+    end
+
+    it "available should be true when both user and assessor have submitted homework" do
+      assessment_request = AssessmentRequest.create!(
+        asset: @assignment.submit_homework(@submission_student, body: "hi"),
+        user: @submission_student,
+        assessor: @review_student,
+        assessor_asset: @assignment.submit_homework(@review_student, body: "hi")
+      )
+      expect(assessment_request).to be_available
+    end
+
+    it "available should be false when only user has submitted homework" do
+      assessment_request = AssessmentRequest.create!(
+        asset: @assignment.submit_homework(@submission_student, body: "hi"),
+        user: @submission_student,
+        assessor: @review_student,
+        assessor_asset: @assignment.submission_for_student(@review_student)
+      )
+      expect(assessment_request).not_to be_available
+    end
+
+    it "available should be false when only accessor has submitted homework" do
+      assessment_request = AssessmentRequest.create!(
+        asset: @assignment.submission_for_student(@submission_student),
+        user: @submission_student,
+        assessor: @review_student,
+        assessor_asset: @assignment.submit_homework(@review_student, body: "hi")
+      )
+      expect(assessment_request).not_to be_available
+    end
+
+    it "available should be true when the submission type of the assignment contains 'none'" do
+      @assignment.update(submission_types: "none")
+      assessment_request = AssessmentRequest.create!(
+        asset: @assignment.submission_for_student(@submission_student),
+        user: @submission_student,
+        assessor: @review_student,
+        assessor_asset: @assignment.submission_for_student(@review_student)
+      )
+      expect(assessment_request).to be_available
+    end
+
+    it "available should be true when the submission type of the assignment contains 'on paper'" do
+      @assignment.update(submission_types: "on_paper")
+      assessment_request = AssessmentRequest.create!(
+        asset: @assignment.submission_for_student(@submission_student),
+        user: @submission_student,
+        assessor: @review_student,
+        assessor_asset: @assignment.submission_for_student(@review_student)
+      )
+      expect(assessment_request).to be_available
+    end
+  end
+
+  describe "#for_active_users" do
+    it "excludes users that aren't active" do
+      course = @assignment.course
+      course.enrollments.find_by(user: @submission_student).destroy
+      user_ids = AssessmentRequest.for_active_users(course).pluck(:user_id)
+
+      expect(user_ids).not_to include @submission_student.id
+    end
+
+    it "includes users that are active" do
+      course = @assignment.course
+      user_ids = AssessmentRequest.for_active_users(course).pluck(:user_id)
+
+      expect(user_ids).to include @submission_student.id
     end
   end
 end

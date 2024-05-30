@@ -30,9 +30,9 @@ shared_examples "allow Quiz LTI placement when the correct Feature Flags are ena
     allow(context).to receive(:feature_enabled?).and_call_original
     allow(context).to receive(:feature_enabled?).with(:quizzes_next).and_return(true)
 
-    expect(Account.site_admin.feature_enabled?(:new_quizzes_account_course_level_item_banks)).to eq(true)
-    expect(context.feature_enabled?(:quizzes_next)).to eq(true)
-    expect(quiz_lti_tool.quiz_lti?).to eq(true)
+    expect(Account.site_admin.feature_enabled?(:new_quizzes_account_course_level_item_banks)).to be(true)
+    expect(context.feature_enabled?(:quizzes_next)).to be(true)
+    expect(quiz_lti_tool.quiz_lti?).to be(true)
     expect(available_section_tabs.to_a.pluck(:id)).to include("context_external_tool_#{quiz_lti_tool.id}")
   end
 
@@ -40,18 +40,18 @@ shared_examples "allow Quiz LTI placement when the correct Feature Flags are ena
     allow(context).to receive(:feature_enabled?).and_call_original
     allow(context).to receive(:feature_enabled?).with(:quizzes_next).and_return(true)
 
-    expect(context.feature_enabled?(:quizzes_next)).to eq(true)
-    expect(Account.site_admin.feature_enabled?(:new_quizzes_account_course_level_item_banks)).to eq(false)
-    expect(quiz_lti_tool.quiz_lti?).to eq(true)
+    expect(context.feature_enabled?(:quizzes_next)).to be(true)
+    expect(Account.site_admin.feature_enabled?(:new_quizzes_account_course_level_item_banks)).to be(false)
+    expect(quiz_lti_tool.quiz_lti?).to be(true)
     expect(available_section_tabs.to_a.pluck(:id)).not_to include("context_external_tool_#{quiz_lti_tool.id}")
   end
 
   it "does not include Quiz LTI placement if next_quizzes is not enabled" do
     Account.site_admin.enable_feature!(:new_quizzes_account_course_level_item_banks)
 
-    expect(Account.site_admin.feature_enabled?(:new_quizzes_account_course_level_item_banks)).to eq(true)
-    expect(domain_root_account.feature_enabled?(:quizzes_next)).to eq(false)
-    expect(quiz_lti_tool.quiz_lti?).to eq(true)
+    expect(Account.site_admin.feature_enabled?(:new_quizzes_account_course_level_item_banks)).to be(true)
+    expect(domain_root_account.feature_enabled?(:quizzes_next)).to be(false)
+    expect(quiz_lti_tool.quiz_lti?).to be(true)
     expect(available_section_tabs.to_a.pluck(:id)).not_to include("context_external_tool_#{quiz_lti_tool.id}")
   end
 end
@@ -126,6 +126,21 @@ describe SectionTabHelper do
 
           it "does not include TAB_CONFERENCES if !WebConference.config" do
             expect(available_section_tabs.to_a.pluck(:id)).to_not include(Course::TAB_CONFERENCES)
+          end
+        end
+
+        context "template course" do
+          let_once(:template_current_user) { account_admin_user }
+          let_once(:template_course) { Course.create!(account: domain_root_account, template: true) }
+          let(:tabs_available) do
+            SectionTabHelperSpec::AvailableSectionTabs.new(
+              template_course, template_current_user, domain_root_account, session
+            )
+          end
+
+          it "does not include TAB_PEOPLE if template?" do
+            template_course.update!(template: true)
+            expect(tabs_available.to_a.pluck(:id)).to_not include(Course::TAB_PEOPLE)
           end
         end
 
@@ -231,8 +246,8 @@ describe SectionTabHelper do
           end
 
           it "includes non-Quiz_LTI placement ignoring quizzes FFs" do
-            expect(Account.site_admin.feature_enabled?(:new_quizzes_account_course_level_item_banks)).to eq(false)
-            expect(domain_root_account.feature_enabled?(:quizzes_next)).to eq(false)
+            expect(Account.site_admin.feature_enabled?(:new_quizzes_account_course_level_item_banks)).to be(false)
+            expect(domain_root_account.feature_enabled?(:quizzes_next)).to be(false)
             expect(available_section_tabs.to_a.pluck(:id)).to include("context_external_tool_0")
           end
         end
@@ -300,7 +315,7 @@ describe SectionTabHelper do
 
       it "does not include aria-current if tab is not active" do
         tag = SectionTabHelperSpec::SectionTabTag.new(new_window_tab, course)
-        expect(tag.a_attributes[:"aria-current"]).to eq nil
+        expect(tag.a_attributes[:"aria-current"]).to be_nil
       end
 
       it "includes aria-current if tab is active" do
@@ -384,9 +399,27 @@ describe SectionTabHelper do
           expect(html.attributes).not_to include("title")
         end
       end
+
+      context "new tabs" do
+        let(:string) do
+          SectionTabHelperSpec::SectionTabTag.new(
+            tab_assignments.merge, course
+          ).a_tag
+        end
+
+        it "includes a new-tab-indicator span for new tabs" do
+          stub_const("SectionTabHelper::SectionTabTag::NEW_TABS", %w[assignments])
+          expect(string).to include("new-tab-indicator")
+        end
+
+        it "does not include the new-tab-indicator for tabs not marked as new" do
+          stub_const("SectionTabHelper::SectionTabTag::NEW_TABS", %w[other_stuff])
+          expect(string).not_to include("new-tab-indicator")
+        end
+      end
     end
 
-    describe "#li_classess" do
+    describe "#li_classes" do
       it "returns an array including element `section`" do
         tag = SectionTabHelperSpec::SectionTabTag.new(
           tab_assignments, course

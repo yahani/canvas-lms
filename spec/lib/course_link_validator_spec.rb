@@ -43,7 +43,8 @@ describe CourseLinkValidator do
 
     bank = @course.assessment_question_banks.create!(title: "bank")
     aq = bank.assessment_questions.create!(question_data: { "name" => "test question",
-                                                            "question_text" => html, "answers" => [{ "id" => 1 }, { "id" => 2 }] })
+                                                            "question_text" => html,
+                                                            "answers" => [{ "id" => 1 }, { "id" => 2 }] })
 
     assmnt = @course.assignments.create!(title: "assignment", description: html)
     event = @course.calendar_events.create!(title: "event", description: html)
@@ -100,7 +101,8 @@ describe CourseLinkValidator do
     course_factory
     bank = @course.assessment_question_banks.create!(title: "bank")
     bank.assessment_questions.create!(question_data: { "name" => "test question",
-                                                       "question_text" => html, "answers" => [{ "id" => 1 }, { "id" => 2 }] })
+                                                       "question_text" => html,
+                                                       "answers" => [{ "id" => 1 }, { "id" => 2 }] })
 
     CourseLinkValidator.queue_course(@course)
     run_jobs
@@ -124,7 +126,8 @@ describe CourseLinkValidator do
     course_factory
     quiz = @course.quizzes.create!(title: "quiz1", description: "desc")
     qq = quiz.quiz_questions.create!(question_data: { "name" => "test question",
-                                                      "question_text" => html, "answers" => [{ "id" => 1 }, { "id" => 2 }] })
+                                                      "question_text" => html,
+                                                      "answers" => [{ "id" => 1 }, { "id" => 2 }] })
     qq.destroy!
 
     CourseLinkValidator.queue_course(@course)
@@ -154,15 +157,15 @@ describe CourseLinkValidator do
 
     it "returns false when Setting is absent" do
       link_validator = CourseLinkValidator.new(@course)
-      expect(link_validator.whitelisted?("https://example.com/")).to eq false
+      expect(link_validator.whitelisted?("https://example.com/")).to be false
     end
 
     it "accepts a comma-separated Setting" do
       Setting.set("link_validator_whitelisted_hosts", "foo.com,bar.com")
       link_validator = CourseLinkValidator.new(@course)
-      expect(link_validator.whitelisted?("http://foo.com/foo")).to eq true
-      expect(link_validator.whitelisted?("http://bar.com/bar")).to eq true
-      expect(link_validator.whitelisted?("http://baz.com/baz")).to eq false
+      expect(link_validator.whitelisted?("http://foo.com/foo")).to be true
+      expect(link_validator.whitelisted?("http://bar.com/bar")).to be true
+      expect(link_validator.whitelisted?("http://baz.com/baz")).to be false
     end
   end
 
@@ -195,15 +198,30 @@ describe CourseLinkValidator do
 
   it "works more betterer with external_tools/retrieve" do
     course_factory
-    tool = @course.context_external_tools.create!(name: "blah",
-                                                  url: "https://blah.example.com", shared_secret: "123", consumer_key: "456")
 
-    active_link = "/courses/#{@course.id}/external_tools/retrieve?url=#{CGI.escape(tool.url)}"
+    tool_1_1 = @course.context_external_tools.create!(name: "blah1",
+                                                      url: "https://blah1.example.com",
+                                                      shared_secret: "123",
+                                                      consumer_key: "456")
+    tool_1_3 = @course.context_external_tools.create!(name: "blah2",
+                                                      url: "https://blah1.example.com",
+                                                      shared_secret: "123",
+                                                      consumer_key: "456",
+                                                      lti_version: "1.3")
+    resource_link = Lti::ResourceLink.create!(
+      context: @course,
+      lookup_uuid: "90abc684-0f4f-11ed-861d-0242ac120002",
+      context_external_tool: tool_1_3
+    )
+
+    active_link_1_1 = "/courses/#{@course.id}/external_tools/retrieve?url=#{CGI.escape(tool_1_1.url)}"
+    active_link_1_3 = "/courses/#{@course.id}/external_tools/retrieve?display=borderless&resource_link_lookup_uuid=#{resource_link.lookup_uuid}"
     nonsense_link = "/courses/#{@course.id}/external_tools/retrieve?url=#{CGI.escape("https://lolwut.beep")}"
 
     message = <<~HTML
-      <a href='#{active_link}'>link</a>
-      <a href='#{nonsense_link}'>linkk</a>
+      <a href='#{active_link_1_1}'>link</a>
+      <a href='#{active_link_1_3}'>link</a>
+      <a href='#{nonsense_link}'>link</a>
     HTML
     @course.syllabus_body = message
     @course.save!
@@ -429,6 +447,14 @@ describe CourseLinkValidator do
 
       attachment_model(context: @course).destroy
       expect(@course_link_validator.check_object_status("/courses/#{@course.id}/files/#{@attachment.id}/download")).to eq :deleted
+    end
+
+    it "returns nil for syllabus links with query params and fragments" do
+      expect(@course_link_validator.check_object_status("/courses/#{@course.id}/assignments/syllabus?foo=bar")).to be_nil
+
+      expect(@course_link_validator.check_object_status("/courses/#{@course.id}/assignments/syllabus#grading")).to be_nil
+
+      expect(@course_link_validator.check_object_status("/courses/#{@course.id}/assignments/syllabus?foo=bar#grading")).to be_nil
     end
   end
 

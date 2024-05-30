@@ -20,7 +20,7 @@ import $ from 'jquery'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import template from '../../jst/commMessagesContentPane.handlebars'
 import overviewTemplate from '../../jst/commMessagesSearchOverview.handlebars'
-import '@canvas/datetime'
+import '@canvas/datetime/jquery'
 
 const I18n = useI18nScope('comm_messages')
 
@@ -60,7 +60,7 @@ export default class CommMessagesContentPaneView extends Backbone.View {
           dates.start_time,
           I18n.t('from_beginning', 'the beginning')
         ),
-        end_date: this.getDisplayDateText(dates.end_time, I18n.t('to_now', 'now'))
+        end_date: this.getDisplayDateText(dates.end_time, I18n.t('to_now', 'now')),
       })
     )
     return this.$overview.show()

@@ -27,6 +27,7 @@ class Mutations::CreateSubmissionComment < Mutations::BaseMutation
   argument :file_ids, [ID], required: false, prepare: GraphQLHelpers.relay_or_legacy_ids_prepare_func("Attachment")
   argument :media_object_id, ID, required: false
   argument :media_object_type, String, required: false
+  argument :reviewer_submission_id, ID, required: false, prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("Submission")
 
   field :submission_comment, Types::SubmissionCommentType, null: true
 
@@ -34,8 +35,9 @@ class Mutations::CreateSubmissionComment < Mutations::BaseMutation
     submission = Submission.find input[:submission_id]
     verify_authorized_action!(submission, :comment)
 
+    latest_attempt = submission.context.feature_enabled?(:assignments_2_student) ? submission.attempt : nil
     opts = {
-      attempt: input[:attempt],
+      attempt: input[:attempt] || latest_attempt,
       author: current_user,
       comment: input[:comment]
     }
@@ -61,6 +63,17 @@ class Mutations::CreateSubmissionComment < Mutations::BaseMutation
         a.ok_for_submission_comment = true
       end
       opts[:attachments] = attachments
+    end
+
+    if input[:reviewer_submission_id].present?
+      reviewer_submission = Submission.find input[:reviewer_submission_id]
+      assessment_request = reviewer_submission
+                           .assigned_assessments
+                           .find_by(asset: submission)
+
+      raise GraphQL::ExecutionError, "not found" if assessment_request.nil?
+
+      opts[:assessment_request] = assessment_request
     end
 
     assignment = submission.assignment

@@ -19,10 +19,11 @@
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import 'date-js'
+
 const I18n = useI18nScope('quizzes.timing')
 /* Date.parse */
 
-var timing = {
+const timing = {
   initialTime: new Date(),
   initTimes() {
     if (timing.timesReady) {
@@ -33,7 +34,7 @@ var timing = {
     timing.clientServerDiff = serverNow.getTime() - clientNow.getTime()
     timing.timesReady = true
   },
-  setReferenceDate(started_at, end_at, now) {
+  setReferenceDate(started_at, end_at, _now) {
     if (!timing.timesReady) {
       timing.initTimes()
     }
@@ -48,7 +49,7 @@ var timing = {
     }
     result.clientServerDiff = timing.clientServerDiff
     return result
-  }
+  },
 }
 
 export default timing

@@ -34,7 +34,7 @@ module Lti
 
     def generate_lti_launch(placement:, opts: {}, expanded_variables: {})
       lti_launch = Lti::Launch.new(opts)
-      lti_launch.resource_url = opts[:launch_url] || @tool.extension_setting(placement, :url)
+      lti_launch.resource_url = @tool.launch_url(extension_type: placement, preferred_launch_url: opts[:launch_url])
       lti_launch.link_text = @tool.label_for(placement.to_sym, I18n.locale)
       lti_launch.analytics_id = @tool.tool_id
       lti_launch.params = launch_params(
@@ -42,7 +42,8 @@ module Lti
         placement,
         expanded_variables,
         opts[:content_item_id],
-        opts[:assignment]
+        opts[:assignment],
+        opts[:parent_frame_context]
       )
 
       lti_launch
@@ -61,22 +62,22 @@ module Lti
         oauth_callback: "about:blank"
       }
 
-      params[:user_id] = Lti::Asset.opaque_identifier_for(user, context: context) if user
+      params[:user_id] = Lti::Asset.opaque_identifier_for(user, context:) if user
       params
     end
 
     private
 
-    def launch_params(resource_url, placement, expanded_variables, content_item_id = nil, assignment = nil)
-      content_item_return_url = return_url(content_item_id)
+    def launch_params(resource_url, placement, expanded_variables, content_item_id = nil, assignment = nil, parent_frame_context = nil)
+      content_item_return_url = return_url(content_item_id, parent_frame_context)
 
       params = ContentItemSelectionRequest.default_lti_params(@context, @domain_root_account, @user)
                                           .merge(message_params(content_item_return_url))
                                           .merge(data: data_hash_jwt(resource_url, content_item_id))
-                                          .merge(placement_params(placement, assignment: assignment))
+                                          .merge(placement_params(placement, assignment:))
                                           .merge(expanded_variables)
 
-      params[:ext_lti_assignment_id] = lti_assignment_id(assignment: assignment)
+      params[:ext_lti_assignment_id] = lti_assignment_id(assignment:)
 
       Lti::Security.signed_post_params(
         params,
@@ -96,7 +97,7 @@ module Lti
         # required params
         lti_message_type: "ContentItemSelectionRequest",
         lti_version: "LTI-1p0",
-        content_item_return_url: content_item_return_url,
+        content_item_return_url:,
         context_title: @context.name,
         # optional params
         accept_multiple: false
@@ -113,13 +114,17 @@ module Lti
       Canvas::Security.create_jwt(data_hash)
     end
 
-    def return_url(content_item_id)
+    def return_url(content_item_id, parent_frame_context)
       return_url_opts = {
         service: "external_tool_dialog",
         host: @base_url.host,
         protocol: @base_url.scheme,
         port: @base_url.port
       }
+
+      if parent_frame_context
+        return_url_opts[:parent_frame_context] = parent_frame_context
+      end
 
       if content_item_id
         return_url_opts[:id] = content_item_id

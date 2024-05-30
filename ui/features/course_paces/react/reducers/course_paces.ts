@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -38,7 +39,7 @@ import {
   Enrollments,
   Section,
   Module,
-  OptionalDate
+  OptionalDate,
 } from '../types'
 import {BlackoutDate, Course} from '../shared/types'
 import {Constants as UIConstants, SetSelectedPaceType} from '../actions/ui'
@@ -54,7 +55,7 @@ const initialProgress = window.ENV.COURSE_PACE_PROGRESS
 export const initialState: CoursePacesState = ({
   ...getInitialCoursePace(),
   course: window.ENV.COURSE,
-  publishingProgress: initialProgress
+  publishingProgress: initialProgress,
 } || {}) as CoursePacesState
 
 const getModuleItems = (modules: Module[]) =>
@@ -89,13 +90,31 @@ export const getPublishingError = (state: StoreState): string | undefined => {
 export const getOriginalEndDate = (state: StoreState): OptionalDate =>
   state.original.coursePace.end_date
 export const isStudentPace = (state: StoreState) => state.coursePace.context_type === 'Enrollment'
-export const isNewPace = (state: StoreState) => !(state.coursePace.id || isStudentPace(state)) // for now, there are no "new" student paces
+export const isSectionPace = (state: StoreState) => state.coursePace.context_type === 'Section'
+export const isNewPace = (state: StoreState) =>
+  !(state.coursePace.id || (isStudentPace(state) && !window.ENV.FEATURES.course_paces_for_students)) // for now, there are no "new" student paces
+export const getIsUnpublishedNewPace = (state: StoreState) => !state.original.coursePace.id
 export const getIsPaceCompressed = (state: StoreState): boolean =>
   !!state.coursePace.compressed_due_dates
 export const getPaceCompressedDates = (state: StoreState): CoursePaceItemDueDates | undefined =>
   state.coursePace.compressed_due_dates
-
+export const getSearchTerm = (state: StoreState): string => state.paceContexts.searchTerm
 export const getCoursePaceItems = createSelector(getCoursePaceModules, getModuleItems)
+
+export const getPaceName = (state: StoreState): string => {
+  switch (state.coursePace.context_type) {
+    case 'Course':
+      return state.course.name
+    case 'Section':
+      return state.sections[state.coursePace.context_id].name
+    case 'Enrollment':
+      return Object.values(state.enrollments).find(
+        enrollment => enrollment.user_id === state.coursePace.context_id
+      ).full_name
+    default:
+      throw new Error('Unknown context type')
+  }
+}
 
 export const getSettingChanges = createDeepEqualSelector(
   getExcludeWeekends,
@@ -109,7 +128,7 @@ export const getSettingChanges = createDeepEqualSelector(
       changes.push({
         id: 'exclude_weekends',
         oldValue: originalPace.exclude_weekends,
-        newValue: excludeWeekends
+        newValue: excludeWeekends,
       })
 
     const blackoutChanges = getBlackoutDateChanges(originalBlackoutDates, blackoutDates)
@@ -141,7 +160,7 @@ export function getBlackoutDateChanges(
         changes.push({
           id: 'blackout_date',
           oldValue: null,
-          newValue: bod
+          newValue: bod,
         })
       }
     })
@@ -159,7 +178,7 @@ export function getBlackoutDateChanges(
         changes.push({
           id: 'blackout_date',
           oldValue: bod,
-          newValue: null
+          newValue: null,
         })
       }
     })
@@ -199,6 +218,12 @@ export const getSummarizedChanges = createDeepEqualSelector(
   getSettingChanges,
   getCoursePaceItemChanges,
   summarizeChanges
+)
+
+export const getUnappliedChangesExist = createDeepEqualSelector(
+  getPacePublishing,
+  getUnpublishedChangeCount,
+  (pacePublishing, unpublishedChangeCount) => unpublishedChangeCount > 0 && !pacePublishing
 )
 
 export const getCoursePaceItemPosition = createDeepEqualSelector(
@@ -423,7 +448,11 @@ export const mergeAssignmentsAndBlackoutDates = (
   const dueDateKeys = Object.keys(dueDates)
   let veryLastDueDate = moment('3000-01-01T00:00:00Z')
   if (dueDateKeys.length) {
-    veryLastDueDate = moment(dueDates[dueDateKeys[dueDateKeys.length - 1]])
+    let lastDueDate = moment(dueDates[dueDateKeys[0]])
+    dueDateKeys.forEach(key => {
+      if (moment(dueDates[key]).isAfter(lastDueDate)) lastDueDate = moment(dueDates[key])
+    })
+    veryLastDueDate = lastDueDate
   }
   const paceEnd = coursePace.end_date ? moment(coursePace.end_date) : veryLastDueDate
   const boDates: Array<any> = blackoutDates
@@ -438,7 +467,7 @@ export const mergeAssignmentsAndBlackoutDates = (
     .map(bd => ({
       ...bd,
       date: bd.start_date,
-      type: 'blackout_date'
+      type: 'blackout_date',
     }))
 
   // merge due dates into module items
@@ -456,7 +485,7 @@ export const mergeAssignmentsAndBlackoutDates = (
       runningValue.push({
         ...module,
         itemsWithDates: assignmentsWithDueDate,
-        moduleKey: `${module.id}-${Date.now()}`
+        moduleKey: `${module.id}-${Date.now()}`,
       })
       return runningValue
     },
@@ -518,7 +547,7 @@ export default (
     case CoursePaceConstants.SET_END_DATE:
       return {
         ...state,
-        end_date: action.payload ? DateHelpers.formatDate(action.payload) : undefined
+        end_date: action.payload ? DateHelpers.formatDate(action.payload) : undefined,
       }
     case CoursePaceConstants.PACE_CREATED:
       // Could use a *REFACTOR* to better handle new paces and updating the ui properly
@@ -526,7 +555,7 @@ export default (
         ...state,
         id: action.payload.id,
         modules: action.payload.modules,
-        published_at: action.payload.published_at
+        published_at: action.payload.published_at,
       }
     case UIConstants.SET_SELECTED_PACE_CONTEXT:
       return {...action.payload.newSelectedPace}
@@ -539,7 +568,7 @@ export default (
     case CoursePaceConstants.RESET_PACE:
       return {
         ...(action.payload as CoursePace),
-        updated_at: new Date().toISOString() // kicks react into re-rendering the assignment_rows
+        updated_at: new Date().toISOString(), // kicks react into re-rendering the assignment_rows
       }
     case CoursePaceConstants.SET_PROGRESS:
       return {...state, publishingProgress: action.payload}
@@ -553,7 +582,7 @@ export default (
     default:
       return {
         ...state,
-        modules: coursePaceItemsReducer(state.modules, action as CoursePaceItemAction)
+        modules: coursePaceItemsReducer(state.modules, action as CoursePaceItemAction),
       }
   }
 }

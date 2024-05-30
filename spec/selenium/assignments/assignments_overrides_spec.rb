@@ -19,7 +19,7 @@
 
 require_relative "../common"
 require_relative "../helpers/assignment_overrides"
-require_relative "./page_objects/assignment_page"
+require_relative "page_objects/assignment_page"
 
 describe "assignment groups" do
   include AssignmentOverridesSeleniumHelper
@@ -27,8 +27,8 @@ describe "assignment groups" do
 
   context "as a teacher" do
     let(:due_at) { Time.zone.now }
-    let(:unlock_at) { Time.zone.now - 1.day }
-    let(:lock_at) { Time.zone.now + 4.days }
+    let(:unlock_at) { 1.day.ago }
+    let(:lock_at) { 4.days.from_now }
 
     before do
       allow(ConditionalRelease::Service).to receive(:active_rules).and_return([])
@@ -78,23 +78,22 @@ describe "assignment groups" do
     end
 
     it "clears a due date", priority: "2" do
-      assign = @course.assignments.create!(title: "due tomorrow", due_at: Time.zone.now + 2.days)
+      assign = @course.assignments.create!(title: "due tomorrow", due_at: 2.days.from_now)
       get "/courses/#{@course.id}/assignments/#{assign.id}/edit"
 
-      fj(".date_field:first[data-date-type='due_at']").clear
+      fj(".date_field[data-date-type='due_at']:first").clear
       expect_new_page_load { submit_form("#edit_assignment_form") }
 
       expect(assign.reload.due_at).to be_nil
     end
 
     it "allows setting overrides", priority: "1" do
-      allow(ConditionalRelease::Service).to receive(:enabled_in_context?).and_return(true)
-      allow(ConditionalRelease::Service).to receive(:jwt_for).and_return(:jwt)
+      allow(ConditionalRelease::Service).to receive_messages(enabled_in_context?: true, jwt_for: :jwt)
 
       default_section = @course.course_sections.first
       other_section = @course.course_sections.create!(name: "other section")
-      default_section_due = Time.zone.now + 1.day
-      other_section_due = Time.zone.now + 2.days
+      default_section_due = 1.day.from_now
+      other_section_due = 2.days.from_now
 
       assign = create_assignment!
       visit_assignment_edit_page(assign)
@@ -149,8 +148,8 @@ describe "assignment groups" do
 
     it "validates override dates against proper section", priority: "1" do
       date = Time.zone.now
-      date2 = Time.zone.now - 10.days
-      due_date = Time.zone.now + 5.days
+      date2 = 10.days.ago
+      due_date = 5.days.from_now
       section1 = @course.course_sections.create!(name: "Section 9", restrict_enrollments_to_section_dates: true, start_at: date)
       section2 = @course.course_sections.create!(name: "Section 31", restrict_enrollments_to_section_dates: true, end_at: date2)
 
@@ -165,6 +164,7 @@ describe "assignment groups" do
       first_lock_at_element.clear
       last_due_at_element
         .send_keys(format_date_for_view(due_date, :medium))
+      f("#edit_assignment_form").click
       wait_for_new_page_load { submit_form("#edit_assignment_form") }
       overrides = assign.reload.assignment_overrides
       section_override = overrides.detect { |o| o.set_id == section1.id }
@@ -210,19 +210,59 @@ describe "assignment groups" do
       before do
         @course.enable_course_paces = true
         @course.save!
+        @context_module = @course.context_modules.create! name: "M"
       end
 
-      it "shows the course pacing notice if in a paced course on show page" do
-        assignment = create_assignment!
-        get "/courses/#{@course.id}/assignments/#{assignment.id}"
-        expect(AssignmentPage.course_pacing_notice).to be_displayed
-        expect(f("#content")).not_to contain_css("table.assignment_dates")
+      context "on show page" do
+        it "shows the course pacing notice for a module item assignment" do
+          assignment = create_assignment!
+          assignment.context_module_tags.create! context_module: @context_module, context: @course, tag_type: "context_module"
+          get "/courses/#{@course.id}/assignments/#{assignment.id}"
+          expect(AssignmentPage.course_pacing_notice).to be_displayed
+          expect(f("#content")).not_to contain_css("table.assignment_dates")
+        end
+
+        it "does not show the course pacing notice when feature flag is off" do
+          @course.account.disable_feature!(:course_paces)
+          assignment = create_assignment!
+          assignment.context_module_tags.create! context_module: @context_module, context: @course, tag_type: "context_module"
+          get "/courses/#{@course.id}/assignments/#{assignment.id}"
+          expect(element_exists?(AssignmentPage.course_pacing_notice_selector)).to be_falsey
+          expect(f("#content")).to contain_css("table.assignment_dates")
+        end
+
+        it "does not show the course pacing notice for a non-moduled assignment" do
+          assignment = create_assignment!
+          get "/courses/#{@course.id}/assignments/#{assignment.id}"
+          expect(f("#content")).not_to contain_css("[data-testid='CoursePacingNotice']")
+          expect(f("#content")).to contain_css("table.assignment_dates")
+        end
       end
 
-      it "shows the course pacing notice if in a paced course on edit page" do
-        assignment = create_assignment!
-        get "/courses/#{@course.id}/assignments/#{assignment.id}/edit"
-        expect(AssignmentPage.course_pacing_notice).to be_displayed
+      context "on edit page" do
+        it "shows the course pacing notice for a module item assignment" do
+          assignment = create_assignment!
+          assignment.context_module_tags.create! context_module: @context_module, context: @course, tag_type: "context_module"
+          get "/courses/#{@course.id}/assignments/#{assignment.id}/edit"
+          expect(AssignmentPage.course_pacing_notice).to be_displayed
+          expect(f("#content")).not_to contain_css(".ContainerDueDate")
+        end
+
+        it "does not show the course pacing notice for a module item assignment when feature flag is off" do
+          @course.account.disable_feature!(:course_paces)
+          assignment = create_assignment!
+          assignment.context_module_tags.create! context_module: @context_module, context: @course, tag_type: "context_module"
+          get "/courses/#{@course.id}/assignments/#{assignment.id}/edit"
+          expect(element_exists?(AssignmentPage.course_pacing_notice_selector)).to be_falsey
+          expect(f("#content")).to contain_css(".ContainerDueDate")
+        end
+
+        it "does not show the course pacing notice for a non-moduled assignment" do
+          assignment = create_assignment!
+          get "/courses/#{@course.id}/assignments/#{assignment.id}/edit"
+          expect(f("#content")).not_to contain_css("[data-testid='CoursePacingNotice']")
+          expect(f("#content")).to contain_css(".ContainerDueDate")
+        end
       end
 
       it "does not show availability or due dates on index page" do
@@ -236,8 +276,8 @@ describe "assignment groups" do
   end
 
   context "as a student" do
-    let(:unlock_at) { Time.zone.now - 2.days }
-    let(:lock_at) { Time.zone.now + 4.days }
+    let(:unlock_at) { 2.days.ago }
+    let(:lock_at) { 4.days.from_now }
 
     before do
       course_with_student_logged_in(active_all: true)

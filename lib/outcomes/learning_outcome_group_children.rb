@@ -21,6 +21,7 @@
 module Outcomes
   class LearningOutcomeGroupChildren
     include OutcomesFeaturesHelper
+    include OutcomesServiceAlignmentsHelper
     attr_reader :context
 
     SHORT_DESCRIPTION = "coalesce(learning_outcomes.short_description, '')"
@@ -81,7 +82,7 @@ module Outcomes
 
     def suboutcomes_by_group_id(learning_outcome_group_id, args = {})
       relation = outcome_links(learning_outcome_group_id)
-      relation = filter_outcomes(relation, args[:filter]) unless args[:filter].nil? || !outcome_alignment_summary_enabled?(@context)
+      relation = filter_outcomes(relation, args[:filter])
       relation = relation.joins(:learning_outcome_content)
                          .joins("INNER JOIN #{LearningOutcomeGroup.quoted_table_name} AS logs
               ON logs.id = content_tags.associated_asset_id")
@@ -105,33 +106,54 @@ module Outcomes
       # cache this in the class since this won't change so much
       @supported_languages ||= ContentTag.connection.execute(
         "SELECT cfgname FROM pg_ts_config"
-      ).to_a.map { |r| r["cfgname"] }
+      ).to_a.pluck("cfgname")
     end
 
     private
 
     def outcome_links(learning_outcome_group_id)
       group_ids = children_ids_with_self(learning_outcome_group_id)
-      relation = ContentTag.active.learning_outcome_links
-                           .where(associated_asset_id: group_ids)
-      # Check that the LearningOutcome the content tag is aligned to is not deleted
-      tag_ids = relation.reject { |tag| LearningOutcome.find(tag.content_id).workflow_state == "deleted" }.map(&:id)
-      ContentTag.where(id: tag_ids)
+      relation = ContentTag.active.learning_outcome_links.where(associated_asset_id: group_ids)
+      # Exclude tags for which the aligned outcome is deleted
+      valid_outcome_ids = relation
+                          .select("content_tags.content_id")
+                          .joins("LEFT OUTER JOIN #{LearningOutcome.quoted_table_name} AS outcomes ON content_tags.content_id = outcomes.id")
+                          .where("outcomes.workflow_state<>'deleted'")
+      relation.where(content_id: valid_outcome_ids)
     end
 
     def filter_outcomes(relation, filter)
-      outcomes = LearningOutcome.preload(:alignments).where(id: relation.map(&:content_id))
-      filtered_tag_ids = if filter == "WITH_ALIGNMENTS"
-                           relation.reject { |tag| outcomes.find(tag.content_id).alignments.empty? }.map(&:id)
-                         elsif filter == "NO_ALIGNMENTS"
-                           relation.select { |tag| outcomes.find(tag.content_id).alignments.empty? }.map(&:id)
-                         end
-      filtered_tag_ids.nil? ? relation : relation.where(id: filtered_tag_ids)
+      if %w[WITH_ALIGNMENTS NO_ALIGNMENTS].include?(filter) && improved_outcomes_management_enabled?(@context)
+        outcomes_with_alignments_in_context = ContentTag
+                                              .not_deleted
+                                              .where(
+                                                tag_type: "learning_outcome",
+                                                content_type: %w[Rubric Assignment AssessmentQuestionBank],
+                                                context: @context
+                                              )
+                                              .map(&:learning_outcome_id)
+                                              .uniq
+
+        if outcome_alignment_summary_with_new_quizzes_enabled?(@context)
+          outcomes_with_alignments_in_os = get_active_os_alignments(@context)
+
+          if outcomes_with_alignments_in_os
+            outcomes_with_alignments_in_context
+              .concat(outcomes_with_alignments_in_os.keys.map(&:to_i))
+              .uniq
+          end
+        end
+
+        return relation.where(content_id: outcomes_with_alignments_in_context) if filter == "WITH_ALIGNMENTS"
+        return relation.where.not(content_id: outcomes_with_alignments_in_context) if filter == "NO_ALIGNMENTS"
+      end
+
+      relation
     end
 
     def total_outcomes_for(learning_outcome_group_id, args = {})
       relation = outcome_links(learning_outcome_group_id)
-      relation = filter_outcomes(relation, args[:filter]) unless args[:filter].nil? || !outcome_alignment_summary_enabled?(@context)
+      relation = filter_outcomes(relation, args[:filter])
 
       if args[:search_query]
         relation = relation.joins(:learning_outcome_content)
@@ -156,7 +178,7 @@ module Outcomes
               SQL
             end
 
-      search_query_tokens = ContentTag.connection.execute(sql).to_a.map { |r| r["token"] }.uniq
+      search_query_tokens = ContentTag.connection.execute(sql).to_a.pluck("token").uniq
 
       short_description_query = ContentTag.sanitize_sql_array(["#{SHORT_DESCRIPTION} ~* ANY(array[?])",
                                                                search_query_tokens])
@@ -192,7 +214,7 @@ module Outcomes
         SELECT id FROM levels
       SQL
 
-      LearningOutcomeGroup.connection.execute(sql).as_json.map { |r| r["id"] }
+      LearningOutcomeGroup.connection.execute(sql).as_json.pluck("id")
     end
 
     def context_timestamp_cache
@@ -230,7 +252,7 @@ module Outcomes
 
     def lang
       # lang can be nil, so we check with instance_variable_defined? method
-      unless instance_variable_defined?("@lang")
+      unless instance_variable_defined?(:@lang)
         account = context&.root_account || LoadAccount.default_domain_root_account
         @lang = MAP_CANVAS_POSTGRES_LOCALES[account.default_locale || "en"]
       end

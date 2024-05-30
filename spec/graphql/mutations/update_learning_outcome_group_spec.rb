@@ -41,7 +41,7 @@ describe Mutations::UpdateLearningOutcomeGroup do
       mutation {
         updateLearningOutcomeGroup(
             input: {
-              #{gql_arguments("", attrs)}
+              #{gql_arguments("", **attrs)}
             }
           ) {
           learningOutcomeGroup {
@@ -64,7 +64,7 @@ describe Mutations::UpdateLearningOutcomeGroup do
   end
 
   def execute_query(mutation_str, context)
-    CanvasSchema.execute(mutation_str, context: context)
+    CanvasSchema.execute(mutation_str, context:)
   end
 
   context "Mutation" do

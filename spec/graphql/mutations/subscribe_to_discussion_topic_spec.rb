@@ -46,9 +46,9 @@ RSpec.describe Mutations::SubscribeToDiscussionTopic do
 
   def run_mutation(opts = {}, current_user = @teacher)
     result = CanvasSchema.execute(
-      mutation_str(opts),
+      mutation_str(**opts),
       context: {
-        current_user: current_user,
+        current_user:,
         domain_root_account: @course.account.root_account,
         request: ActionDispatch::TestRequest.create
       }
@@ -61,7 +61,7 @@ RSpec.describe Mutations::SubscribeToDiscussionTopic do
     expect(@topic.subscribed?(@teacher)).to be false
 
     result = run_mutation({ id: @topic.id, subscribed: true })
-    expect(result["errors"]).to be nil
+    expect(result["errors"]).to be_nil
     expect(result.dig("data", "subscribeToDiscussionTopic", "discussionTopic", "subscribed")).to be true
     @topic.reload
     expect(@topic.subscribed?(@teacher)).to be true
@@ -72,7 +72,7 @@ RSpec.describe Mutations::SubscribeToDiscussionTopic do
     expect(@topic.subscribed?(@teacher)).to be true
 
     result = run_mutation({ id: @topic.id, subscribed: false })
-    expect(result["errors"]).to be nil
+    expect(result["errors"]).to be_nil
     expect(result.dig("data", "subscribeToDiscussionTopic", "discussionTopic", "subscribed")).to be false
     @topic.reload
     expect(@topic.subscribed?(@teacher)).to be false

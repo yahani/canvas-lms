@@ -1,3 +1,4 @@
+/* eslint-disable qunit/resolve-async */
 /*
  * Copyright (C) 2015 - present Instructure, Inc.
  *
@@ -17,6 +18,7 @@
  */
 
 import $ from 'jquery'
+import 'jquery-migrate'
 import AvatarDialogView from '@canvas/avatar-dialog-view/backbone/views/AvatarDialogView'
 import assertions from 'helpers/assertions'
 
@@ -29,31 +31,28 @@ QUnit.module('AvatarDialogView#onPreflight', {
     this.server.restore()
     this.avatarDialogView = null
     $('.ui-dialog').remove()
-  }
+  },
 })
 
-test('it should be accessible', function(assert) {
+test('it should be accessible', function (assert) {
   const done = assert.async()
   assertions.isAccessible(this.avatarDialogView, done, {a11yReport: true})
 })
 
-test('calls flashError with base error message when errors are present', function() {
+test('calls flashError with base error message when errors are present', function () {
   const errorMessage = 'User storage quota exceeded'
   sandbox.stub(this.avatarDialogView, 'enableSelectButton')
-  const mock = sandbox
-    .mock($)
-    .expects('flashError')
-    .withArgs(errorMessage)
+  const mock = sandbox.mock($).expects('flashError').withArgs(errorMessage)
   this.avatarDialogView.preflightRequest()
   this.server.respond('POST', '/files/pending', [
     400,
     {'Content-Type': 'application/json'},
-    `{\"errors\":{\"base\":\"${errorMessage}\"}}`
+    `{\"errors\":{\"base\":\"${errorMessage}\"}}`,
   ])
   ok(mock.verify())
 })
 
-test('errors if waitAndSaveUserAvatar is called more than 50 times without successful save', function(assert) {
+test('errors if waitAndSaveUserAvatar is called more than 50 times without successful save', function (assert) {
   const done = assert.async()
   sandbox
     .mock($)

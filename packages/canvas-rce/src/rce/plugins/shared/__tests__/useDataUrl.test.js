@@ -20,18 +20,18 @@ import {act, renderHook} from '@testing-library/react-hooks/dom'
 import useDataUrl from '../useDataUrl'
 import fetchMock from 'fetch-mock'
 
-const flushPromises = () => new Promise(setImmediate)
+const flushPromises = () => new Promise(setTimeout)
 
 describe('useDataUrl()', () => {
   beforeEach(() => {
     Object.defineProperty(global, 'FileReader', {
       writable: true,
       value: jest.fn().mockImplementation(() => ({
-        readAsDataURL: function () {
+        readAsDataURL() {
           this.onloadend()
         },
-        result: 'data:image/png;base64,asdfasdfjksdf=='
-      }))
+        result: 'data:image/png;base64,asdfasdfjksdf==',
+      })),
     })
   })
 
@@ -52,7 +52,7 @@ describe('useDataUrl()', () => {
     expect(result.current).toMatchObject({
       dataUrl: '',
       dataLoading: false,
-      dataError: undefined
+      dataError: undefined,
     })
   })
 
@@ -87,11 +87,12 @@ describe('useDataUrl()', () => {
       Object.defineProperty(global, 'FileReader', {
         writable: true,
         value: jest.fn().mockImplementation(() => ({
-          readAsDataURL: function () {
+          readAsDataURL() {
+            // eslint-disable-next-line no-throw-literal
             throw 'an error occured!'
           },
-          result: 'data:image/png;base64,asdfasdfjksdf=='
-        }))
+          result: 'data:image/png;base64,asdfasdfjksdf==',
+        })),
       })
 
       const {result} = subject()

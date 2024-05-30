@@ -24,20 +24,19 @@ import {Spinner} from '@instructure/ui-spinner'
 import {Flex} from '@instructure/ui-flex'
 import {Button} from '@instructure/ui-buttons'
 import {Table} from '@instructure/ui-table'
-import {ContentItem, DeepLinkResponse} from '@canvas/deep-linking/types'
+import type {ContentItem} from '@canvas/deep-linking/models/ContentItem'
+import type {DeepLinkResponse} from '@canvas/deep-linking/DeepLinkResponse'
 import {Pill} from '@instructure/ui-pill'
 import {View} from '@instructure/ui-view'
 
 const I18n = useI18nScope('external_content.success')
 
-// Doing this to avoid TS2339 errors-- remove and rename once we're on InstUI 8
-const {Item: FlexItem} = Flex as any
 const {
   Head: TableHead,
   Row: TableRow,
   ColHeader: TableColHeader,
   Body: TableBody,
-  Cell: TableCell
+  Cell: TableCell,
 } = Table as any
 
 type ContentItemDisplay = {
@@ -89,13 +88,13 @@ const renderContentItem = (item: ContentItemDisplay) => {
 }
 
 const buildContentItems = (items: ContentItem[]) =>
-  items.reduce((acc, item) => {
+  items.reduce<ContentItemDisplay[]>((acc, item) => {
     if (item.errors) {
       const errorItems = Object.entries(item.errors).map(
         ([field, message]) =>
           ({
             title: item.title,
-            error: {field, message}
+            error: {field, message},
           } as ContentItemDisplay)
       )
       return [...acc, ...errorItems]
@@ -104,22 +103,33 @@ const buildContentItems = (items: ContentItem[]) =>
     return [
       ...acc,
       {
-        title: item.title
-      } as ContentItemDisplay
+        title: item.title,
+      } as ContentItemDisplay,
     ]
-  }, [] as ContentItemDisplay[])
+  }, [])
 
-export const RetrievingContent = ({environment, parentWindow}) => {
+type RetrievingContentProps = {
+  environment: Environment
+  parentWindow: Window
+}
+
+type Environment = {
+  deep_link_response: DeepLinkResponse
+  DEEP_LINKING_POST_MESSAGE_ORIGIN: string
+  deep_linking_use_window_parent: boolean
+}
+
+export const RetrievingContent = ({environment, parentWindow}: RetrievingContentProps) => {
   const subject = 'LtiDeepLinkingResponse'
-  const deepLinkResponse = environment.deep_link_response as DeepLinkResponse
+  const deepLinkResponse = environment.deep_link_response
   const [hasErrors, setHasErrors] = useState(false)
-  const [contentItems, setContentItems] = useState([] as ContentItemDisplay[])
+  const [contentItems, setContentItems] = useState<ContentItemDisplay[]>([])
 
   const sendMessage = useCallback(() => {
     parentWindow.postMessage(
       {
         subject,
-        ...deepLinkResponse
+        ...deepLinkResponse,
       },
       environment.DEEP_LINKING_POST_MESSAGE_ORIGIN
     )
@@ -143,21 +153,23 @@ export const RetrievingContent = ({environment, parentWindow}) => {
   if (hasErrors) {
     return (
       <Flex justifyItems="center" direction="column">
-        <FlexItem>{header()}</FlexItem>
-        <FlexItem margin="medium 0">
+        <Flex.Item>{header()}</Flex.Item>
+        <Flex.Item margin="medium 0">
           <Table caption={I18n.t('Content Items with Errors')}>
             <TableHead>
               <TableRow>
-                <TableColHeader>{I18n.t('Content Item Title')}</TableColHeader>
-                <TableColHeader>{I18n.t('Status')}</TableColHeader>
-                <TableColHeader>{I18n.t('Field')}</TableColHeader>
-                <TableColHeader>{I18n.t('Error')}</TableColHeader>
+                <TableColHeader id="content_item_title">
+                  {I18n.t('Content Item Title')}
+                </TableColHeader>
+                <TableColHeader id="status">{I18n.t('Status')}</TableColHeader>
+                <TableColHeader id="field">{I18n.t('Field')}</TableColHeader>
+                <TableColHeader id="error">{I18n.t('Error')}</TableColHeader>
               </TableRow>
             </TableHead>
             <TableBody>{contentItems.map(item => renderContentItem(item))}</TableBody>
           </Table>
-        </FlexItem>
-        <FlexItem overflowY="hidden">
+        </Flex.Item>
+        <Flex.Item overflowY="hidden">
           <Button
             margin="none small"
             color="primary"
@@ -168,7 +180,7 @@ export const RetrievingContent = ({environment, parentWindow}) => {
           >
             {I18n.t('I Understand, Continue')}
           </Button>
-        </FlexItem>
+        </Flex.Item>
       </Flex>
     )
   }
@@ -177,26 +189,36 @@ export const RetrievingContent = ({environment, parentWindow}) => {
   return (
     <div>
       <Flex justifyItems="center" margin="x-large 0 large 0">
-        <FlexItem>
+        <Flex.Item>
           <Spinner renderTitle={message} size="large" />
-        </FlexItem>
+        </Flex.Item>
       </Flex>
       <Flex justifyItems="center" margin="0 0 large">
-        <FlexItem>
+        <Flex.Item>
           <Text size="x-large" fontStyle="italic">
             {message}
           </Text>
-        </FlexItem>
+        </Flex.Item>
       </Flex>
     </div>
   )
 }
 
 export default class DeepLinkingResponse {
+  static targetWindow(window: Window) {
+    // Use window.parent instead of window.top to allow
+    // tools within tools to send content items to the tool,
+    // not to Canvas. This assumes that tools are always only
+    // "one level deep" in the frame hierarchy.
+    const environment: Environment = window.ENV as Environment
+    const shouldUseParent = environment.deep_linking_use_window_parent
+    return window.opener || (shouldUseParent && window.parent) || window.top
+  }
+
   static mount() {
-    const parentWindow = window.opener || window.top
+    const parentWindow = this.targetWindow(window)
     ReactDOM.render(
-      <RetrievingContent environment={window.ENV} parentWindow={parentWindow} />,
+      <RetrievingContent environment={window.ENV as Environment} parentWindow={parentWindow} />,
       document.getElementById('deepLinkingContent')
     )
   }

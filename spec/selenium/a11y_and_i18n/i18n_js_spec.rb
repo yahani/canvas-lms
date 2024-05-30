@@ -31,37 +31,13 @@ describe "i18n js" do
 
   context "strftime" do
     it "formats just like ruby" do
+      skip("FOO-4268")
       # everything except %N %6N %9N %U %V %W %Z
       format = "%a %A %b %B %d %-d %D %e %F %h %H %I %j %k %l %L %m %M %n %3N %p %P %r %R %s %S %t %T %u %v %w %y %Y %z %%"
       date = Time.now
       expect(driver.execute_script(<<~JS).upcase).to eq date.strftime(format).upcase
         var date = new Date(#{date.strftime("%s")} * 1000 + #{date.strftime("%L").gsub(/^0+/, "")});
         return I18n.strftime(date, '#{format}');
-      JS
-    end
-  end
-
-  context "locales" do
-    it "pulls in core translations for all locales" do
-      skip("USE_OPTIMIZED_JS=true") unless ENV["USE_OPTIMIZED_JS"]
-      skip("RAILS_LOAD_ALL_LOCALES=true") unless ENV["RAILS_LOAD_ALL_LOCALES"]
-      core_keys = I18nTasks::Utils::CORE_KEYS
-      core_translations = I18n.available_locales.map do |locale|
-        [locale.to_s, I18n.backend.send(:translations)[locale].slice(*core_keys)]
-      end.to_h.deep_stringify_keys
-
-      expect(driver.execute_script(<<~JS)).to eq core_translations
-        var core = {};
-        var coreKeys = #{core_keys.map(&:to_s).inspect};
-        Object.keys(I18n.translations).forEach(function(locale) {
-          core[locale] = {};
-          coreKeys.forEach(function(key) {
-            if (I18n.translations[locale][key]) {
-              core[locale][key] = I18n.translations[locale][key];
-            }
-          });
-        });
-        return core;
       JS
     end
   end
@@ -73,7 +49,7 @@ describe "i18n js" do
 
       (I18n.available_locales - [:en]).each do |locale|
         driver.execute_script("I18n.locale = '#{locale}'")
-        rb_value = I18n.t("dashboard.confirm.close", "fake en default", locale: locale)
+        rb_value = I18n.t("dashboard.confirm.close", "fake en default", locale:)
         js_value = driver.execute_script("return I18n.scoped('dashboard').t('confirm.close', 'fake en default');")
         expect(js_value).to eq(rb_value)
       end

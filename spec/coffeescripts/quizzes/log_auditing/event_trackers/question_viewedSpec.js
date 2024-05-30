@@ -19,6 +19,7 @@
 import Subject from '@canvas/quiz-log-auditing/jquery/event_trackers/question_viewed'
 import K from '@canvas/quiz-log-auditing/jquery/constants'
 import $ from 'jquery'
+import 'jquery-migrate'
 
 const scrollSelector = 'html, body'
 const $scrollContainer = $(scrollSelector)
@@ -27,12 +28,12 @@ QUnit.module('Quizzes::LogAuditing::EventTrackers::QuestionViewed', {
   setup() {},
   teardown() {
     document.getElementById('fixtures').innerHTML = ''
-  }
+  },
 })
-const createQuestion = function(id) {
+const createQuestion = function (id) {
   const $question = $('<div />', {
     class: 'question',
-    id: `question_${id}`
+    id: `question_${id}`,
   }).appendTo(document.getElementById('fixtures'))
   QUnit.done(() => $question.remove())
   return $question
@@ -61,7 +62,7 @@ test('capturing: it works', () => {
   const $fakeQuestion = createQuestion('123')
   $fakeQuestion.css({
     height: '1px', // needs some height to be considered visible
-    'margin-top': offsetTop
+    'margin-top': offsetTop,
   })
   $scrollContainer.scrollTop(10).scroll()
   ok(!capture.called, 'question should not be marked as viewed just yet')

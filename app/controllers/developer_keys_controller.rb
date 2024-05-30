@@ -21,12 +21,11 @@
 class DeveloperKeysController < ApplicationController
   before_action :set_key, only: [:update, :destroy]
   before_action :require_manage_developer_keys
+  before_action :require_root_account, only: [:index, :create]
 
   include Api::V1::DeveloperKey
 
   def index
-    raise ActiveRecord::RecordNotFound unless @context.root_account?
-
     respond_to do |format|
       format.html do
         set_navigation
@@ -34,7 +33,7 @@ class DeveloperKeysController < ApplicationController
           accountEndpoint: api_v1_account_developer_keys_path(@context),
           enableTestClusterChecks: DeveloperKey.test_cluster_checks_enabled?,
           validLtiScopes: TokenScopes::LTI_SCOPES,
-          validLtiPlacements: Lti::ResourcePlacement.valid_placements(@domain_root_account),
+          validLtiPlacements: Lti::ResourcePlacement.public_placements(@domain_root_account),
           includesFeatureFlagEnabled: Account.site_admin.feature_enabled?(:developer_key_support_includes)
         )
 
@@ -53,6 +52,9 @@ class DeveloperKeysController < ApplicationController
         )
       end
     end
+  rescue => e
+    report_error(e)
+    raise e
   end
 
   def create
@@ -61,8 +63,12 @@ class DeveloperKeysController < ApplicationController
     if @key.save
       render json: developer_key_json(@key, @current_user, session, account_context)
     else
+      report_error(nil, 400)
       render json: @key.errors, status: :bad_request
     end
+  rescue => e
+    report_error(e)
+    raise e
   end
 
   def update
@@ -71,13 +77,20 @@ class DeveloperKeysController < ApplicationController
     if @key.save
       render json: developer_key_json(@key, @current_user, session, account_context)
     else
+      report_error(nil, 400)
       render json: @key.errors, status: :bad_request
     end
+  rescue => e
+    report_error(e)
+    raise e
   end
 
   def destroy
     @key.destroy
     render json: developer_key_json(@key, @current_user, session, account_context)
+  rescue => e
+    report_error(e)
+    raise e
   end
 
   protected
@@ -100,11 +113,7 @@ class DeveloperKeysController < ApplicationController
               end
             elsif @context.site_admin?
               # Return all siteadmin keys
-              if Account.site_admin.feature_enabled?(:site_admin_keys_only)
-                DeveloperKey.site_admin
-              else
-                DeveloperKey
-              end
+              DeveloperKey.site_admin
             else
               # Only return keys that belong to the current account
               DeveloperKey.where(account_id: @context.id)
@@ -114,7 +123,7 @@ class DeveloperKeysController < ApplicationController
 
     # query for parent keys is most likely cross-shard,
     # so doesn't fit into the scope cases above
-    if params[:inherited].present? && !@context.primary_settings_root_account?
+    if params[:inherited].present? && !@context.root_account.primary_settings_root_account?
       federated_parent = @context.account_chain(include_federated_parent: true).last
       parent_keys = DeveloperKey
                     .shard(federated_parent.shard)
@@ -125,11 +134,18 @@ class DeveloperKeysController < ApplicationController
       return parent_keys + scope
     end
 
+    if params[:id].present?
+      scope = scope.where(id: params[:id])
+    end
+
     scope
   end
 
   def set_key
     @key = DeveloperKey.nondeleted.find(params[:id])
+  rescue ActiveRecord::RecordNotFound => e
+    report_error(e)
+    raise e
   end
 
   def account_context
@@ -150,6 +166,13 @@ class DeveloperKeysController < ApplicationController
 
   def require_manage_developer_keys
     require_context_with_permission(account_context, :manage_developer_keys)
+  rescue ActiveRecord::RecordNotFound => e
+    report_error(e)
+    raise e
+  end
+
+  def require_root_account
+    raise ActiveRecord::RecordNotFound unless @context.root_account?
   end
 
   def developer_key_params
@@ -169,5 +192,10 @@ class DeveloperKeysController < ApplicationController
       :allow_includes,
       scopes: []
     )
+  end
+
+  def report_error(exception, code = nil)
+    code ||= response_code_for_rescue(exception) if exception
+    InstStatsd::Statsd.increment("canvas.developer_keys_controller.request_error", tags: { action: action_name, code: })
   end
 end

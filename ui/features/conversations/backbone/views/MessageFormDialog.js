@@ -18,20 +18,20 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import _ from 'underscore'
+import {map, pick, keys, filter, find, uniqueId, each, includes, every, isEmpty} from 'lodash'
 import {Collection} from '@canvas/backbone'
 import DialogBaseView from '@canvas/dialog-base-view'
 import template from '../../jst/MessageFormDialog.handlebars'
-import preventDefault from 'prevent-default'
+import preventDefault from '@canvas/util/preventDefault'
 import composeTitleBarTemplate from '../../jst/composeTitleBar.handlebars'
 import composeButtonBarTemplate from '../../jst/composeButtonBar.handlebars'
 import addAttachmentTemplate from '../../jst/addAttachment.handlebars'
-import Message from '../models/Message.coffee'
+import Message from '../models/Message'
 import AutocompleteView from './AutocompleteView'
 import CourseSelectionView from './CourseSelectionView'
 import ContextMessagesView from './ContextMessagesView'
 import 'jquery.elastic'
-import '@canvas/forms/jquery/jquery.instructure_forms.js'
+import '@canvas/jquery/jquery.instructure_forms'
 
 const I18n = useI18nScope('conversation_dialog')
 
@@ -59,7 +59,7 @@ export default class MessageFormDialog extends DialogBaseView {
       '.conversation_body': '$conversationBody',
       '.compose_form': '$form',
       '.user_note': '$userNote',
-      '.user_note_info': '$userNoteInfo'
+      '.user_note_info': '$userNoteInfo',
     }
 
     this.prototype.messages = {flashSuccess: I18n.t('message_sent', 'Message sent!')}
@@ -97,7 +97,7 @@ export default class MessageFormDialog extends DialogBaseView {
       buttons: [
         {
           text: I18n.t('#buttons.cancel', 'Cancel'),
-          click: this.cancel
+          click: this.cancel,
         },
         {
           text: I18n.t('#buttons.send', 'Send'),
@@ -106,9 +106,11 @@ export default class MessageFormDialog extends DialogBaseView {
           'data-track-action': 'Edit',
           'data-track-label': 'Send',
           'data-text-while-loading': I18n.t('Sending...'),
-          click: e => this.sendMessage(e)
-        }
-      ]
+          click: e => this.sendMessage(e),
+        },
+      ],
+      modal: true,
+      zIndex: 1000,
     }
   }
 
@@ -122,7 +124,7 @@ export default class MessageFormDialog extends DialogBaseView {
       this.returnFocusTo = options.trigger
     }
     if (options.remoteLaunch) {
-      this.launchParams = _.pick(options, 'context', 'user')
+      this.launchParams = pick(options, 'context', 'user')
     }
 
     this.render()
@@ -212,7 +214,7 @@ export default class MessageFormDialog extends DialogBaseView {
     this.prepareTextarea(this.$el)
     this.recipientView = new AutocompleteView({
       el: this.$recipients,
-      disabled: this.model != null ? this.model.get('private') : undefined
+      disabled: this.model != null ? this.model.get('private') : undefined,
     }).render()
     this.recipientView.on('changeToken', this.recipientIdsChanged, this)
     this.recipientView.on('recipientTotalChange', this.recipientTotalChanged, this)
@@ -228,14 +230,14 @@ export default class MessageFormDialog extends DialogBaseView {
       courses: this.options.courses,
       defaultOption: I18n.t('select_course', 'Select course'),
       messageableOnly: true,
-      excludeConcluded: true
+      excludeConcluded: true,
     })
     if (this.model) {
       if (this.model.get('context_code')) {
         this.onCourse({id: this.model.get('context_code'), name: this.model.get('context_name')})
       } else {
         this.courseView.on('course', c => this.onCourse(c))
-        this.courseView.setValue(`course_${_.keys(this.model.get('audience_contexts').courses)[0]}`)
+        this.courseView.setValue(`course_${keys(this.model.get('audience_contexts').courses)[0]}`)
       }
       this.recipientView.disable(false)
     } else if (this.launchParams) {
@@ -260,14 +262,14 @@ export default class MessageFormDialog extends DialogBaseView {
       if (this.options.user_id) {
         const query = {
           user_id: this.options.user_id,
-          from_conversation_id: this.options.from_conversation_id
+          from_conversation_id: this.options.from_conversation_id,
         }
         $.ajaxJSON(this.tokenInput.selector.url, 'GET', query, data => {
           if (data.length) {
             return this.tokenInput.addToken({
               value: data[0].id,
               text: data[0].name,
-              data: data[0]
+              data: data[0],
             })
           }
         })
@@ -280,7 +282,7 @@ export default class MessageFormDialog extends DialogBaseView {
       if (this.to === 'replyAll' || ENV.current_user_id === this.message.get('author').id) {
         tokens = tokens.concat(this.message.get('participants'))
         if (tokens.length > 1) {
-          tokens = _.filter(tokens, t => t.id !== ENV.current_user_id)
+          tokens = filter(tokens, t => t.id !== ENV.current_user_id)
         }
       }
       this.recipientView.setTokens(tokens)
@@ -311,12 +313,12 @@ export default class MessageFormDialog extends DialogBaseView {
         messages.filter(
           m =>
             new Date(m.get('created_at')) <= date &&
-            !_.find(participants, p => !_.includes(m.get('participating_user_ids'), p))
+            !find(participants, p => !includes(m.get('participating_user_ids'), p))
         )
       )
       const contextView = new ContextMessagesView({
         el: this.$contextMessages,
-        collection: includedMessages
+        collection: includedMessages,
       })
       contextView.render()
     }
@@ -359,7 +361,7 @@ export default class MessageFormDialog extends DialogBaseView {
           if (this.recipientView && !this.recipientView.tokens.length) {
             return I18n.t('Invalid recipient name.')
           }
-        }
+        },
       },
       handle_files(attachments, data) {
         data.attachment_ids = attachments.map(a => a.id)
@@ -373,7 +375,7 @@ export default class MessageFormDialog extends DialogBaseView {
         }
         return formData
       },
-      onSubmit: (request, submitData) => {
+      onSubmit: (request, _submitData) => {
         this.request = request
         const dfd = $.Deferred()
         $(this.el)
@@ -392,7 +394,7 @@ export default class MessageFormDialog extends DialogBaseView {
             let message = response.messages[0]
             message.author = {
               name: ENV.current_user.display_name,
-              avatar_url: ENV.current_user.avatar_image_url
+              avatar_url: ENV.current_user.avatar_image_url,
             }
             message = new Message(response, {parse: true})
             this.trigger('addMessage', message.toJSON().conversation.messages[0], response)
@@ -403,18 +405,18 @@ export default class MessageFormDialog extends DialogBaseView {
         }) // close after DOM has been updated, so focus is properly restored
         // also don't close the dialog on failure, so the user's typed message isn't lost
         return $.when(this.request).fail(() => dfd.reject())
-      }
+      },
     })
   }
 
   recipientIdsChanged(recipientIds) {
-    if (_.isEmpty(recipientIds) || _.includes(recipientIds, /(teachers|tas|observers)$/)) {
+    if (isEmpty(recipientIds) || includes(recipientIds, /(teachers|tas|observers)$/)) {
       return this.toggleUserNote(false)
     } else {
-      const canAddNotes = _.map(this.recipientView.tokenModels(), tokenModel =>
+      const canAddNotes = map(this.recipientView.tokenModels(), tokenModel =>
         this.canAddNotesFor(tokenModel)
       )
-      return this.toggleUserNote(_.every(canAddNotes))
+      return this.toggleUserNote(every(canAddNotes))
     }
   }
 
@@ -477,7 +479,7 @@ export default class MessageFormDialog extends DialogBaseView {
   }
 
   addAttachment() {
-    $('#file_input').attr('id', _.uniqueId('file_input'))
+    $('#file_input').attr('id', uniqueId('file_input'))
     this.appendAddAttachmentTemplate()
     this.updateAttachmentOverflow()
 
@@ -588,7 +590,7 @@ export default class MessageFormDialog extends DialogBaseView {
   }
 
   removeEmptyAttachments() {
-    return _.each(this.$attachments.find('input[value=]'), node => this.removeAttachment(node))
+    each(this.$attachments.find('input:not([value])'), node => this.removeAttachment(node))
   }
 
   removeAttachment(node) {

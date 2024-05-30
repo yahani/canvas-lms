@@ -25,6 +25,7 @@ module Lti
     # Launch: The authentication request
     class AuthenticationController < ApplicationController
       include Lti::RedisMessageClient
+      include Lti::Concerns::ParentFrame
 
       REQUIRED_PARAMS = %w[
         client_id
@@ -50,7 +51,9 @@ module Lti
       # domain in the authentication requests rather than keeping
       # track of institution-specific domain.
       def authorize_redirect
-        redirect_to authorize_redirect_url
+        Utils::InstStatsdUtils::Timing.track "lti.authorize_redirect" do
+          redirect_to authorize_redirect_url
+        end
       end
 
       # Handles the authentication response from an LTI tool. This
@@ -71,19 +74,47 @@ module Lti
       # For more details on how the cached ID token is generated,
       # please refer to the inline documentation of "app/models/lti/lti_advantage_adapter.rb"
       def authorize
-        validate_oidc_params!
-        validate_current_user!
-        validate_client_id!
-        validate_launch_eligibility!
+        Utils::InstStatsdUtils::Timing.track "lti.authorize" do
+          validate_oidc_params!
+          validate_current_user!
+          validate_client_id!
+          validate_launch_eligibility!
+          set_extra_csp_frame_ancestor! unless @oidc_error
 
-        render(
-          "lti/ims/authentication/authorize.html.erb",
-          layout: "borderless_lti",
-          locals: {
-            redirect_uri: redirect_uri,
-            parameters: @oidc_error || id_token
-          }
-        )
+          # This was added as a resolution to the INTEROP-8200 saga. Essentially, for a reason that no one was able to
+          # determine, during the second step of the LTI 1.3 launch, the browser would not send cookies. This meant that
+          # we had no user information and the launch would fail. Previously, we were forwarding this error along
+          # to tools. However, there wasn't really anything the tool was able to do. Luckily, the issue is easily fixed
+          # by just relaunching the tool. We *believe* that the issue was only present in Safari and that it was caused
+          # by ITP (Intelligent Tracking Prevention). We added this error screen to give the user and the tool a better
+          # overall experience, rather than just getting an obscure "login_required" error message.
+          # Unless you have tracked down the root cause of the issue and are sure that it is fixed,
+          # do not remove this error screen.
+          if @current_user.blank? && !public_course? && decoded_jwt.present? && Account.site_admin.feature_enabled?(:lti_login_required_error_page)
+            if context.is_a?(Account)
+              account = context
+            elsif context.respond_to?(:account)
+              account = context.account
+            end
+
+            InstStatsd::Statsd.increment("lti.oidc_login_required_error", tags: {
+                                           account: account&.global_id,
+                                           client_id: oidc_params[:client_id],
+                                         })
+            render("lti/ims/authentication/login_required_error_screen", status: :unauthorized, layout: "borderless_lti", formats: :html)
+            return
+          end
+
+          render(
+            "lti/ims/authentication/authorize",
+            formats: :html,
+            layout: "borderless_lti",
+            locals: {
+              redirect_uri:,
+              parameters: @oidc_error || launch_parameters
+            }
+          )
+        end
       end
 
       private
@@ -99,7 +130,7 @@ module Lti
       def validate_current_user!
         return if public_course? && @current_user.blank?
 
-        if !@current_user || Lti::Asset.opaque_identifier_for(@current_user, context: context) != oidc_params[:login_hint]
+        if !@current_user || Lti::Asset.opaque_identifier_for(@current_user, context:) != oidc_params[:login_hint]
           set_oidc_error!("login_required", "Must have an active user session")
         end
       end
@@ -123,8 +154,8 @@ module Lti
 
       def set_oidc_error!(error, error_description)
         @oidc_error = {
-          error: error,
-          error_description: error_description,
+          error:,
+          error_description:,
           state: oidc_params[:state]
         }
       end
@@ -140,6 +171,11 @@ module Lti
 
       def canvas_domain
         decoded_jwt["canvas_domain"]
+      end
+
+      # Overrides method in Lti::Concerns::ParentFrame; used by set_extra_csp_frame_ancestor!
+      def parent_frame_context
+        decoded_jwt["parent_frame_context"]
       end
 
       def context
@@ -158,10 +194,21 @@ module Lti
         end
       end
 
+      def launch_parameters
+        @launch_parameters ||= id_token.merge({
+          state: oidc_params[:state],
+          lti_storage_target:
+        }.compact)
+      end
+
+      def lti_storage_target
+        return nil unless decoded_jwt["include_storage_target"]
+
+        Lti::PlatformStorage::FORWARDING_TARGET
+      end
+
       def id_token
-        @id_token ||= Lti::Messages::JwtMessage.generate_id_token(cached_launch_with_nonce).merge({
-                                                                                                    state: oidc_params[:state]
-                                                                                                  })
+        @id_token ||= Lti::Messages::JwtMessage.generate_id_token(cached_launch_with_nonce)
       end
 
       def authorize_redirect_url

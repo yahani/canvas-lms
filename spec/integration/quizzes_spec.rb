@@ -37,6 +37,12 @@ describe Quizzes::QuizzesController do
       @cs2 = @course.course_sections.create!
     end
 
+    it "renders page title as Quizzes: Course Name" do
+      get "/courses/#{@course.id}/quizzes"
+
+      expect(Nokogiri::HTML5(response.body).title).to eq("Quizzes: #{@course.name}")
+    end
+
     context "with overridden due dates" do
       include TextHelper
 
@@ -57,7 +63,7 @@ describe Quizzes::QuizzesController do
         end
 
         it "shows an overridden due date for student" do
-          @course.enroll_user(user_factory, "StudentEnrollment")
+          @course.enroll_user(user_factory, "StudentEnrollment", enrollment_state: "active")
           user_session(@user)
 
           get "/courses/#{@course.id}/quizzes/#{@quiz.id}"
@@ -172,7 +178,7 @@ describe Quizzes::QuizzesController do
         doc = Nokogiri::HTML5(response.body)
         needing_review = doc.at_css("#questions_needing_review")
         expect(needing_review).to be_present
-        expect(needing_review.children.css("li a").map(&:text)).to eq(@quiz.quiz_data.map { |qq| qq["name"] })
+        expect(needing_review.children.css("li a").map(&:text)).to eq(@quiz.quiz_data.pluck("name"))
       end
 
       it "displays message about the quiz changing significantly" do
@@ -195,7 +201,7 @@ describe Quizzes::QuizzesController do
         doc = Nokogiri::HTML5(response.body)
         needing_review = doc.at_css("#questions_needing_review")
         expect(needing_review).to be_present
-        expect(needing_review.children.css("li a").map(&:text)).to eq(@quiz.quiz_data.map { |qq| qq["name"] })
+        expect(needing_review.children.css("li a").map(&:text)).to eq(@quiz.quiz_data.pluck("name"))
       end
 
       it "shoudn't show the user's name/email when it's an anonymous submission" do

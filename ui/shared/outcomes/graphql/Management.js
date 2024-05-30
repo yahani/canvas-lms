@@ -17,7 +17,7 @@
  */
 
 import axios from '@canvas/axios'
-import pluralize from 'str-pluralize'
+import pluralize from '@canvas/util/stringPluralize'
 import {gql} from '@canvas/apollo'
 
 export const groupFields = `
@@ -169,6 +169,7 @@ export const SEARCH_GROUP_OUTCOMES = gql`
                   points
                 }
                 canEdit
+                canArchive(contextId: $outcomesContextId, contextType: $outcomesContextType)
                 contextType
                 contextId
                 friendlyDescription(
@@ -338,6 +339,75 @@ export const CREATE_LEARNING_OUTCOME_GROUP = gql`
       errors {
         attribute
         message
+      }
+    }
+  }
+`
+
+export const COURSE_ALIGNMENT_STATS = gql`
+  query GetCourseAlignmentStatsQuery($id: ID!) {
+    course(id: $id) {
+      outcomeAlignmentStats {
+        totalOutcomes
+        alignedOutcomes
+        totalAlignments
+        totalArtifacts
+        alignedArtifacts
+        artifactAlignments
+      }
+    }
+  }
+`
+
+export const SEARCH_OUTCOME_ALIGNMENTS = gql`
+  query SearchOutcomeAlignmentsQuery(
+    $id: ID!
+    $outcomesCursor: String
+    $outcomesContextId: ID!
+    $outcomesContextType: String!
+    $searchQuery: String
+    $searchFilter: String
+  ) {
+    group: legacyNode(type: LearningOutcomeGroup, _id: $id) {
+      ... on LearningOutcomeGroup {
+        _id
+        outcomesCount(searchQuery: $searchQuery)
+        outcomes(
+          searchQuery: $searchQuery
+          filter: $searchFilter
+          first: 10
+          after: $outcomesCursor
+        ) {
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+          edges {
+            node {
+              ... on LearningOutcome {
+                _id
+                title
+                description
+                alignments(contextId: $outcomesContextId, contextType: $outcomesContextType) {
+                  _id
+                  title
+                  contentType
+                  assignmentContentType
+                  assignmentWorkflowState
+                  url
+                  moduleName
+                  moduleUrl
+                  moduleWorkflowState
+                  quizItems {
+                    _id
+                    title
+                  }
+                  alignmentsCount
+                }
+              }
+            }
+          }
+        }
       }
     }
   }

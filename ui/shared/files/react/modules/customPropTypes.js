@@ -18,11 +18,11 @@
 
 import PropTypes from 'prop-types'
 import Folder from '../../backbone/models/Folder'
-import FilesystemObject from '../../backbone/models/FilesystemObject.coffee'
+import FilesystemObject from '../../backbone/models/FilesystemObject'
 
 export default {
   contextType: PropTypes.oneOf(['users', 'groups', 'accounts', 'courses']),
   contextId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   folder: PropTypes.instanceOf(Folder),
-  filesystemObject: PropTypes.instanceOf(FilesystemObject)
+  filesystemObject: PropTypes.instanceOf(FilesystemObject),
 }

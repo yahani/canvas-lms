@@ -17,19 +17,20 @@
  */
 
 import $ from 'jquery'
+import 'jquery-migrate'
 import {extend, defer} from 'lodash'
 import RCELoader from '@canvas/rce/serviceRCELoader'
 import SectionCollection from '@canvas/sections/backbone/collections/SectionCollection'
 import DueDateList from '@canvas/due-dates/backbone/models/DueDateList'
-import Section from '@canvas/sections/backbone/models/Section.coffee'
-import DiscussionTopic from '@canvas/discussions/backbone/models/DiscussionTopic.coffee'
-import Announcement from '@canvas/discussions/backbone/models/Announcement.coffee'
+import Section from '@canvas/sections/backbone/models/Section'
+import DiscussionTopic from '@canvas/discussions/backbone/models/DiscussionTopic'
+import Announcement from '@canvas/discussions/backbone/models/Announcement'
 import DueDateOverrideView from '@canvas/due-dates'
-import EditView from 'ui/features/discussion_topic_edit/backbone/views/EditView.coffee'
+import EditView from 'ui/features/discussion_topic_edit/backbone/views/EditView'
 import AssignmentGroupCollection from '@canvas/assignments/backbone/collections/AssignmentGroupCollection'
 import fakeENV from 'helpers/fakeENV'
 import assertions from 'helpers/assertions'
-import 'helpers/jquery.simulate'
+import '@canvas/jquery/jquery.simulate'
 
 const currentOrigin = window.location.origin
 
@@ -40,7 +41,8 @@ const editView = function (opts = {}, discussOpts = {}) {
   if (opts.withAssignment) {
     const assignmentOpts = extend({}, opts.assignmentOpts, {
       name: 'Test Assignment',
-      assignment_overrides: []
+      assignment_overrides: [],
+      graded_submissions_exist: true,
     })
     discussOpts.assignment = assignmentOpts
   }
@@ -58,15 +60,15 @@ const editView = function (opts = {}, discussOpts = {}) {
     views: {
       'js-assignment-overrides': new DueDateOverrideView({
         model: dueDateList,
-        views: {}
-      })
+        views: {},
+      }),
     },
     lockedItems: opts.lockedItems || {},
     isEditing: false,
     anonymousState: ENV?.DISCUSSION_TOPIC?.ATTRIBUTES?.anonymous_state,
     react_discussions_post: ENV.REACT_DISCUSSIONS_POST,
     allow_student_anonymous_discussion_topics: ENV.allow_student_anonymous_discussion_topics,
-    context_is_not_group: ENV.context_is_not_group
+    context_is_not_group: ENV.context_is_not_group,
   })
   ;(app.assignmentGroupCollection = new AssignmentGroupCollection()).contextAssetString =
     ENV.context_asset_string
@@ -90,7 +92,7 @@ const nameLengthHelper = function (
     {
       title,
       set_assignment: '1',
-      assignment
+      assignment,
     },
     []
   )
@@ -111,7 +113,7 @@ QUnit.module('EditView', {
   },
   editView() {
     return editView.apply(this, arguments)
-  }
+  },
 })
 
 test('it should be accessible', function (assert) {
@@ -127,7 +129,7 @@ test('renders', function () {
 test('shows error message on assignment point change with submissions', function () {
   const view = this.editView({
     withAssignment: true,
-    assignmentOpts: {has_submitted_submissions: true}
+    assignmentOpts: {has_submitted_submissions: true},
   })
   view.renderGroupCategoryOptions()
   ok(view.$el.find('#discussion_point_change_warning'), 'rendered change warning')
@@ -165,7 +167,7 @@ test('validates the group category for non-assignment discussions', function () 
 test('does not render #podcast_has_student_posts_container for non-course contexts', function () {
   const view = this.editView({
     withAssignment: true,
-    permissions: {CAN_MODERATE: true}
+    permissions: {CAN_MODERATE: true},
   })
   equal(view.$el.find('#podcast_enabled').length, 1)
   equal(view.$el.find('#podcast_has_student_posts_container').length, 0)
@@ -221,9 +223,10 @@ test('shows todo checkbox', function () {
 test('shows todo input when todo checkbox is selected', function () {
   ENV.STUDENT_PLANNER_ENABLED = true
   const view = this.editView()
+  equal(view.$el.find('#todo_date_input')[0].style.display, 'none')
   view.$el.find('#allow_todo_date').prop('checked', true)
   view.$el.find('#allow_todo_date').trigger('change')
-  equal(view.$el.find('#todo_date_input')[0].style.display, 'block')
+  notStrictEqual(view.$el.find('#todo_date_input')[0].style.display, 'none')
 })
 
 test('shows todo input with date when given date', function () {
@@ -231,7 +234,7 @@ test('shows todo input with date when given date', function () {
   ENV.TIMEZONE = 'America/Chicago'
   const view = this.editView({}, {todo_date: '2017-01-03'})
   equal(view.$el.find('#allow_todo_date').prop('checked'), true)
-  equal(view.$el.find('input[name="todo_date"').val(), 'Jan 2, 2017, 6:00 PM')
+  equal(view.$el.find('input[name="todo_date"]').val(), 'Jan 2, 2017, 6:00 PM')
 })
 
 test('renders announcement page when planner enabled', function () {
@@ -254,6 +257,15 @@ test('does not show todo date elements when grading is enabled', function () {
   equal(view.$el.find('#todo_options')[0].style.display, 'none')
 })
 
+test('does retain the assignment when user with assignment-edit permission edits discussion', function () {
+  const view = this.editView({
+    withAssignment: true,
+    permissions: {CAN_UPDATE_ASSIGNMENT: true, CAN_CREATE_ASSIGNMENT: false},
+  })
+  const formData = view.getFormData()
+  equal(formData.set_assignment, '1')
+})
+
 test('does save todo date if allow_todo_date is checked and discussion is not graded', function () {
   ENV.STUDENT_PLANNER_ENABLED = true
   const todo_date = new Date('2017-05-25T08:00:00-0800')
@@ -261,8 +273,8 @@ test('does save todo date if allow_todo_date is checked and discussion is not gr
   view.renderGroupCategoryOptions()
   view.$el.find('#allow_todo_date').prop('checked', true)
   view.$el.find('#allow_todo_date').trigger('change')
-  view.$el.find('input[name="todo_date"').val(todo_date.toISOString())
-  view.$el.find('input[name="todo_date"').trigger('change')
+  view.$el.find('input[name="todo_date"]').val(todo_date.toISOString())
+  view.$el.find('input[name="todo_date"]').trigger('change')
   const formData = view.getFormData()
   equal(formData.todo_date.toString(), todo_date.toString())
 })
@@ -293,7 +305,7 @@ test('does not renders anonymous section if is a group discussion', function () 
   ENV.REACT_DISCUSSIONS_POST = true
   ENV.context_is_not_group = false
   const view = this.editView({
-    permissions: {CAN_MODERATE: true}
+    permissions: {CAN_MODERATE: true},
   })
   equal(view.$el.find('#anonymous_section_header').length, 0)
 })
@@ -302,7 +314,7 @@ test('renders anonymous section if able to moderate', function () {
   ENV.REACT_DISCUSSIONS_POST = true
   ENV.context_is_not_group = true
   const view = this.editView({
-    permissions: {CAN_MODERATE: true}
+    permissions: {CAN_MODERATE: true},
   })
   equal(view.$el.find('#anonymous_section_header').length, 1)
 })
@@ -320,7 +332,7 @@ test('renders anonymous section with anonymous discussions off checked', functio
   ENV.context_is_not_group = true
   ENV.DISCUSSION_TOPIC = {ATTRIBUTES: {anonymous_state: null}}
   const view = this.editView({
-    permissions: {CAN_MODERATE: true}
+    permissions: {CAN_MODERATE: true},
   })
   equal(view.$el.find('input[name=anonymous_state][value=null]:checked').length, 1)
 })
@@ -330,9 +342,88 @@ test('renders anonymous section with full_anonymity checked', function () {
   ENV.context_is_not_group = true
   ENV.DISCUSSION_TOPIC = {ATTRIBUTES: {anonymous_state: 'full_anonymity'}}
   const view = this.editView({
-    permissions: {CAN_MODERATE: true}
+    permissions: {CAN_MODERATE: true},
   })
   equal(view.$el.find('input[name=anonymous_state][value=full_anonymity]:checked').length, 1)
+})
+
+test("renders 'points' as editable when user has grade-edit permissions", function () {
+  const view = this.editView({
+    permissions: {CAN_EDIT_GRADES: true},
+    withAssignment: true,
+  })
+  notOk(view.$el.find('#discussion_topic_assignment_points_possible').attr('readonly'))
+})
+
+test("renders 'points' as readonly when user has grade-edit permissions", function () {
+  const view = this.editView({
+    permissions: {CAN_EDIT_GRADES: false},
+    withAssignment: true,
+  })
+  ok(view.$el.find('#discussion_topic_assignment_points_possible').attr('readonly'))
+})
+
+test('handleMessageEvent sets ab_guid when subject is assignment.set_ab_guid and the ab_guid is formatted correctly', function () {
+  const view = this.editView({
+    withAssignment: true,
+  })
+
+  const mockEvent = {
+    data: {
+      subject: 'assignment.set_ab_guid',
+      data: ['1E20776E-7053-11DF-8EBF-BE719DFF4B22', '1e20776e-7053-11df-8eBf-Be719dff4b22'],
+    },
+  }
+
+  view.handleMessageEvent(mockEvent)
+
+  deepEqual(
+    view.assignment.get('ab_guid'),
+    ['1E20776E-7053-11DF-8EBF-BE719DFF4B22', '1e20776e-7053-11df-8eBf-Be719dff4b22'],
+    'ab_guid should be set correctly'
+  )
+})
+
+test('handleMessageEvent does not set ab_guid when subject is not assignment.set_ab_guid', function () {
+  const view = this.editView({
+    withAssignment: true,
+  })
+
+  const mockEvent = {
+    data: {
+      subject: 'some.other.subject',
+      data: ['1E20776E-7053-11DF-8EBF-BE719DFF4B22', '1e20776e-7053-11df-8eBf-Be719dff4b22'],
+    },
+  }
+
+  view.handleMessageEvent(mockEvent)
+
+  notDeepEqual(
+    view.assignment.has('ab_guid'),
+    ['not_an_ab_guid', '1e20776e-7053-11df-8eBf-Be719dff4b22'],
+    'ab_guid should not be set'
+  )
+})
+
+test('handleMessageEvent does not set ab_guid when the ab_guid is not formatted correctly', function () {
+  const view = this.editView({
+    withAssignment: true,
+  })
+
+  const mockEvent = {
+    data: {
+      subject: 'assignment.set_ab_guid',
+      data: ['not_an_ab_guid', '1e20776e-7053-11df-8eBf-Be719dff4b22'],
+    },
+  }
+
+  view.handleMessageEvent(mockEvent)
+
+  notDeepEqual(
+    view.assignment.has('ab_guid'),
+    ['not_an_ab_guid', '1e20776e-7053-11df-8eBf-Be719dff4b22'],
+    'ab_guid should not be set'
+  )
 })
 
 QUnit.module(
@@ -349,7 +440,7 @@ QUnit.module(
         title,
         set_assignment: '1',
         assignment,
-        specific_sections: null
+        specific_sections: null,
       },
       []
     )
@@ -365,7 +456,7 @@ QUnit.module(
     const errors = view.validateBeforeSave(
       {
         title,
-        specific_sections: ['fake_section']
+        specific_sections: ['fake_section'],
       },
       []
     )
@@ -383,7 +474,7 @@ QUnit.module(
     const errors = view.validateBeforeSave(
       {
         title,
-        specific_sections: null
+        specific_sections: null,
       },
       []
     )
@@ -402,7 +493,7 @@ QUnit.module(
     const errors = view.validateBeforeSave(
       {
         title,
-        specific_sections: null
+        specific_sections: null,
       },
       []
     )
@@ -427,7 +518,7 @@ QUnit.module('EditView - Usage Rights', {
   },
   editView() {
     return editView.apply(this, arguments)
-  }
+  },
 })
 
 test('renders usage rights control', function () {
@@ -440,7 +531,7 @@ QUnit.module('EditView - ConditionalRelease', {
     fakeENV.setup()
     ENV.CONDITIONAL_RELEASE_SERVICE_ENABLED = true
     ENV.CONDITIONAL_RELEASE_ENV = {
-      assignment: {id: 1}
+      assignment: {id: 1},
     }
     $(document).on('submit', () => false)
     this.server = sinon.fakeServer.create({respondImmediately: true})
@@ -453,7 +544,7 @@ QUnit.module('EditView - ConditionalRelease', {
   },
   editView() {
     return editView.apply(this, arguments)
-  }
+  },
 })
 
 test('does not show conditional release tab when feature not enabled', function () {
@@ -604,7 +695,7 @@ test('switches to conditional tab if save error contains conditional release err
     view.$discussionEditView.tabs('option', 'active', 0)
     view.showErrors({
       foo: {type: 'bar'},
-      conditional_release: {type: 'bat'}
+      conditional_release: {type: 'bat'},
     })
     equal(view.$discussionEditView.tabs('option', 'active'), 1)
     return resolved()
@@ -618,7 +709,7 @@ test('switches to details tab if save error does not contain conditional release
     view.$discussionEditView.tabs('option', 'active', 1)
     view.showErrors({
       foo: {type: 'bar'},
-      baz: {type: 'bat'}
+      baz: {type: 'bat'},
     })
     equal(view.$discussionEditView.tabs('option', 'active'), 0)
     return resolved()
@@ -644,7 +735,7 @@ QUnit.module('EditView: Assignment External Tools', {
 
   editView() {
     return editView.apply(this, arguments)
-  }
+  },
 })
 
 test('it attaches assignment external tools component in course context', function () {
@@ -656,5 +747,15 @@ test('it attaches assignment external tools component in course context', functi
 test('it does not attach assignment external tools component in group context', function () {
   ENV.context_asset_string = 'group_1'
   const view = this.editView()
+  equal(view.$AssignmentExternalTools.children().size(), 0)
+})
+
+test('it renders assignment external tools on announcements page when assignment_edit_placement_not_on_announcements flag is on', function () {
+  const view = this.editView({isAnnouncement: true})
+  equal(view.$AssignmentExternalTools.children().size(), 0)
+})
+
+test('it does not render assignment external tools on announcements page when assignment_edit_placement_not_on_announcements flag is off', function () {
+  const view = this.editView({isAnnouncement: false})
   equal(view.$AssignmentExternalTools.children().size(), 0)
 })

@@ -16,9 +16,9 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import NavigationForTree from 'ui/features/content_migrations/backbone/views/NavigationForTree.coffee'
+import NavigationForTree from 'ui/features/content_migrations/backbone/views/NavigationForTree'
 import $ from 'jquery'
-import fakeENV from 'helpers/fakeENV'
+import 'jquery-migrate'
 
 QUnit.module('Navigation: Click Tests', {
   setup() {
@@ -34,10 +34,10 @@ QUnit.module('Navigation: Click Tests', {
   },
   teardown() {
     return $('#fixtures').html('')
-  }
+  },
 })
 
-test('clicking treeitem heading selects that tree item', function() {
+test('clicking treeitem heading selects that tree item', function () {
   const $heading = this.$tree.find('.treeitem-heading')
   const $treeitem = $heading.closest('[role=treeitem]')
   $heading.click()

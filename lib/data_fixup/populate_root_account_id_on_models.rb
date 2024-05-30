@@ -219,7 +219,7 @@ module DataFixup::PopulateRootAccountIdOnModels
   end
 
   # tables that have been filled for a while already
-  DONE_TABLES = [Account, Assignment, Course, CourseSection, Enrollment, EnrollmentDatesOverride, EnrollmentTerm, Group].freeze
+  DONE_TABLES = [Account, Assignment, Course, CourseSection, Enrollment, EnrollmentTerm, Group].freeze
 
   def self.send_later_backfill_strand(job, *args)
     delay_if_production(priority: Delayed::MAX_PRIORITY,
@@ -508,9 +508,9 @@ module DataFixup::PopulateRootAccountIdOnModels
     # cross-shard could actually exist so ignore:
     scope = scope.where("#{reflection.join_foreign_key} < #{Shard::IDS_PER_SHARD}")
 
-    scope.where("NOT EXISTS (?)", foreign_table.where(
-                                    "#{foreign_table.quoted_table_name}.#{reflection.join_primary_key}=#{table.quoted_table_name}.#{reflection.join_foreign_key}"
-                                  ))
+    scope.where.not(foreign_table.where(
+      "#{foreign_table.quoted_table_name}.#{reflection.join_primary_key}=#{table.quoted_table_name}.#{reflection.join_foreign_key}"
+    ).arel.exists)
   end
 
   def self.fill_nonexistent_associations_with_zeros(table, min, max)
@@ -543,7 +543,7 @@ module DataFixup::PopulateRootAccountIdOnModels
     return columns if columns.is_a?(String)
 
     names = Array(columns).map { |column| "#{assoc.klass.table_name}.#{column}" }
-    names.count == 1 ? names.first : "COALESCE(#{names.join(", ")})"
+    (names.count == 1) ? names.first : "COALESCE(#{names.join(", ")})"
   end
 
   def self.fill_cross_shard_associations(table, scope, reflection, column)

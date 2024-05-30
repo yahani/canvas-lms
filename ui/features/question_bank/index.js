@@ -18,8 +18,8 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import {map} from 'underscore'
-import OutcomeGroup from '@canvas/outcomes/backbone/models/OutcomeGroup.coffee'
+import {map} from 'lodash'
+import OutcomeGroup from '@canvas/outcomes/backbone/models/OutcomeGroup'
 import FindDialog from '@canvas/outcomes/backbone/views/FindDialog'
 import {updateAlignments, attachPageEvents} from './jquery/index'
 import './jst/move_question.handlebars'
@@ -45,7 +45,7 @@ class QuestionBankPage {
       setQuizMastery: true,
       shouldImport: false,
       disableGroupImport: true,
-      rootOutcomeGroup: this.rootOutcomeGroup
+      rootOutcomeGroup: this.rootOutcomeGroup,
     })
     this.$els.dialog.on('import', this.onOutcomeImport)
   }
@@ -68,7 +68,7 @@ class QuestionBankPage {
       const $outcome = $(o)
       const [id, percent] = Array.from([
         $outcome.data('id'),
-        $outcome.getTemplateData({textValues: ['mastery_threshold']}).mastery_threshold / 100.0
+        $outcome.getTemplateData({textValues: ['mastery_threshold']}).mastery_threshold / 100.0,
       ])
       if (id !== outcome.get('id')) {
         return [id, percent]

@@ -18,7 +18,7 @@
 
 import Backbone from '@canvas/backbone'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import TextHelper from '@canvas/util/TextHelper.coffee'
+import * as TextHelper from '@canvas/util/TextHelper'
 
 const I18n = useI18nScope('modelsPageView')
 
@@ -32,7 +32,7 @@ function parseUserAgentString(userAgent) {
     opera: /opera/.test(userAgent),
     firefox: /firefox/.test(userAgent),
     mozilla: /mozilla/.test(userAgent) && !/(compatible|webkit)/.test(userAgent),
-    speedgrader: /speedgrader/.test(userAgent)
+    speedgrader: /speedgrader/.test(userAgent),
   }
   let browser = null
   if (data.edge) {
@@ -53,10 +53,7 @@ function parseUserAgentString(userAgent) {
   if (!browser) {
     browser = I18n.t('browsers.unrecognized', 'Unrecognized Browser')
   } else if (data.version) {
-    data.version = data.version
-      .split(/\./)
-      .slice(0, 2)
-      .join('.')
+    data.version = data.version.split(/\./).slice(0, 2).join('.')
     browser = `${browser} ${data.version}`
   }
   return browser
@@ -91,5 +88,5 @@ PageView.prototype.computedAttributes = [
   'summarizedUserAgent',
   'readableInteractionTime',
   'truncatedURL',
-  'isLinkable'
+  'isLinkable',
 ]

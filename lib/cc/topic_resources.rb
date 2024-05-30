@@ -32,13 +32,13 @@ module CC
         title = topic.title || I18n.t("course_exports.unknown_titles.topic", "Unknown topic")
 
         if topic.assignment && !topic.assignment.can_copy?(@user)
-          add_error(I18n.t("course_exports.errors.topic_is_locked", "The topic \"%{title}\" could not be copied because it is locked.", title: title))
+          add_error(I18n.t("course_exports.errors.topic_is_locked", "The topic \"%{title}\" could not be copied because it is locked.", title:))
           next
         end
         begin
           add_topic(topic)
         rescue
-          add_error(I18n.t("course_exports.errors.topic", "The discussion topic \"%{title}\" failed to export", title: title), $!)
+          add_error(I18n.t("course_exports.errors.topic", "The discussion topic \"%{title}\" failed to export", title:), $!)
         end
       end
     end
@@ -138,7 +138,7 @@ module CC
           AssignmentResources.create_canvas_assignment(a, topic.assignment, @manifest)
         end
       end
-      doc.anonymous_state topic.anonymous_state
+      doc.anonymous_state topic.anonymous_state unless topic.anonymous_state.nil?
       doc.is_anonymous_author "true" if topic.is_anonymous_author
     end
   end

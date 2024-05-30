@@ -60,19 +60,55 @@ module Types
       value "inactive"
     end
 
+    class CourseFilterableEnrollmentType < BaseEnum
+      graphql_name "CourseFilterableEnrollmentType"
+      description "Users in a course can be returned based on these enrollment types"
+      value "StudentEnrollment"
+      value "TeacherEnrollment"
+      value "TaEnrollment"
+      value "ObserverEnrollment"
+      value "DesignerEnrollment"
+      value "StudentViewEnrollment"
+    end
+
+    class CourseGradeStatus < BaseEnum
+      description "Grade statuses that can be applied to submissions in a course"
+      value "late"
+      value "missing"
+      value "none"
+      value "excused"
+      value "extended"
+    end
+
     class CourseUsersFilterInputType < Types::BaseInputObject
       graphql_name "CourseUsersFilter"
 
-      argument :user_ids, [ID],
+      argument :user_ids,
+               [ID],
                "only include users with the given ids",
                prepare: GraphQLHelpers.relay_or_legacy_ids_prepare_func("User"),
                required: false
 
-      argument :enrollment_states, [CourseFilterableEnrollmentWorkflowState],
+      argument :enrollment_states,
+               [CourseFilterableEnrollmentWorkflowState],
                <<~MD,
                  only return users with the given enrollment state. defaults
                  to `invited`, `creation_pending`, `active`
                MD
+               required: false
+      argument :enrollment_types,
+               [CourseFilterableEnrollmentType],
+               "Only return users with the specified enrollment types",
+               required: false
+    end
+
+    class CourseSectionsFilterInputType < Types::BaseInputObject
+      graphql_name "CourseSectionsFilter"
+
+      argument :assignment_id,
+               ID,
+               "Only include sections associated with users assigned to this assignment",
+               prepare: GraphQLHelpers.relay_or_legacy_id_prepare_func("Assignment"),
                required: false
     end
 
@@ -85,15 +121,22 @@ module Types
 
     field :name, String, null: false
     field :course_code, String, "course short name", null: true
+    field :syllabus_body, String, null: true
     field :state, CourseWorkflowState, method: :workflow_state, null: false
 
-    field :assignment_groups_connection, AssignmentGroupType.connection_type,
+    field :assignment_groups_connection,
+          AssignmentGroupType.connection_type,
           method: :assignment_groups,
           null: true
 
+    field :apply_group_weights, Boolean, null: true
+    def apply_group_weights
+      object.apply_group_weights?
+    end
+
     implements Interfaces::AssignmentsConnectionInterface
     def assignments_connection(filter: {})
-      super(filter: filter, course: course)
+      super(filter:, course:)
     end
 
     field :account, AccountType, null: true
@@ -122,15 +165,26 @@ module Types
       course.resolved_outcome_calculation_method
     end
 
-    field :outcome_alignment_stats, CourseOutcomeAlignmentStatsType, null: false
+    field :outcome_alignment_stats, CourseOutcomeAlignmentStatsType, null: true
     def outcome_alignment_stats
-      Loaders::CourseOutcomeAlignmentStatsLoader.load(course)
+      Loaders::CourseOutcomeAlignmentStatsLoader.load(course) if course&.grants_right?(current_user, session, :manage_outcomes)
     end
 
-    field :sections_connection, SectionType.connection_type, null: true
-    def sections_connection
-      course.active_course_sections
-            .order(CourseSection.best_unicode_collation_key("name"))
+    field :sections_connection, SectionType.connection_type, null: true do
+      argument :filter, CourseSectionsFilterInputType, required: false
+    end
+
+    def sections_connection(filter: {})
+      scope = course.active_course_sections
+
+      if filter[:assignment_id]
+        assignment = course.assignments.active.find(filter[:assignment_id])
+        scope = scope.where(id: assignment.sections_for_assigned_students) if assignment.only_visible_to_overrides?
+      end
+
+      scope.order(CourseSection.best_unicode_collation_key("name"))
+    rescue ActiveRecord::RecordNotFound
+      raise GraphQL::ExecutionError, "assignment not found"
     end
 
     field :modules_connection, ModuleType.connection_type, null: true
@@ -139,12 +193,21 @@ module Types
             .order("name")
     end
 
-    field :users_connection, UserType.connection_type, null: true do
-      argument :user_ids, [ID], <<~MD,
-        Only include users with the given ids.
+    field :rubrics_connection, RubricType.connection_type, null: true
+    def rubrics_connection
+      rubric_associations = course.rubric_associations.bookmarked.include_rubric.to_a
+      rubric_associations = Canvas::ICU.collate_by(rubric_associations.select(&:rubric_id).uniq(&:rubric_id)) { |r| r.rubric.title }
+      rubric_associations.map(&:rubric)
+    end
 
-        **This field is deprecated, use `filter: {userIds}` instead.**
-      MD
+    field :users_connection, UserType.connection_type, null: true do
+      argument :user_ids,
+               [ID],
+               <<~MD,
+                 Only include users with the given ids.
+
+                 **This field is deprecated, use `filter: {userIds}` instead.**
+               MD
                prepare: GraphQLHelpers.relay_or_legacy_ids_prepare_func("User"),
                required: false
 
@@ -152,13 +215,19 @@ module Types
     end
     def users_connection(user_ids: nil, filter: {})
       return nil unless course.grants_any_right?(
-        current_user, session,
-        :read_roster, :view_all_grades, :manage_grades
+        current_user,
+        session,
+        :read_roster,
+        :view_all_grades,
+        :manage_grades
       )
 
-      scope = UserSearch.scope_for(course, current_user,
+      context.scoped_merge!(course:)
+      scope = UserSearch.scope_for(course,
+                                   current_user,
                                    include_inactive_enrollments: true,
-                                   enrollment_state: filter[:enrollment_states])
+                                   enrollment_state: filter[:enrollment_states],
+                                   enrollment_type: filter[:enrollment_types])
 
       user_ids = filter[:user_ids] || user_ids
       if user_ids.present?
@@ -168,16 +237,35 @@ module Types
       scope
     end
 
+    field :course_nickname, String, null: true
+    def course_nickname
+      current_user.course_nickname(course)
+    end
+
     field :enrollments_connection, EnrollmentType.connection_type, null: true do
       argument :filter, EnrollmentFilterInputType, required: false
     end
+
+    field :custom_grade_statuses_connection, CustomGradeStatusType.connection_type, null: true
+    def custom_grade_statuses_connection
+      return unless Account.site_admin.feature_enabled?(:custom_gradebook_statuses)
+      return unless course.grants_any_right?(current_user, session, :manage_grades, :view_all_grades)
+
+      course.custom_grade_statuses.active.order(:id)
+    end
+
     def enrollments_connection(filter: {})
       return nil unless course.grants_any_right?(
-        current_user, session,
-        :read_roster, :view_all_grades, :manage_grades
+        current_user,
+        session,
+        :read_roster,
+        :view_all_grades,
+        :manage_grades
       )
 
-      scope = course.apply_enrollment_visibility(course.all_enrollments, current_user).active
+      context.scoped_merge!(course:)
+      scope = course.apply_enrollment_visibility(course.all_enrollments, current_user)
+      scope = filter[:states].present? ? scope.where(workflow_state: filter[:states]) : scope.active
       scope = scope.where(associated_user_id: filter[:associated_user_ids]) if filter[:associated_user_ids].present?
       scope = scope.where(type: filter[:types]) if filter[:types].present?
       scope
@@ -188,10 +276,20 @@ module Types
       GradingPeriod.for(course).order(:start_date)
     end
 
+    field :relevant_grading_period_group, GradingPeriodGroupType, null: true
+    delegate :relevant_grading_period_group, to: :object
+
+    field :grading_standard, GradingStandardType, null: true
+    def grading_standard
+      object.grading_standard_or_default
+    end
+
     field :submissions_connection, SubmissionType.connection_type, null: true do
       description "all the submissions for assignments in this course"
 
-      argument :student_ids, [ID], "Only return submissions for the given students.",
+      argument :student_ids,
+               [ID],
+               "Only return submissions for the given students.",
                prepare: GraphQLHelpers.relay_or_legacy_ids_prepare_func("User"),
                required: false
       argument :order_by, [SubmissionOrderInputType], required: false
@@ -230,7 +328,7 @@ module Types
       end
 
       (order_by || []).each do |order|
-        direction = order[:direction] == "descending" ? "DESC NULLS LAST" : "ASC"
+        direction = (order[:direction] == "descending") ? "DESC NULLS LAST" : "ASC"
         submissions = submissions.order("#{order[:field]} #{direction}")
       end
 
@@ -262,7 +360,7 @@ module Types
       argument :filter, ExternalToolFilterInputType, required: false, default_value: {}
     end
     def external_tools_connection(filter:)
-      scope = ContextExternalTool.all_tools_for(course, { placements: filter.placement })
+      scope = Lti::ContextToolFinder.all_tools_for(course, { placements: filter.placement })
       filter.state.nil? ? scope : scope.where(workflow_state: filter.state)
     end
 
@@ -271,13 +369,15 @@ module Types
       load_association(:enrollment_term)
     end
 
-    field :permissions, CoursePermissionsType,
+    field :permissions,
+          CoursePermissionsType,
           "returns permission information for the current user in this course",
           null: true
     def permissions
       Loaders::PermissionsLoader.for(
         course,
-        current_user: current_user, session: session
+        current_user:,
+        session:
       )
     end
 
@@ -288,7 +388,8 @@ module Types
       load_association(:default_post_policy)
     end
 
-    field :assignment_post_policies, PostPolicyType.connection_type,
+    field :assignment_post_policies,
+          PostPolicyType.connection_type,
           <<~MD,
             PostPolicies for assignments within a course
           MD
@@ -330,5 +431,7 @@ module Types
     end
 
     field :root_outcome_group, LearningOutcomeGroupType, null: false
+
+    field :grade_statuses, [CourseGradeStatus], null: false
   end
 end

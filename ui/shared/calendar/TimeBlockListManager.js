@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import fcUtil from './jquery/fcUtil.coffee'
+import fcUtil from './jquery/fcUtil'
 
 export default class TimeBlockListManager {
   // takes an optional array of Date pairs
@@ -42,7 +42,7 @@ export default class TimeBlockListManager {
     this.sort()
 
     const consolidatedBlocks = []
-    consolidatedBlocks.last = function() {
+    consolidatedBlocks.last = function () {
       return this[this.length - 1]
     }
 

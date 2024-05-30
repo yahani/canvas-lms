@@ -109,7 +109,11 @@ as source system, data type, and term id. Some examples of good identifiers:
 
 Diffing mode by default marks objects as "deleted" when they are not included
 for an import, but enrollments can be marked as 'completed' or 'inactive' if the
-`diffing_drop_status` is passed.
+`diffing_drop_status` is passed. Likewise users removed between diffed batches
+can be marked as 'suspended' if the `diffing_user_remove_status` is set to
+`suspended`. If you prefer to leave removed objects alone in diffed imports,
+pass `skip_deletes=true` instead of either of these (this will apply to all object
+types, not just users and enrollments).
 
 If changes are made to SIS-managed objects outside of the normal import
 process, as in the example given above, it may be necessary to process a SIS
@@ -124,8 +128,9 @@ sends a partial or an empty file, diffing would see that all users not included
 should be removed. Using `change_threshold=10` will then not perform diffing if
 the files being compared are greater than 10% different. The threshold can be
 set to help prevent removing objects unintentionally. When set and the file is
-over 10% different it will be the same as if `diffing_remaster_data_set=true`.
-The change_threshold can be set to any integer between 1 and 100.
+over 10% different, the entire import file will be applied instead of diffing
+against a previous batch and this batch will not be used for diffing any future
+batches. The change_threshold can be set to any integer between 1 and 100.
 
 change_threshold also impacts batch mode.
 
@@ -282,14 +287,24 @@ recommended to omit this field over using fake email addresses for testing.</td>
 student, student_other, or teacher. Can pass "&lt;delete>" to remove the
 declared user type from the user.</td>
 </tr>
+<tr>
 <td>canvas_password_notification</td>
 <td>boolean</td>
 <td></td>
 <td></td>
 <td>Defaults to false. When true, user is notified for password setup if
-the authentication_provider_id is canvas</td>
+the authentication_provider_id is "canvas"</td>
 </tr>
 <tr>
+<td>home_account</td>
+<td>boolean</td>
+<td></td>
+<td></td>
+<td>Setting this to true will create a new user in the target account for the
+SIS import and merge in another existing user from another account within the
+consortium with a matching integration_id. Will be ignored unless the target
+account is associated with an auto-merge consortium.</td>
+</tr>
 <tr>
 <td>status</td>
 <td>enum</td>
@@ -442,7 +457,7 @@ When set, all columns except term_id, status, start_date, and end_date will be i
 <td></td>
 <td>✓</td>
 <td>The date the term starts. The format should be in ISO 8601:
-YYYY-MM-DDTHH:MM:SSZ</td>
+YYYY-MM-DDTHH:MM:SSZ. Will be cleared if empty.</td>
 </tr>
 <tr>
 <td>end_date</td>
@@ -450,7 +465,7 @@ YYYY-MM-DDTHH:MM:SSZ</td>
 <td></td>
 <td>✓</td>
 <td>The date the term ends. The format should be in ISO 8601:
-YYYY-MM-DDTHH:MM:SSZ</td>
+YYYY-MM-DDTHH:MM:SSZ. Will be cleared if empty.</td>
 </tr>
 </table>
 
@@ -534,7 +549,8 @@ specified the default term for the account will be used</td>
 <td></td>
 <td>✓</td>
 <td>The course start date. The format should be in ISO 8601:
-YYYY-MM-DDTHH:MM:SSZ. To remove the start date pass "&lt;delete>"</td>
+YYYY-MM-DDTHH:MM:SSZ. To remove the start date pass "&lt;delete&gt;".
+Will keep any existing value if empty.</td>
 </tr>
 <tr>
 <td>end_date</td>
@@ -542,7 +558,8 @@ YYYY-MM-DDTHH:MM:SSZ. To remove the start date pass "&lt;delete>"</td>
 <td></td>
 <td>✓</td>
 <td>The course end date. The format should be in ISO 8601:
-YYYY-MM-DDTHH:MM:SSZ. To remove the end date pass "&lt;delete>"</td>
+YYYY-MM-DDTHH:MM:SSZ. To remove the end date pass "&lt;delete&gt;"
+Will keep any existing value if empty.</td>
 </tr>
 <tr>
 <td>course_format</td>
@@ -649,14 +666,14 @@ interface, this is called the SIS ID.</td>
 <td>date</td>
 <td></td>
 <td>✓</td>
-<td>The section start date. The format should be in ISO 8601: YYYY-MM-DDTHH:MM:SSZ</td>
+<td>The section start date. The format should be in ISO 8601: YYYY-MM-DDTHH:MM:SSZ. Will be cleared if empty.</td>
 </tr>
 <tr>
 <td>end_date</td>
 <td>date</td>
 <td></td>
 <td>✓</td>
-<td>The section end date The format should be in ISO 8601: YYYY-MM-DDTHH:MM:SSZ</td>
+<td>The section end date The format should be in ISO 8601: YYYY-MM-DDTHH:MM:SSZ. Will be cleared if empty.</td>
 </tr>
 </table>
 
@@ -701,14 +718,14 @@ enrollments.csv
 <td>date</td>
 <td></td>
 <td>✓</td>
-<td>The enrollment start date. For start_date to take effect the end_date also needs to be populated. The format should be in ISO 8601: YYYY-MM-DDTHH:MM:SSZ</td>
+<td>The enrollment start date. For start_date to take effect the end_date also needs to be populated. The format should be in ISO 8601: YYYY-MM-DDTHH:MM:SSZ. Will be cleared if empty.</td>
 </tr>
 <tr>
 <td>end_date</td>
 <td>date</td>
 <td></td>
 <td>✓</td>
-<td>The enrollment end date. For end_date to take effect the start_date also needs to be populated. The format should be in ISO 8601: YYYY-MM-DDTHH:MM:SSZ</td>
+<td>The enrollment end date. For end_date to take effect the start_date also needs to be populated. The format should be in ISO 8601: YYYY-MM-DDTHH:MM:SSZ. Will be cleared if empty.</td>
 </tr>
 <tr>
 <td>user_id</td>

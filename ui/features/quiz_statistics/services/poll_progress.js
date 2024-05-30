@@ -24,27 +24,27 @@ import pickAndNormalize from '@canvas/quiz-legacy-client-apps/util/pick_and_norm
 
 const Adapter = new CoreAdapter(config)
 
-const fetchProgress = function(url) {
+const fetchProgress = function (url) {
   return Adapter.request({
     type: 'GET',
-    url
-  }).then(function(payload) {
+    url,
+  }).then(function (payload) {
     return pickAndNormalize(payload, K.PROGRESS_ATTRS)
   })
 }
 
 export default function pollProgress(url, options) {
   return new Promise((resolve, reject) => {
-    let poll, poller
+    let poller
 
     options = options || {}
 
-    $(window).on('beforeunload.progress', function() {
+    $(window).on('beforeunload.progress', function () {
       clearTimeout(poller)
     })
 
-    poll = function() {
-      fetchProgress(url).then(function(data) {
+    const poll = function () {
+      fetchProgress(url).then(function (data) {
         if (options.onTick) {
           options.onTick(data.completion, data)
         }

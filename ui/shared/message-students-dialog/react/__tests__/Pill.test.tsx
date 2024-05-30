@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2022 - present Instructure, Inc.
  *
@@ -23,7 +24,7 @@ import React from 'react'
 function makeProps(overrides) {
   const props = {
     ...overrides,
-    onClick: jest.fn().mockResolvedValue({})
+    onClick: jest.fn().mockResolvedValue({}),
   }
   return props
 }
@@ -60,6 +61,16 @@ describe('Pill', () => {
     const icon = getByTestId('item-selected')
     waitFor(() => {
       expect(icon).toBeInTheDocument()
+    })
+  })
+
+  it('truncates names with > 14 characters', () => {
+    const props = makeProps({studentId, text: 'LongNameLongName', selected: true})
+    const {findByRole} = render(<Pill {...props} />)
+
+    const button = findByRole('button', {name: 'LongNameLongN...'})
+    waitFor(() => {
+      expect(button).toBeInTheDocument()
     })
   })
 

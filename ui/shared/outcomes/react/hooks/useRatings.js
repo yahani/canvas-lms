@@ -18,26 +18,34 @@
 
 import {useMemo, useState, useCallback} from 'react'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import uuid from 'uuid/v1'
+import {v1 as uuid} from 'uuid'
 import useBoolean from './useBoolean'
 
 const I18n = useI18nScope('useRatings')
 
 const floatRegex = /^[+-]?\d+(\.\d+)?$/
 
-export const createRating = (description, points, focusField = null) => ({
+export const createRating = (
+  description,
+  points,
+  mastery,
+  focusField = null,
+  color = '#ffffff'
+) => ({
   description,
   points,
   focusField,
-  key: uuid()
+  color,
+  mastery,
+  key: uuid(),
 })
 
 export const defaultRatings = [
-  createRating(I18n.t('Exceeds Mastery'), 4),
-  createRating(I18n.t('Mastery'), 3),
-  createRating(I18n.t('Near Mastery'), 2),
-  createRating(I18n.t('Below Mastery'), 1),
-  createRating(I18n.t('No Evidence'), 0)
+  createRating(I18n.t('Exceeds Mastery'), 4, false),
+  createRating(I18n.t('Mastery'), 3, true),
+  createRating(I18n.t('Near Mastery'), 2, false),
+  createRating(I18n.t('Below Mastery'), 1, false),
+  createRating(I18n.t('No Evidence'), 0, false),
 ]
 
 export const defaultMasteryPoints = 3
@@ -83,7 +91,7 @@ const useRatings = ({initialRatings, initialMasteryPoints}) => {
         ...r,
         points,
         pointsError,
-        descriptionError
+        descriptionError,
       }
     })
   }, [ratings])
@@ -112,7 +120,7 @@ const useRatings = ({initialRatings, initialMasteryPoints}) => {
 
     return {
       value: masteryPointsFloat,
-      error
+      error,
     }
   }, [ratings, masteryPoints])
 
@@ -178,7 +186,7 @@ const useRatings = ({initialRatings, initialMasteryPoints}) => {
     ratingsError,
     masteryPointsError,
     clearRatingsFocus,
-    focusOnRatingsError
+    focusOnRatingsError,
   }
 }
 

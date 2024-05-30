@@ -16,18 +16,23 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* eslint-disable qunit/no-setup-teardown */
-
 import $ from 'jquery'
+import 'jquery-migrate'
 import DialogBaseView from '@canvas/dialog-base-view'
 
 QUnit.module('DialogBaseView', {
   setup() {
-    $('.ui-dialog').remove()
+    const $dialog = $('.ui-dialog')
+    if ($dialog.length) {
+      $dialog.remove()
+    }
   },
   teardown() {
-    $('.ui-dialog').remove()
-  }
+    const $dialog = $('.ui-dialog')
+    if ($dialog.length) {
+      $dialog.remove()
+    }
+  },
 })
 
 test('it removes the created dialog upon close when the destroy option is set', () => {

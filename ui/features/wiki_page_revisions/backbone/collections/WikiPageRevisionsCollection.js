@@ -15,9 +15,9 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
-import _ from 'underscore'
-import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection.coffee'
-import WikiPageRevision from '@canvas/wiki/backbone/models/WikiPageRevision.coffee'
+import {extend, pick} from 'lodash'
+import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection'
+import WikiPageRevision from '@canvas/wiki/backbone/models/WikiPageRevision'
 
 const revisionOptions = ['parentModel']
 
@@ -28,13 +28,13 @@ export default class WikiPageRevisionsCollection extends PaginatedCollection {
 
   initialize(models, options) {
     super.initialize(...arguments)
-    _.extend(this, _.pick(options || {}, revisionOptions))
+    extend(this, pick(options || {}, revisionOptions))
 
     if (this.parentModel) {
       const collection = this
       const {parentModel} = collection
 
-      function setupModel(model) {
+      const setupModel = model => {
         model.page = parentModel
         model.pageUrl = parentModel.get('url')
         model.contextAssetString = parentModel.contextAssetString
@@ -43,7 +43,7 @@ export default class WikiPageRevisionsCollection extends PaginatedCollection {
         }
       }
 
-      this.on('reset', models => models.each(setupModel))
+      this.on('reset', models_ => models_.each(setupModel))
       this.on('add', model => setupModel(model))
     }
   }

@@ -19,9 +19,9 @@ import Backbone from '@canvas/backbone'
 import $ from 'jquery'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import template from '../../jst/userDateRangeSearchForm.handlebars'
-import ValidatedMixin from '@canvas/forms/backbone/views/ValidatedMixin.coffee'
+import ValidatedMixin from '@canvas/forms/backbone/views/ValidatedMixin'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/datetime'
+import '@canvas/datetime/jquery'
 import 'jqueryui/dialog'
 import '@canvas/rails-flash-notifications'
 
@@ -47,7 +47,7 @@ export default class UserDateRangeSearchFormView extends Backbone.View {
       '.dateStartSearchField': '$dateStartSearchField',
       '.dateEndSearchField': '$dateEndSearchField',
       '.search-controls': '$searchControls',
-      '.search-people-status': '$searchPeopleStatus'
+      '.search-people-status': '$searchPeopleStatus',
     }
 
     this.optionProperty('formName')
@@ -101,7 +101,7 @@ export default class UserDateRangeSearchFormView extends Backbone.View {
   }
 
   selectUser(e) {
-    this.usersView.$el.find('tr').each(function() {
+    this.usersView.$el.find('tr').each(function () {
       $(this).removeClass('selected')
     })
     if (e) {
@@ -115,6 +115,7 @@ export default class UserDateRangeSearchFormView extends Backbone.View {
         height: 'auto',
         width: 400,
         modal: true,
+        zIndex: 1000,
         dialogClass: 'userDateRangeSearchModal',
         close() {
           return self.$el.find(`.roster_user_name[data-user-id=${id}]`).focus()
@@ -124,7 +125,7 @@ export default class UserDateRangeSearchFormView extends Backbone.View {
             text: I18n.t('Cancel'),
             click() {
               $(this).dialog('close')
-            }
+            },
           },
           {
             text: I18n.t('Find'),
@@ -141,9 +142,9 @@ export default class UserDateRangeSearchFormView extends Backbone.View {
               self.$hiddenDateEnd.val(self.$dateEndSearchField.val())
               self.$el.submit()
               $(this).dialog('close')
-            }
-          }
-        ]
+            },
+          },
+        ],
       })
     } else {
       return this.$userIdField.val('')
@@ -155,7 +156,7 @@ export default class UserDateRangeSearchFormView extends Backbone.View {
       return true
     }
     const date = dateField.data('unfudged-date')
-    return date instanceof Date && !isNaN(date.valueOf())
+    return date instanceof Date && !Number.isNaN(Number(date.valueOf()))
   }
 
   datesValidation() {
@@ -168,22 +169,22 @@ export default class UserDateRangeSearchFormView extends Backbone.View {
     if (startDate && endDate && startDate > endDate) {
       errors[`${this.formName}_end_time`] = [
         {
-          message: I18n.t('To Date cannot come before From Date')
-        }
+          message: I18n.t('To Date cannot come before From Date'),
+        },
       ]
     } else {
       if (!this.dateIsValid(startDateField)) {
         errors[`${this.formName}_start_time`] = [
           {
-            message: I18n.t('Not a valid date')
-          }
+            message: I18n.t('Not a valid date'),
+          },
         ]
       }
       if (!this.dateIsValid(endDateField)) {
         errors[`${this.formName}_end_time`] = [
           {
-            message: I18n.t('Not a valid date')
-          }
+            message: I18n.t('Not a valid date'),
+          },
         ]
       }
     }
@@ -199,8 +200,18 @@ export default class UserDateRangeSearchFormView extends Backbone.View {
     // Update the params (which fetches the collection)
     const json = this.$el.toJSON()
     delete json.search_term
-    if (!json.start_time) json.start_time = ''
-    if (!json.end_time) json.end_time = ''
+
+    if (!json.start_time) {
+      json.start_time = ''
+    } else {
+      json.start_time = new Date(this.$dateStartSearchField.data('unfudged-date')).toISOString()
+    }
+    if (!json.end_time) {
+      json.end_time = ''
+    } else {
+      json.end_time = new Date(this.$dateEndSearchField.data('unfudged-date')).toISOString()
+    }
+
     return this.collection.setParams(json)
   }
 }

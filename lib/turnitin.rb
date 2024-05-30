@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_dependency "turnitin/response"
-
 module Turnitin
   def self.state_from_similarity_score(similarity_score)
     return "none" if similarity_score == 0
@@ -92,19 +90,19 @@ module Turnitin
     end
 
     def createStudent(user)
-      sendRequest(:create_user, 2, user: user, utp: "1")
+      sendRequest(:create_user, 2, user:, utp: "1")
     end
 
     def createTeacher(user)
-      sendRequest(:create_user, 2, user: user, utp: "2")
+      sendRequest(:create_user, 2, user:, utp: "2")
     end
 
     def createCourse(course)
-      sendRequest(:create_course, 2, course: course, user: course, utp: "2")
+      sendRequest(:create_course, 2, course:, user: course, utp: "2")
     end
 
     def enrollStudent(course, student)
-      sendRequest(:enroll_student, 2, user: student, course: course, utp: "1", tem: email(course))
+      sendRequest(:enroll_student, 2, user: student, course:, utp: "1", tem: email(course))
     end
 
     def self.default_assignment_turnitin_settings
@@ -164,8 +162,8 @@ module Turnitin
       # submit_papers_to    - 0=none, 1=standard, 2=institution
       response = sendRequest(:create_assignment, settings.delete(:created) ? "3" : "2", settings.merge!({
                                                                                                           user: course,
-                                                                                                          course: course,
-                                                                                                          assignment: assignment,
+                                                                                                          course:,
+                                                                                                          assignment:,
                                                                                                           utp: "2",
                                                                                                           dtstart: "#{today.strftime} 00:00:00",
                                                                                                           dtdue: "#{today.strftime} 00:00:00",
@@ -186,8 +184,8 @@ module Turnitin
         post: true,
         utp: "1",
         user: student,
-        course: course,
-        assignment: assignment,
+        course:,
+        assignment:,
         tem: email(course)
       }
       responses = {}
@@ -214,7 +212,7 @@ module Turnitin
       course = assignment.context
       object_id = submission.turnitin_data[asset_string][:object_id] rescue nil
       res = nil
-      res = sendRequest(:generate_report, 2, oid: object_id, utp: "2", user: course, course: course, assignment: assignment) if object_id
+      res = sendRequest(:generate_report, 2, oid: object_id, utp: "2", user: course, course:, assignment:) if object_id
       data = {}
       if res
         data[:similarity_score] = res.css("originalityscore").first.try(:content)
@@ -229,7 +227,7 @@ module Turnitin
       assignment = submission.assignment
       course = assignment.context
       object_id = submission.turnitin_data[asset_string][:object_id] rescue nil
-      sendRequest(:generate_report, 1, oid: object_id, utp: "2", user: course, course: course, assignment: assignment)
+      sendRequest(:generate_report, 1, oid: object_id, utp: "2", user: course, course:, assignment:)
     end
 
     def submissionStudentReportUrl(submission, asset_string)
@@ -237,7 +235,7 @@ module Turnitin
       assignment = submission.assignment
       course = assignment.context
       object_id = submission.turnitin_data[asset_string][:object_id] rescue nil
-      sendRequest(:generate_report, 1, oid: object_id, utp: "1", user: user, course: course, assignment: assignment, tem: email(course))
+      sendRequest(:generate_report, 1, oid: object_id, utp: "1", user:, course:, assignment:, tem: email(course))
     end
 
     def submissionPreviewUrl(submission, asset_string)
@@ -245,7 +243,7 @@ module Turnitin
       assignment = submission.assignment
       course = assignment.context
       object_id = submission.turnitin_data[asset_string][:object_id] rescue nil
-      sendRequest(:show_paper, 1, oid: object_id, utp: "1", user: user, course: course, assignment: assignment, tem: email(course))
+      sendRequest(:show_paper, 1, oid: object_id, utp: "1", user:, course:, assignment:, tem: email(course))
     end
 
     def submissionDownloadUrl(submission, asset_string)
@@ -253,12 +251,12 @@ module Turnitin
       assignment = submission.assignment
       course = assignment.context
       object_id = submission.turnitin_data[asset_string][:object_id] rescue nil
-      sendRequest(:show_paper, 1, oid: object_id, utp: "1", user: user, course: course, assignment: assignment, tem: email(course))
+      sendRequest(:show_paper, 1, oid: object_id, utp: "1", user:, course:, assignment:, tem: email(course))
     end
 
     def listSubmissions(assignment)
       course = assignment.context
-      sendRequest(:list_papers, 2, assignment: assignment, course: course, user: course, utp: "1", tem: email(course))
+      sendRequest(:list_papers, 2, assignment:, course:, user: course, utp: "1", tem: email(course))
     end
 
     # From the turnitin api docs: To calculate the MD5, concatenate the data
@@ -279,7 +277,7 @@ module Turnitin
       keys = %i[aid assign assignid cid cpw ctl diagnostic dis dtdue dtstart dtpost encrypt fcmd fid gmtime newassign newupw oid pfn pln ptl ptype said tem uem ufn uid uln upw utp]
       keys.each do |key|
         keys_used << key if params[key].present?
-        str += (params[key] || "")
+        str += params[key] || ""
       end
       str += @shared_secret
       Digest::MD5.hexdigest(str)
@@ -346,8 +344,7 @@ module Turnitin
       params = prepare_params(command, fcmd, args)
 
       if post
-        mp = Multipart::Post.new
-        query, headers = mp.prepare_query(params)
+        query, headers = LegacyMultipart::Post.prepare_query(params)
         http = Net::HTTP.new(@host, 443)
         http.use_ssl = true
         http_response = http.start do |con|
@@ -355,9 +352,11 @@ module Turnitin
           con.read_timeout = 30
           begin
             con.request(req, query)
-          rescue
+          rescue => e
             Rails.logger.error("Turnitin API error for account_id #{@account_id}: POSTING FAILED")
             Rails.logger.error(params.to_json)
+            Canvas::Errors.capture(e, { tags: { type: "turnitin_api_unreachable", host: @host, endpoint: @endpoint } })
+            raise e
           end
         end
       else
@@ -365,7 +364,7 @@ module Turnitin
         params.each do |key, value|
           next if value.nil?
 
-          requestParams += "&#{URI.escape(key.to_s)}=#{CGI.escape(value.to_s)}"
+          requestParams += "&#{URI::DEFAULT_PARSER.escape(key.to_s)}=#{CGI.escape(value.to_s)}"
         end
         if params[:fcmd] == "1"
           return "https://#{@host}#{@endpoint}?#{requestParams}"

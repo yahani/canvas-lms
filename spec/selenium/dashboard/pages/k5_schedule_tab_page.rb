@@ -105,7 +105,7 @@ module K5ScheduleTabPageObject
 
   def beginning_of_week_date
     date_block = ff(week_date_selector)
-    date_block[0].text == "Today" ? date_block[1].text : date_block[0].text
+    (date_block[0].text == "Today") ? date_block[1].text : date_block[0].text
   end
 
   def calendar_event_modal
@@ -255,16 +255,16 @@ module K5ScheduleTabPageObject
 
   def update_todo_title(old_todo_title, new_todo_title)
     todo_element = todo_title_input(old_todo_title)
-    todo_element.send_keys([:command, "a"], :backspace, new_todo_title)
+    replace_content(todo_element, new_todo_title)
   end
 
   #------------------------Helper Methods------------------------#
 
   def beginning_weekday_calculation(current_date)
-    (current_date.beginning_of_week(:sunday)).strftime("%B %-d")
+    current_date.beginning_of_week(:sunday).strftime("%B %-d")
   end
 
   def ending_weekday_calculation(current_date)
-    (current_date.end_of_week(:sunday)).strftime("%B %-d")
+    current_date.end_of_week(:sunday).strftime("%B %-d")
   end
 end

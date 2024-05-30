@@ -32,28 +32,34 @@ class AssignmentGroup < ActiveRecord::Base
 
   attr_readonly :context_id, :context_type
 
-  attr_accessor :saved_by
+  attr_accessor :saved_by, :validate_rules
 
   belongs_to :context, polymorphic: [:course]
   acts_as_list scope: { context: self, workflow_state: "available" }
   has_a_broadcast_policy
-  serialize :integration_data, Hash
+  serialize :integration_data, type: Hash
 
   has_many :scores, -> { active }
   has_many :assignments, -> { order("position, due_at, title") }
 
-  has_many :active_assignments, lambda {
-    where("assignments.workflow_state<>'deleted'").order("assignments.position, assignments.due_at, assignments.title")
-  }, class_name: "Assignment", dependent: :destroy
+  has_many :active_assignments,
+           lambda {
+             where("assignments.workflow_state<>'deleted'").order("assignments.position, assignments.due_at, assignments.title")
+           },
+           class_name: "Assignment",
+           dependent: :destroy
 
-  has_many :published_assignments, lambda {
-    where(workflow_state: "published").order("assignments.position, assignments.due_at, assignments.title")
-  }, class_name: "Assignment"
+  has_many :published_assignments,
+           lambda {
+             where(workflow_state: "published").order("assignments.position, assignments.due_at, assignments.title")
+           },
+           class_name: "Assignment"
 
   validates :context_id, :context_type, :workflow_state, presence: true
   validates :rules, length: { maximum: maximum_text_length }, allow_blank: true
   validates :default_assignment_name, length: { maximum: maximum_string_length }, allow_nil: true
   validates :name, length: { maximum: maximum_string_length }, allow_nil: true
+  validate :validate_assignment_group_rules, if: :validate_rules
 
   before_create :set_root_account_id
   before_save :set_context_code
@@ -169,12 +175,38 @@ class AssignmentGroup < ActiveRecord::Base
   # drop_lowest:2\ndrop_highest:1\nnever_drop:12\nnever_drop:14\n
   def rules_hash=(incoming_hash)
     rule_string = ""
-    rule_string += "drop_lowest:#{incoming_hash["drop_lowest"]}\n" if incoming_hash["drop_lowest"]
-    rule_string += "drop_highest:#{incoming_hash["drop_highest"]}\n" if incoming_hash["drop_highest"]
+
+    if incoming_hash["drop_lowest"]
+      drop_lowest = incoming_hash["drop_lowest"]
+      drop_lowest_value = drop_lowest.respond_to?(:to_i) ? drop_lowest.to_i : drop_lowest
+      rule_string += "drop_lowest:#{drop_lowest_value}\n"
+    end
+
+    if incoming_hash["drop_highest"]
+      drop_highest = incoming_hash["drop_highest"]
+      drop_highest_value = drop_highest.respond_to?(:to_i) ? drop_highest.to_i : drop_highest
+      rule_string += "drop_highest:#{drop_highest_value}\n"
+    end
+
     incoming_hash["never_drop"]&.each do |r|
       rule_string += "never_drop:#{r}\n"
     end
     self.rules = rule_string
+  end
+
+  def validate_assignment_group_rules
+    parsed_rules_hash = rules_hash({ stringify_json_ids: true })
+    drop_lowest = parsed_rules_hash["drop_lowest"]
+    drop_highest = parsed_rules_hash["drop_highest"]
+
+    if (drop_lowest && drop_lowest < 0) || (drop_highest && drop_highest < 0)
+      errors.add(:rules, t("drop_rules_must_be_positive", "Drop rules must be a positive number"))
+    end
+
+    if (drop_lowest && drop_lowest > assignments.active.count) ||
+       (drop_highest && drop_highest > assignments.active.count)
+      errors.add(:rules, t("drop_rules_too_high", "Drop rules cannot be higher than the number of assignments"))
+    end
   end
 
   def points_possible
@@ -252,8 +284,8 @@ class AssignmentGroup < ActiveRecord::Base
       user,
       context,
       [self],
-      includes: includes,
-      assignment_ids: assignment_ids
+      includes:,
+      assignment_ids:
     )
   end
 
@@ -306,7 +338,7 @@ class AssignmentGroup < ActiveRecord::Base
     score_ids = Score.where(
       assignment_group_id: self,
       enrollment_id: student_enrollments,
-      workflow_state: new_workflow_state == :active ? :deleted : :active
+      workflow_state: (new_workflow_state == :active) ? :deleted : :active
     ).pluck(:id)
 
     score_ids.each_slice(1000) do |score_ids_batch|

@@ -33,14 +33,14 @@ actions.listCollaborationsStart = payload => ({type: actions.LIST_COLLABORATIONS
 actions.LIST_COLLABORATIONS_SUCCESSFUL = 'LIST_COLLABORATIONS_SUCCESSFUL'
 actions.listCollaborationsSuccessful = payload => ({
   type: actions.LIST_COLLABORATIONS_SUCCESSFUL,
-  payload
+  payload,
 })
 
 actions.LIST_COLLABORATIONS_FAILED = 'LIST_COLLABORATIONS_FAILED'
 actions.listCollaborationsFailed = error => ({
   type: actions.LIST_COLLABORATIONS_FAILED,
   error: true,
-  payload: error
+  payload: error,
 })
 
 actions.LIST_LTI_COLLABORATIONS_START = 'LIST_LTI_COLLABORATIONS_START'
@@ -49,14 +49,14 @@ actions.listLTICollaborationsStart = () => ({type: actions.LIST_LTI_COLLABORATIO
 actions.LIST_LTI_COLLABORATIONS_SUCCESSFUL = 'LIST_LTI_COLLABORATIONS_SUCCESSFUL'
 actions.listLTICollaborationsSuccessful = tools => ({
   type: actions.LIST_LTI_COLLABORATIONS_SUCCESSFUL,
-  payload: tools
+  payload: tools,
 })
 
 actions.LIST_LTI_COLLABORATIONS_FAILED = 'LIST_LTI_COLLABORATIONS_FAILED'
 actions.listLTICollaborationsFailed = error => ({
   type: actions.LIST_LTI_COLLABORATIONS_FAILED,
   payload: error,
-  error: true
+  error: true,
 })
 
 actions.DELETE_COLLABORATION_START = 'DELETE_COLLABORATION_START'
@@ -65,14 +65,14 @@ actions.deleteCollaborationStart = () => ({type: actions.DELETE_COLLABORATION_ST
 actions.DELETE_COLLABORATION_SUCCESSFUL = 'DELETE_COLLABORATION_SUCCESSFUL'
 actions.deleteCollaborationSuccessful = deletedCollaborationId => ({
   type: actions.DELETE_COLLABORATION_SUCCESSFUL,
-  payload: deletedCollaborationId
+  payload: deletedCollaborationId,
 })
 
 actions.DELETE_COLLABORATION_FAILED = 'DELETE_COLLABORATION_FAILED'
 actions.deleteCollaborationFailed = error => ({
   type: actions.DELETE_COLLABORATION_FAILED,
   payload: error,
-  error: true
+  error: true,
 })
 
 actions.CREATE_COLLABORATION_START = 'CREATE_COLLABORATION_START'
@@ -81,14 +81,14 @@ actions.createCollaborationStart = () => ({type: actions.CREATE_COLLABORATION_ST
 actions.CREATE_COLLABORATION_SUCCESSFUL = 'CREATE_COLLABORATION_SUCCESSFUL'
 actions.createCollaborationSuccessful = collaboration => ({
   type: actions.CREATE_COLLABORATION_SUCCESSFUL,
-  payload: collaboration
+  payload: collaboration,
 })
 
 actions.CREATE_COLLABORATION_FAILED = 'CREATE_COLLABORATION_FAILED'
 actions.createCollaborationFailed = error => ({
   type: actions.CREATE_COLLABORATION_FAILED,
   payload: error,
-  error: true
+  error: true,
 })
 
 actions.UPDATE_COLLABORATION_START = 'UPDATE_COLLABORATION_START'
@@ -97,14 +97,14 @@ actions.updateCollaborationStart = () => ({type: actions.UPDATE_COLLABORATION_ST
 actions.UPDATE_COLLABORATION_SUCCESSFUL = 'UPDATE_COLLABORATION_SUCCESSFUL'
 actions.updateCollaborationSuccessful = collaboration => ({
   type: actions.UPDATE_COLLABORATION_SUCCESSFUL,
-  payload: collaboration
+  payload: collaboration,
 })
 
 actions.UPDATE_COLLABORATION_FAILED = 'UPDATE_COLLABORATION_FAILED'
 actions.updateCollaborationFailed = error => ({
   type: actions.UPDATE_COLLABORATION_FAILED,
   payload: error,
-  error: true
+  error: true,
 })
 
 actions.getCollaborations = (url, newSearch) => {
@@ -147,7 +147,7 @@ actions.deleteCollaboration = (context, contextId, collaborationId) => {
     const url = `/api/v1/${context}/${contextId}/collaborations/${collaborationId}`
     axios
       .delete(url)
-      .then(response => {
+      .then(_response => {
         dispatch(actions.deleteCollaborationSuccessful(collaborationId))
         dispatch(actions.getCollaborations(`/api/v1/${context}/${contextId}/collaborations`))
       })
@@ -155,18 +155,21 @@ actions.deleteCollaboration = (context, contextId, collaborationId) => {
   }
 }
 
-actions.createCollaboration = (context, contextId, contentItems) => {
+actions.createCollaboration = (context, contextId, contentItems, tool_id) => {
   return dispatch => {
     dispatch(actions.createCollaborationStart())
     const url = `/${context}/${contextId}/collaborations`
     axios
       .post(
         url,
-        {contentItems: JSON.stringify(contentItems)},
+        {
+          contentItems: JSON.stringify(contentItems),
+          tool_id,
+        },
         {
           headers: {
-            Accept: 'application/json'
-          }
+            Accept: 'application/json',
+          },
         }
       )
       .then(({data}) => {
@@ -179,18 +182,21 @@ actions.createCollaboration = (context, contextId, contentItems) => {
   }
 }
 
-actions.updateCollaboration = (context, contextId, contentItems, collaborationId) => {
+actions.updateCollaboration = (context, contextId, contentItems, tool_id, collaborationId) => {
   return dispatch => {
     dispatch(actions.updateCollaborationStart())
     const url = `/${context}/${contextId}/collaborations/${collaborationId}`
     axios
       .put(
         url,
-        {contentItems: JSON.stringify(contentItems)},
+        {
+          contentItems: JSON.stringify(contentItems),
+          tool_id,
+        },
         {
           headers: {
-            Accept: 'application/json'
-          }
+            Accept: 'application/json',
+          },
         }
       )
       .then(({collaboration}) => {
@@ -203,13 +209,13 @@ actions.updateCollaboration = (context, contextId, contentItems, collaborationId
   }
 }
 
-actions.externalContentReady = ({contentItems, service_id}) => {
+actions.externalContentReady = ({contentItems, service_id, tool_id}) => {
   return dispatch => {
     const [context, contextId] = splitAssetString(ENV.context_asset_string)
     if (service_id) {
-      dispatch(actions.updateCollaboration(context, contextId, contentItems, service_id))
+      dispatch(actions.updateCollaboration(context, contextId, contentItems, tool_id, service_id))
     } else {
-      dispatch(actions.createCollaboration(context, contextId, contentItems))
+      dispatch(actions.createCollaboration(context, contextId, contentItems, tool_id))
     }
   }
 }

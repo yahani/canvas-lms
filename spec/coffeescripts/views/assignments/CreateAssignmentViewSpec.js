@@ -1,3 +1,7 @@
+/* eslint-disable qunit/resolve-async */
+/* eslint-disable qunit/no-ok-equality */
+/* eslint-disable qunit/no-identical-names */
+
 /*
  * Copyright (C) 2013 - present Instructure, Inc.
  *
@@ -17,30 +21,30 @@
  */
 
 import AssignmentGroupCollection from '@canvas/assignments/backbone/collections/AssignmentGroupCollection'
-import AssignmentGroup from '@canvas/assignments/backbone/models/AssignmentGroup.coffee'
-import Assignment from '@canvas/assignments/backbone/models/Assignment.coffee'
-import CreateAssignmentView from 'ui/features/assignment_index/backbone/views/CreateAssignmentView.coffee'
-import DialogFormView from '@canvas/forms/backbone/views/DialogFormView.coffee'
+import AssignmentGroup from '@canvas/assignments/backbone/models/AssignmentGroup'
+import Assignment from '@canvas/assignments/backbone/models/Assignment'
+import CreateAssignmentView from 'ui/features/assignment_index/backbone/views/CreateAssignmentView'
+import DialogFormView from '@canvas/forms/backbone/views/DialogFormView'
 import $ from 'jquery'
-import tz from '@canvas/timezone'
-import tzInTest from '@canvas/timezone/specHelpers'
+import 'jquery-migrate'
+import tzInTest from '@canvas/datetime/specHelpers'
 import timezone from 'timezone'
 import juneau from 'timezone/America/Juneau'
 import french from 'timezone/fr_FR'
 import I18nStubber from 'helpers/I18nStubber'
 import fakeENV from 'helpers/fakeENV'
 import assertions from 'helpers/assertions'
-import 'helpers/jquery.simulate'
-import '../../../../ui/boot/initializers/activateTooltips.js'
+import '@canvas/jquery/jquery.simulate'
+import '../../../../ui/boot/initializers/activateTooltips'
 
 function buildAssignment1() {
   const date1 = {
     due_at: new Date('2103-08-28T00:00:00').toISOString(),
-    title: 'Summer Session'
+    title: 'Summer Session',
   }
   const date2 = {
     due_at: new Date('2103-08-28T00:00:00').toISOString(),
-    title: 'Winter Session'
+    title: 'Winter Session',
   }
   return buildAssignment({
     id: 1,
@@ -49,7 +53,7 @@ function buildAssignment1() {
     due_at: new Date('August 21, 2013').toISOString(),
     points_possible: 2,
     position: 1,
-    all_dates: [date1, date2]
+    all_dates: [date1, date2],
   })
 }
 
@@ -59,7 +63,7 @@ const buildAssignment2 = () =>
     name: 'Math Quiz',
     due_at: new Date('August 23, 2013').toISOString(),
     points_possible: 10,
-    position: 2
+    position: 2,
   })
 
 const buildAssignment3 = () =>
@@ -68,7 +72,7 @@ const buildAssignment3 = () =>
     name: '',
     due_at: '',
     points_possible: 10,
-    position: 3
+    position: 3,
   })
 
 const buildAssignment4 = () =>
@@ -79,7 +83,7 @@ const buildAssignment4 = () =>
     unlock_at: new Date('August 1, 2013').toISOString(),
     lock_at: new Date('August 30, 2013').toISOString(),
     points_possible: 10,
-    position: 4
+    position: 4,
   })
 
 const buildAssignment5 = () =>
@@ -89,7 +93,7 @@ const buildAssignment5 = () =>
     submission_types: ['wiki_page'],
     grading_type: 'not_graded',
     points_possible: null,
-    position: 5
+    position: 5,
   })
 
 const buildAssignment = (options = {}) => ({
@@ -105,7 +109,7 @@ const buildAssignment = (options = {}) => ({
   needs_grading_count: 0,
   all_dates: [],
   published: true,
-  ...options
+  ...options,
 })
 
 function assignmentGroup() {
@@ -116,7 +120,7 @@ function assignmentGroup() {
     position: 1,
     rules: {},
     group_weight: 1,
-    assignments
+    assignments,
   }
   const groups = new AssignmentGroupCollection([group])
   return groups.models[0]
@@ -151,7 +155,7 @@ QUnit.module('CreateAssignmentView', {
     fakeENV.teardown()
     tzInTest.restore()
     I18nStubber.clear()
-  }
+  },
 })
 
 test('should be accessible', function (assert) {
@@ -196,6 +200,22 @@ test('render hides date picker and points_possible for pages', function () {
   const view = createView(this.assignment5)
   equal(view.$('.date_field_container').length, 0)
   equal(view.$('input[name=points_possible]').length, 0)
+})
+
+test('includes the year in the input for current-year dates', function () {
+  const now = new Date()
+  const assignment = new Assignment(
+    buildAssignment({
+      id: 4,
+      name: 'Science Project',
+      due_at: now.toISOString(),
+      points_possible: 10,
+      position: 2,
+    })
+  )
+  const view = createView(assignment)
+  const input = view.$el.find('.datetime_field')
+  ok(input.val().includes(now.getFullYear()))
 })
 
 test('onSaveSuccess adds model to assignment group for creation', function () {
@@ -317,7 +337,7 @@ test('openAgain adds datetime picker', function () {
   I18nStubber.stub('fr_FR', {
     'date.formats.medium': '%a %-d %b %Y %-k:%M',
     'date.month_names': ['août'],
-    'date.abbr_month_names': ['août']
+    'date.abbr_month_names': ['août'],
   })
   const view = createView(this.assignment2)
   view.openAgain()
@@ -376,14 +396,14 @@ test('requires due_at to be in an open grading period if it is being changed and
       title: 'Closed Period',
       close_date: '2103-08-31T06:00:00Z',
       is_last: false,
-      is_closed: true
-    }
+      is_closed: true,
+    },
   ]
   const view = createView(this.assignment1)
   sandbox.stub(view, 'currentUserIsAdmin').returns(false)
   const data = {
     name: 'Foo',
-    due_at: '2103-08-15T06:00:00Z'
+    due_at: '2103-08-15T06:00:00Z',
   }
   const errors = view.validateBeforeSave(data, [])
   equal(errors.due_at[0].message, 'Due date cannot fall in a closed grading period')
@@ -398,14 +418,14 @@ test('does not require due_at to be in an open grading period if it is being cha
       title: 'Closed Period',
       close_date: '2103-08-31T06:00:00Z',
       is_last: false,
-      is_closed: true
-    }
+      is_closed: true,
+    },
   ]
   const view = createView(this.assignment1)
   sandbox.stub(view, 'currentUserIsAdmin').returns(true)
   const data = {
     name: 'Foo',
-    due_at: '2103-08-15T06:00:00Z'
+    due_at: '2103-08-15T06:00:00Z',
   }
   const errors = view.validateBeforeSave(data, [])
   notOk(errors.due_at)
@@ -475,7 +495,7 @@ test('rejects a letter for points_possible', function () {
   const view = createView(this.assignment3)
   const data = {
     name: 'foo',
-    points_possible: 'a'
+    points_possible: 'a',
   }
   const errors = view.validateBeforeSave(data, [])
   ok(errors.points_possible)
@@ -491,26 +511,26 @@ test('passes explicit submission_type for Assignment option', function () {
 test('validates due date against date range', function () {
   const start_at = {
     date: new Date('August 20, 2013').toISOString(),
-    date_context: 'term'
+    date_context: 'term',
   }
   const end_at = {
     date: new Date('August 30, 2013').toISOString(),
-    date_context: 'course'
+    date_context: 'course',
   }
   ENV.VALID_DATE_RANGE = {
     start_at,
-    end_at
+    end_at,
   }
   const view = createView(this.assignment3)
   let data = {
     name: 'Example',
-    due_at: new Date('September 1, 2013').toISOString()
+    due_at: new Date('September 1, 2013').toISOString(),
   }
   let errors = view.validateBeforeSave(data, [])
   equal(errors.due_at[0].message, 'Due date cannot be after course end')
   data = {
     name: 'Example',
-    due_at: new Date('July 1, 2013').toISOString()
+    due_at: new Date('July 1, 2013').toISOString(),
   }
   errors = view.validateBeforeSave(data, [])
   ok(errors.due_at)
@@ -523,14 +543,14 @@ test('validates due date for lock and unlock', function () {
   const view = createView(this.assignment4)
   let data = {
     name: 'Example',
-    due_at: new Date('September 1, 2013').toISOString()
+    due_at: new Date('September 1, 2013').toISOString(),
   }
   let errors = view.validateBeforeSave(data, [])
   ok(errors.due_at)
   equal(errors.due_at[0].message, 'Due date cannot be after lock date')
   data = {
     name: 'Example',
-    due_at: new Date('July 1, 2013').toISOString()
+    due_at: new Date('July 1, 2013').toISOString(),
   }
   errors = view.validateBeforeSave(data, [])
   ok(errors.due_at)
@@ -540,12 +560,12 @@ test('validates due date for lock and unlock', function () {
 test('renders due dates with locale-appropriate format string', function () {
   tzInTest.configureAndRestoreLater({
     tz: timezone(french, 'fr_FR'),
-    momentLocale: 'fr'
+    momentLocale: 'fr',
   })
   I18nStubber.setLocale('fr_FR')
   I18nStubber.stub('fr_FR', {
     'date.formats.short': '%-d %b',
-    'date.abbr_month_names.8': 'août'
+    'date.abbr_month_names': [0, 1, 2, 3, 4, 5, 6, 7, 'août', 9, 10, 11, 12],
   })
   const view = createView(this.assignment1)
   equal(view.$('#vdd_tooltip_assign_1 div dd').first().text().trim(), '28 août')
@@ -555,16 +575,29 @@ test('renders due dates in appropriate time zone', function () {
   tzInTest.configureAndRestoreLater({
     tz: timezone(juneau, 'America/Juneau'),
     tzData: {
-      'America/Juneau': juneau
-    }
+      'America/Juneau': juneau,
+    },
   })
 
   I18nStubber.stub('en', {
     'date.formats.short': '%b %-d',
-    'date.abbr_month_names.8': 'Aug'
+    'date.abbr_month_names': [0, 1, 2, 3, 4, 5, 6, 7, 'Aug', 9, 10, 11, 12],
   })
   const view = createView(this.assignment1)
   equal(view.$('#vdd_tooltip_assign_1 div dd').first().text().trim(), 'Aug 27')
+})
+
+test('sets points possible when the assignment has unfrozen points possible', function () {
+  const view = createView(this.assignment2)
+  const data = view.getFormData()
+  equal(data.points_possible, 10)
+})
+
+test('does not set points possible when the assignment has frozen points possible', function () {
+  this.assignment2.set('frozen_attributes', ['points_possible'])
+  const view = createView(this.assignment2)
+  const data = view.getFormData()
+  notOk(data.hasOwnProperty('points_possible'))
 })
 
 QUnit.module('ENV.DEFAULT_DUE_TIME', {
@@ -578,7 +611,7 @@ QUnit.module('ENV.DEFAULT_DUE_TIME', {
     fakeENV.teardown()
     tzInTest.restore()
     I18nStubber.clear()
-  }
+  },
 })
 
 test('sets the default due time', function () {
@@ -598,7 +631,7 @@ QUnit.module('due_at', hooks => {
   const assignment = {
     id: 1,
     name: 'Charlie Brown Quiz',
-    due_at: $.unfudgeDateForProfileTimezone(new Date(date).toISOString())
+    due_at: $.unfudgeDateForProfileTimezone(new Date(date).toISOString()),
   }
   let view
 

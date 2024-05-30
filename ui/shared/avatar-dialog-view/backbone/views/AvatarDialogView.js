@@ -18,7 +18,7 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import _ from 'underscore'
+import {each, isString, defer, find, partial, isArray} from 'lodash'
 import DialogBaseView from '@canvas/dialog-base-view'
 import UploadFileView from './UploadFileView'
 import TakePictureView from './TakePictureView'
@@ -34,7 +34,7 @@ export default class AvatarDialogView extends DialogBaseView {
 
     this.prototype.AVATAR_SIZE = {
       h: 128,
-      w: 128
+      w: 128,
     }
 
     this.child('uploadFileView', '#upload-picture')
@@ -45,13 +45,13 @@ export default class AvatarDialogView extends DialogBaseView {
       selectAvatar: I18n.t('buttons.select_profile_picture', 'Select Profile Picture'),
       cancel: I18n.t('#buttons.cancel', 'Cancel'),
       selectImage: I18n.t('buttons.save', 'Save'),
-      selectingImage: I18n.t('buttons.selecting_image', 'Selecting Image...')
+      selectingImage: I18n.t('buttons.selecting_image', 'Selecting Image...'),
     }
 
     this.prototype.events = {
       'click .nav-pills a': 'onNav',
       'click .select-photo-link': 'onUploadClick',
-      'change #selected-photo': 'onSelectAvatar'
+      'change #selected-photo': 'onSelectAvatar',
     }
   }
 
@@ -61,16 +61,18 @@ export default class AvatarDialogView extends DialogBaseView {
       buttons: [
         {
           text: this.messages.cancel,
-          click: (...args) => this.cancel(...args)
+          click: (...args) => this.cancel(...args),
         },
         {
           text: this.messages.selectImage,
           class: 'btn-primary select_button',
-          click: () => this.updateAvatar()
-        }
+          click: () => this.updateAvatar(),
+        },
       ],
       height: 500,
-      width: 600
+      width: 600,
+      modal: true,
+      zIndex: 1000,
     }
   }
 
@@ -83,7 +85,7 @@ export default class AvatarDialogView extends DialogBaseView {
 
   show() {
     this.render()
-    _.each(this.children, child => this.listenTo(child, 'ready', this.onReady))
+    each(this.children, child => this.listenTo(child, 'ready', this.onReady))
     this.togglePane(this.$('.nav-pills a')[0])
     return super.show(...arguments)
   }
@@ -120,9 +122,7 @@ export default class AvatarDialogView extends DialogBaseView {
   }
 
   disableSelectButton() {
-    $('.select_button')
-      .prop('disabled', true)
-      .text(this.messages.selectingImage)
+    $('.select_button').prop('disabled', true).text(this.messages.selectingImage)
   }
 
   viewUpdateAvatar() {
@@ -149,9 +149,9 @@ export default class AvatarDialogView extends DialogBaseView {
       if (errors) {
         const errorReducer = (errorString, currentError) => (errorString += currentError.message)
 
-        const message = _.isString(errors.base)
+        const message = isString(errors.base)
           ? errors.base
-          : _.isArray(errors.base)
+          : isArray(errors.base)
           ? errors.base.reduce(errorReducer, '')
           : I18n.t(
               'Your profile photo could not be uploaded. You may have exceeded your upload limit.'
@@ -173,7 +173,7 @@ export default class AvatarDialogView extends DialogBaseView {
       'attachment[on_duplicate]': 'overwrite',
       'attachment[folder_id]': ENV.folder_id,
       'attachment[filename]': 'profile.jpg',
-      'attachment[context_code]': `user_${ENV.current_user_id}`
+      'attachment[context_code]': `user_${ENV.current_user_id}`,
     }).fail(xhr => this.handleErrorUpdating(xhr.responseText))
   }
 
@@ -193,7 +193,7 @@ export default class AvatarDialogView extends DialogBaseView {
   // wait 5 seconds and then error out
   waitAndSaveUserAvatar(token, url, count) {
     return $.getJSON('/api/v1/users/self/avatars').then(avatarList => {
-      const processedAvatar = _.find(avatarList, avatar => avatar.token === token)
+      const processedAvatar = find(avatarList, avatar => avatar.token === token)
       if (processedAvatar) {
         return this.saveUserAvatar(token, url)
       } else if (count < 50) {
@@ -202,8 +202,8 @@ export default class AvatarDialogView extends DialogBaseView {
         return this.handleErrorUpdating(
           JSON.stringify({
             errors: {
-              base: I18n.t('Profile photo save failed too many times')
-            }
+              base: I18n.t('Profile photo save failed too many times'),
+            },
           })
         )
       }
@@ -214,8 +214,8 @@ export default class AvatarDialogView extends DialogBaseView {
     return $.ajax('/api/v1/users/self', {
       data: {'user[avatar][token]': token},
       dataType: 'json',
-      type: 'PUT'
-    }).then(_.partial(this.updateDomAvatar, url))
+      type: 'PUT',
+    }).then(partial(this.updateDomAvatar, url))
   }
 
   updateDomAvatar = url => {
@@ -248,7 +248,7 @@ export default class AvatarDialogView extends DialogBaseView {
   checkFocus() {
     // deferring this makes it work more reliably because in some cases (like
     // visibility updates) the focus isn't lost immediately.
-    return _.defer(this.checkFocusDeferred)
+    return defer(this.checkFocusDeferred)
   }
 
   checkFocusDeferred = () => {
@@ -261,7 +261,7 @@ export default class AvatarDialogView extends DialogBaseView {
   }
 
   teardown() {
-    return _.each(this.children, child => child.teardown())
+    each(this.children, child => child.teardown())
   }
 
   toJSON() {

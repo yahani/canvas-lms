@@ -247,9 +247,10 @@ module GroupsCommon
 
   # Moves student from one group to another group. Assumes student can be seen by toggling group's collapse arrow.
   def move_student_to_group(group_destination, student = 0)
-    ff(".group-user-actions")[student].click
+    ff("[data-testid=groupUserMenu]")[student].click
+    wait_for_ajaximations
     wait_for(method: nil, timeout: 1) { f(".ui-menu-item .edit-group-assignment").displayed? }
-    ff(".edit-group-assignment")[student].click
+    f("[data-testid=moveTo]").click
     wait_for(method: nil, timeout: 2) { fxpath("//*[@data-cid='Tray']//*[@role='dialog']").displayed? }
     click_option(".move-select .move-select__group select", @testgroup[group_destination].name)
     wait_for_animations
@@ -263,9 +264,9 @@ module GroupsCommon
 
   # Assumes student can be seen by toggling group's collapse arrow
   def remove_student_from_group(student = 0)
-    ff(".group-user-actions")[student].click
+    ff("[data-testid=groupUserMenu]")[student].click
     wait_for_ajaximations
-    ff(".remove-from-group")[student].click
+    f("[data-testid=removeFromGroup]").click
     wait_for_ajaximations
   end
 
@@ -308,8 +309,9 @@ module GroupsCommon
     a = Attachment.create! context: student,
                            filename: "homework.pdf",
                            uploaded_data: StringIO.new("blah blah blah")
-    assignment.submit_homework(student, attachments: [a],
-                                        submission_type: "online_upload")
+    assignment.submit_homework(student,
+                               attachments: [a],
+                               submission_type: "online_upload")
   end
 
   def create_group_announcement_manually(title, text)
@@ -339,9 +341,11 @@ module GroupsCommon
                           end
 
     add_file(fixture_file_upload("example.pdf", "application/pdf"),
-             @testgroup.first, "example.pdf")
+             @testgroup.first,
+             "example.pdf")
     add_file(fixture_file_upload("a_file.txt", "text/plain"),
-             second_file_context, "a_file.txt")
+             second_file_context,
+             "a_file.txt")
   end
 
   def expand_files_on_content_pane

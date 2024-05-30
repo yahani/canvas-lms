@@ -68,12 +68,26 @@ describe UsersController do
       expect(response.body).not_to match(/studentname2/)
     end
 
-    it "shows user notes if enabled" do
-      get user_course_teacher_activity_url(@teacher, @course)
-      expect(response.body).not_to match(/journal entry/i)
-      @course.root_account.update_attribute(:enable_user_notes, true)
-      get user_course_teacher_activity_url(@teacher, @course)
-      expect(response.body).to match(/journal entry/i)
+    context "when the deprecate_faculty_journal flag is disabled" do
+      before { Account.site_admin.disable_feature!(:deprecate_faculty_journal) }
+
+      it "shows user notes if enabled" do
+        get user_course_teacher_activity_url(@teacher, @course)
+        expect(response.body).not_to match(/journal entry/i)
+        @course.root_account.update_attribute(:enable_user_notes, true)
+        get user_course_teacher_activity_url(@teacher, @course)
+        expect(response.body).to match(/journal entry/i)
+      end
+    end
+
+    context "when the deprecate_faculty_journal flag is enabled" do
+      it "does not show user notes if enabled" do
+        get user_course_teacher_activity_url(@teacher, @course)
+        expect(response.body).not_to match(/journal entry/i)
+        @course.root_account.update_attribute(:enable_user_notes, true)
+        get user_course_teacher_activity_url(@teacher, @course)
+        expect(response.body).to_not match(/journal entry/i)
+      end
     end
 
     it "shows individual user info across courses" do
@@ -172,9 +186,11 @@ describe UsersController do
       student_in_course(account: @account)
 
       role = custom_account_role("custom", account: @account)
-      RoleOverride.create!(context: @account, permission: "read_roster",
-                           role: role, enabled: true)
-      @account.account_users.create!(user: user_factory, role: role)
+      RoleOverride.create!(context: @account,
+                           permission: "read_roster",
+                           role:,
+                           enabled: true)
+      @account.account_users.create!(user: user_factory, role:)
       user_session(@user)
 
       get "/users/#{@student.id}"
@@ -185,9 +201,11 @@ describe UsersController do
       account_model
       student_in_course(account: @account)
       role = custom_account_role("custom", account: @account)
-      RoleOverride.create!(context: @account, permission: "read_roster",
-                           role: role, enabled: true)
-      @account.account_users.create!(user: user_factory, role: role)
+      RoleOverride.create!(context: @account,
+                           permission: "read_roster",
+                           role:,
+                           enabled: true)
+      @account.account_users.create!(user: user_factory, role:)
       user_session(@user)
 
       get "/courses/#{@course.id}/users/#{@student.id}"
@@ -202,6 +220,25 @@ describe UsersController do
       doc = Nokogiri::HTML5(response.body)
       membership = doc.at_css(".courses span.subtitle").to_s
       expect(membership).to match(/CustomTeacherRole/)
+    end
+
+    it "does not render group memberships from cross-account when not authorized" do
+      root_account = Account.default
+      sub_account_a = account_model(parent_account: root_account)
+      sub_account_b = account_model(parent_account: root_account)
+      course_1 = course_factory(account: sub_account_a, active_all: true)
+      course_2 = course_factory(account: sub_account_b, active_all: true)
+      student = user_factory(active_all: true)
+      student_in_course(user: student, course: course_1)
+      student_in_course(user: student, course: course_2)
+      group = course_1.groups.create!(name: "My Group")
+      group.add_user(student, "accepted", true)
+      admin = account_admin_user(account: sub_account_b, active_all: true)
+      user_session(admin)
+
+      get "/users/#{student.id}"
+      doc = Nokogiri::HTML5(response.body)
+      expect(doc.at_css(".groups")).to be_nil
     end
   end
 
@@ -299,7 +336,7 @@ describe UsersController do
       @first_course = @course
       course_with_student(user: @student, active_all: true)
       role = custom_account_role("grade viewer", account: Account.default)
-      account_admin_user_with_role_changes(role: role, role_changes: { view_all_grades: true })
+      account_admin_user_with_role_changes(role:, role_changes: { view_all_grades: true })
       user_session(@user)
 
       get "/users/#{@student.id}/grades"
@@ -352,7 +389,7 @@ describe UsersController do
 
     before do
       account = Account.create!
-      course_with_student(active_all: true, account: account)
+      course_with_student(active_all: true, account:)
       user_session(@student)
     end
 

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -23,7 +24,7 @@ import {CoursePace, ModuleWithDueDates, ResponsiveSizes, StoreState} from '../..
 import {
   getCoursePace,
   getCompression,
-  getModulesWithItemsMergedWithDueDatesAndBlackoutDates
+  getModulesWithItemsMergedWithDueDatesAndBlackoutDates,
 } from '../../reducers/course_paces'
 import {getResponsiveSize, getShowProjections} from '../../reducers/ui'
 import {Module} from './module'
@@ -35,13 +36,14 @@ interface StoreProps {
   readonly compression: number
   readonly modulesWithItemsWithDates: ModuleWithDueDates[]
 }
-export const CoursePaceTable: React.FC<StoreProps> = ({
+
+export const CoursePaceTable = ({
   coursePace,
   responsiveSize,
   showProjections,
   compression,
-  modulesWithItemsWithDates
-}) => {
+  modulesWithItemsWithDates,
+}: StoreProps) => {
   return (
     <>
       {modulesWithItemsWithDates.map((module, index) => (
@@ -65,7 +67,7 @@ const mapStateToProps = (state: StoreState) => {
     responsiveSize: getResponsiveSize(state),
     showProjections: getShowProjections(state),
     compression: getCompression(state),
-    modulesWithItemsWithDates: getModulesWithItemsMergedWithDueDatesAndBlackoutDates(state)
+    modulesWithItemsWithDates: getModulesWithItemsMergedWithDueDatesAndBlackoutDates(state),
   }
 }
 

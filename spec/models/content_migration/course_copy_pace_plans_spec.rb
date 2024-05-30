@@ -41,8 +41,8 @@ describe ContentMigration do
       expect(course_pace_to.start_date).to eq course_pace.start_date
       expect(course_pace_to.end_date).to eq course_pace.end_date
       expect(course_pace_to.published_at.to_i).to eq course_pace.published_at.to_i
-      expect(course_pace_to.exclude_weekends).to eq false
-      expect(course_pace_to.hard_end_dates).to eq true
+      expect(course_pace_to.exclude_weekends).to be false
+      expect(course_pace_to.hard_end_dates).to be true
     end
 
     context "module items" do
@@ -79,6 +79,12 @@ describe ContentMigration do
 
         course_pace_to = @copy_to.course_paces.where(workflow_state: "unpublished").take
         expect(course_pace_to.course_pace_module_items.count).to eq 1
+      end
+
+      it "does not copy paces if the FF is off" do
+        @copy_from.root_account.disable_feature!(:course_paces)
+        run_course_copy
+        expect(@copy_to.course_paces).to eq []
       end
     end
   end

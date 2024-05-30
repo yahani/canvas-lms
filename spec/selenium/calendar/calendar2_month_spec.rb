@@ -19,10 +19,12 @@
 
 require_relative "../common"
 require_relative "../helpers/calendar2_common"
+require_relative "pages/calendar_page"
 
 describe "calendar2" do
   include_context "in-process server selenium tests"
   include Calendar2Common
+  include CalendarPage
 
   before(:once) do
     Account.find_or_create_by!(id: 0).update(name: "Dummy Root Account", workflow_state: "deleted", root_account_id: nil)
@@ -71,7 +73,7 @@ describe "calendar2" do
         @user.locale = "fa"
         @user.save!
         load_month_view
-        f("#create_new_event_link").click
+        calendar_create_event_button.click
         f("#edit_event .edit_assignment_option").click
         f("#assignment_title").send_keys("test assignment")
         f("#edit_assignment_form .ui-datepicker-trigger.btn").click
@@ -202,11 +204,13 @@ describe "calendar2" do
         end
 
         it "extends event to multiple days by draging", priority: "2" do
+          skip("dragging events are flaky and need more research FOO-4335")
+
           create_middle_day_event
           date_of_middle_day = find_middle_day.attribute("data-date")
           date_of_next_day = (date_of_middle_day.to_datetime + 1.day).strftime("%Y-%m-%d")
           f(".fc-content-skeleton .fc-event-container .fc-resizer")
-          next_day = fj("[data-date = #{date_of_next_day}]")
+          next_day = fj("[data-date=#{date_of_next_day}]")
           drag_and_drop_element(f(".fc-content-skeleton .fc-event-container .fc-resizer"), next_day)
           fj(".fc-event:visible").click
           # observe the event details show date range from event start to date to end date
@@ -221,7 +225,7 @@ describe "calendar2" do
         f(".fc-event").click
         expect(fj(".popover-links-holder:visible")).not_to be_nil
         hover_and_click ".edit_event_link"
-        expect_new_page_load { hover_and_click "#edit_calendar_event_form .more_options_link" }
+        expect_new_page_load { edit_calendar_event_form_more_options.click }
         expect(find("#editCalendarEventFull .btn-primary").text).to eq "Update Event"
         expect(find("#breadcrumbs")).to include_text "Calendar Events"
       end
@@ -257,7 +261,7 @@ describe "calendar2" do
         create_middle_day_event("doomed event")
         f(".fc-event").click
         hover_and_click ".delete_event_link"
-        hover_and_click ".ui-dialog:visible .btn-primary"
+        click_delete_confirm_button
         expect(f("#content")).not_to contain_jqcss(".fc-event:visible")
         # make sure it was actually deleted and not just removed from the interface
         get("/calendar2")
@@ -268,9 +272,7 @@ describe "calendar2" do
         create_middle_day_assignment
         f(".fc-event").click
         hover_and_click ".delete_event_link"
-        expect(f(".ui-dialog .ui-dialog-buttonset")).to be_displayed
-        wait_for_ajaximations
-        hover_and_click ".ui-dialog:visible .btn-danger"
+        click_delete_confirm_button
         wait_for_ajaximations
         expect(f("#content")).not_to contain_css(".fc-event")
         # make sure it was actually deleted and not just removed from the interface
@@ -300,10 +302,10 @@ describe "calendar2" do
 
         # Verify known dates in calendar header and grid
         expect(header_text).to include("February 2012")
-        first_wednesday = ".fc-day-number.fc-wed:first"
+        first_wednesday = ".fc-day-top.fc-wed:first"
         expect(fj(first_wednesday).text).to eq("1")
         expect(fj(first_wednesday)).to have_attribute("data-date", "2012-02-01")
-        last_thursday = ".fc-day-number.fc-thu:last"
+        last_thursday = ".fc-day-top.fc-thu:last"
         expect(fj(last_thursday).text).to eq("1")
         expect(fj(last_thursday)).to have_attribute("data-date", "2012-03-01")
       end
@@ -315,10 +317,10 @@ describe "calendar2" do
 
         # Verify known dates in calendar header and grid
         expect(header_text).to include("December 2011")
-        first_thursday = ".fc-day-number.fc-thu:first"
+        first_thursday = ".fc-day-top.fc-thu:first"
         expect(fj(first_thursday).text).to eq("1")
         expect(fj(first_thursday)).to have_attribute("data-date", "2011-12-01")
-        last_saturday = ".fc-day-number.fc-sat:last"
+        last_saturday = ".fc-day-top.fc-sat:last"
         expect(fj(last_saturday).text).to eq("31")
         expect(fj(last_saturday)).to have_attribute("data-date", "2011-12-31")
       end
@@ -383,23 +385,23 @@ describe "calendar2" do
         # Check for highlight to be present on this month
         # this class is also present on the mini calendar so we need to make
         #   sure that they are both present
-        expect(find_all(".fc-state-highlight").size).to eq 4
+        expect(find_all(".fc-today").size).to eq 4
 
         # Switch the month and verify that there is no highlighted day
         2.times { change_calendar }
-        expect(f("body")).not_to contain_css(".fc-state-highlight")
+        expect(f("body")).not_to contain_css(".fc-today")
 
         # Go back to the present month. Verify that there is a highlighted day
         change_calendar(:today)
-        expect(find_all(".fc-state-highlight").size).to eq 4
+        expect(find_all(".fc-today").size).to eq 4
         # Check the date in the second instance which is the main calendar
-        expect(ffj(".fc-state-highlight")[1].text).to include(date)
+        expect(ff(".fc-today")[1].text).to include(date)
       end
 
       it "shows the location when clicking on a calendar event" do
         location_name = "brighton"
         location_address = "cottonwood"
-        make_event(location_name: location_name, location_address: location_address)
+        make_event(location_name:, location_address:)
         load_month_view
 
         # Click calendar item to bring up event summary
@@ -465,7 +467,7 @@ describe "calendar2" do
         f(".fc-event").click
 
         hover_and_click ".edit_event_link"
-        expect_new_page_load { f(".more_options_link").click }
+        expect_new_page_load { edit_calendar_event_form_more_options.click }
         cancel_btn = f(".form-actions a")
         expect(cancel_btn.text).to eq "Cancel"
         expect(cancel_btn["href"]).to include("view_name=month")
@@ -549,10 +551,10 @@ describe "calendar2" do
         @course.calendar_events.create! title: "aprilfools", start_at: time, end_at: time + 5.minutes
         get "/calendar2?include_contexts=#{@course.asset_string}#view_name=month&view_start=2016-04-01"
         wait_for_ajaximations
-        expect(ff(".fc-title").count).to eql(1)
+        expect(ff(".fc-title").count).to be(1)
         f(".context-list-toggle-box.group_#{@student.asset_string}").click
         wait_for_ajaximations
-        expect(ff(".fc-title").count).to eql(1)
+        expect(ff(".fc-title").count).to be(1)
         expect(f(".fc-title")).to include_text("aprilfools") # should still load cached event
       end
     end

@@ -18,32 +18,28 @@
 import {useScope as useI18nScope} from '@canvas/i18n'
 
 import $ from 'jquery'
-import '@canvas/datetime'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import '@canvas/datetime/jquery'
+import '@canvas/jquery/jquery.instructure_forms'
 import '@canvas/jquery/jquery.instructure_misc_helpers'
 import '@canvas/jquery/jquery.instructure_misc_plugins'
 import '@canvas/util/templateData'
+import replaceTags from '@canvas/util/replaceTags'
+import {underscoreString} from '@canvas/convert-case'
 
 const I18n = useI18nScope('terms.index')
 
 const dateOpts = {format: 'full'}
 
 $(document).ready(() => {
-  $('.submit_button').click(function(event) {
+  $('.submit_button').click(function (_event) {
     const $term = $(this).closest('.term')
     return $term.find('.enrollment_term_form').submit()
   })
 
-  $('.edit_term_link').click(function(event) {
+  $('.edit_term_link').click(function (event) {
     event.preventDefault()
-    $(this)
-      .parents('.term')
-      .addClass('editing_term')
-    $(this)
-      .parents('.term')
-      .find(':text:visible:first')
-      .focus()
-      .select()
+    $(this).parents('.term').addClass('editing_term')
+    $(this).parents('.term').find(':text:visible:first').focus().select()
     $(this)
       .parents('.term')
       .find('.date_field')
@@ -52,7 +48,7 @@ $(document).ready(() => {
       .date_field()
   })
 
-  $('.term .cancel_button').click(function() {
+  $('.term .cancel_button').click(function () {
     const $term = $(this).closest('.term')
     $term.removeClass('editing_term')
     if ($term.attr('id') === 'term_new') {
@@ -65,12 +61,13 @@ $(document).ready(() => {
 
   $('.cant_delete_term_link').click(event => {
     event.preventDefault()
-    alert(
+    // eslint-disable-next-line no-alert
+    window.alert(
       I18n.t('messages.classes_in_term', "You can't delete a term that still has classes in it.")
     )
   })
 
-  $('.delete_term_link').click(function(event) {
+  $('.delete_term_link').click(function (event) {
     event.preventDefault()
     const $term = $(this).closest('.term')
     let $focusTerm = $term.prev()
@@ -85,11 +82,11 @@ $(document).ready(() => {
       url,
       message: I18n.t('prompts.delete', 'Are you sure you want to delete this term?'),
       success() {
-        $(this).fadeOut(function() {
+        $(this).fadeOut(function () {
           $(this).remove()
           $toFocus.focus()
         })
-      }
+      },
     })
   })
 
@@ -102,24 +99,24 @@ $(document).ready(() => {
       return $.extend(permissions, data)
     },
 
-    beforeSubmit(data) {
+    beforeSubmit(_data) {
       const $tr = $(this).parents('.term')
-      $tr.find('button').attr('disabled', true)
+      $tr.find('button').prop('disabled', true)
       return $tr.find('.submit_button').text(I18n.t('messages.submitting', 'Submitting...'))
     },
 
     success(data) {
       const term = data.enrollment_term
       const $tr = $(this).parents('.term')
-      $tr.find('button').attr('disabled', false)
+      $tr.find('button').prop('disabled', false)
       $tr.find('.submit_button').text(I18n.t('update_term', 'Update Term'))
-      const url = $.replaceTags($('.term_url').attr('href'), 'id', term.id)
+      const url = replaceTags($('.term_url').attr('href'), 'id', term.id)
       $(this).attr('action', url)
       $(this).attr('method', 'PUT')
       for (const idx in term.enrollment_dates_overrides) {
-        var start_string
+        let start_string
         const override = term.enrollment_dates_overrides[idx].enrollment_dates_override
-        const type_string = $.underscore(override.enrollment_type)
+        const type_string = underscoreString(override.enrollment_type)
         // Student enrollments without an overridden start date get the term's overall start date, while teacher, ta,
         // and designer roles without an overridden start date allow access from the dawn of time. The logic
         // implementing this is in EnrollmentTerm#enrollment_dates_for.
@@ -158,7 +155,7 @@ $(document).ready(() => {
       let button_text
       const $term = $(this).closest('.term')
       const $tr = $(this).parents('.term')
-      $tr.find('button').attr('disabled', false)
+      $tr.find('button').prop('disabled', false)
       $(this).formErrors(data)
       if ($term.attr('id') === 'term_new') {
         button_text = I18n.t('add_term', 'Add Term')
@@ -167,15 +164,13 @@ $(document).ready(() => {
       }
       $tr.find('.submit_button').text(button_text)
       $('.edit_term_link', $(this).closest('term')).focus()
-    }
+    },
   })
 
   $('.add_term_link').click(event => {
     event.preventDefault()
     if ($('#term_new').length > 0) return
-    const $term = $('#term_blank')
-      .clone(true)
-      .attr('id', 'term_new')
+    const $term = $('#term_blank').clone(true).attr('id', 'term_new')
     $('#terms').prepend($term.show())
     $term.find('.edit_term_link').click()
   })

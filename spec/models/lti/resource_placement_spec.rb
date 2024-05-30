@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_dependency "lti/resource_placement"
-
 module Lti
   describe ResourcePlacement do
     describe "validations" do
@@ -35,7 +33,7 @@ module Lti
       end
     end
 
-    describe "valid_placements" do
+    describe ".valid_placements" do
       it "does not include conference_selection when FF disabled" do
         expect(described_class.valid_placements(Account.default)).not_to include(:conference_selection)
       end
@@ -47,6 +45,23 @@ module Lti
 
       it "includes submission_type_selection when FF enabled" do
         expect(described_class.valid_placements(Account.default)).to include(:submission_type_selection)
+      end
+    end
+
+    describe ".public_placements" do
+      it "does not include submission_type_selection" do
+        expect(described_class.public_placements(Account.default)).not_to include(:submission_type_selection)
+      end
+
+      it "contains common placements" do
+        expect(described_class.public_placements(Account.default)).to include(:assignment_selection, :course_navigation, :link_selection)
+      end
+
+      context "when the feature remove_submission_type_selection_from_dev_keys_edit_page flag is disabled" do
+        it "includes submission_type_selection" do
+          Account.default.disable_feature! :remove_submission_type_selection_from_dev_keys_edit_page
+          expect(described_class.public_placements(Account.default)).to include(:submission_type_selection)
+        end
       end
     end
 

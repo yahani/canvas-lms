@@ -1,6 +1,7 @@
 FROM local/base-runner
 
-COPY --chown=docker:docker --from=local/cache-helper-collect-gems /tmp/dst ${APP_HOME}
+RUN --mount=type=bind,from=local/cache-helper,source=/tmp/dst,target=/cache-helper \
+  tar --no-same-owner -xf /cache-helper/ruby-runner.tar -C ${APP_HOME}
 
 RUN set -eux; \
   \
@@ -10,5 +11,6 @@ RUN set -eux; \
   && mkdir -p \
     /home/docker/.bundle \
   # TODO: --without development \
-  && bundle install --jobs $(nproc) \
+  && { bundle install --jobs $(nproc) || bundle install; } \
+  && bundle config --global frozen true \
   && rm -rf $GEM_HOME/cache

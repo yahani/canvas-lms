@@ -17,7 +17,8 @@
  */
 
 import $ from 'jquery'
-import '@canvas/forms/jquery/serializeForm'
+import 'jquery-migrate'
+import '@canvas/serialize-form'
 
 const $sampleForm = $(`
   <form>
@@ -68,6 +69,6 @@ test('Serializes valid input items correctly', () => {
     {name: 'textarea', value: 'hello\r\nworld'},
     {name: 'select', value: '2'},
     {name: 'multiselect', value: '2'},
-    {name: 'multiselect', value: '3'}
+    {name: 'multiselect', value: '3'},
   ])
 })

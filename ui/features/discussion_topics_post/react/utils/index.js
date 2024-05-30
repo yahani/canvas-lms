@@ -17,10 +17,14 @@
  */
 
 import {CURRENT_USER} from './constants'
-import {DISCUSSION_SUBENTRIES_QUERY} from '../../graphql/Queries'
+import {
+  DISCUSSION_ENTRY_ALL_ROOT_ENTRIES_QUERY,
+  DISCUSSION_SUBENTRIES_QUERY,
+} from '../../graphql/Queries'
 import {Discussion} from '../../graphql/Discussion'
 import {DiscussionEntry} from '../../graphql/DiscussionEntry'
 import {useScope as useI18nScope} from '@canvas/i18n'
+import $ from '@canvas/rails-flash-notifications'
 
 const I18n = useI18nScope('discussion_topics_post')
 
@@ -49,7 +53,7 @@ export const updateDiscussionTopicEntryCounts = (
   const options = {
     id: discussionTopicGraphQLId,
     fragment: Discussion.fragment,
-    fragmentName: 'Discussion'
+    fragmentName: 'Discussion',
   }
 
   const data = JSON.parse(JSON.stringify(cache.readFragment(options)))
@@ -64,18 +68,16 @@ export const updateDiscussionTopicEntryCounts = (
     }
     cache.writeFragment({
       ...options,
-      data
+      data,
     })
   }
 }
 
-export const updateDiscussionEntryRootEntryCounts = (cache, result, unreadCountChange) => {
+export const updateDiscussionEntryRootEntryCounts = (cache, discussionEntry, unreadCountChange) => {
   const discussionEntryOptions = {
-    id: btoa(
-      'DiscussionEntry-' + result.data.updateDiscussionEntryParticipant.discussionEntry.rootEntryId
-    ),
+    id: btoa('DiscussionEntry-' + discussionEntry.rootEntryId),
     fragment: DiscussionEntry.fragment,
-    fragmentName: 'DiscussionEntry'
+    fragmentName: 'DiscussionEntry',
   }
 
   const data = JSON.parse(JSON.stringify(cache.readFragment(discussionEntryOptions)))
@@ -83,7 +85,7 @@ export const updateDiscussionEntryRootEntryCounts = (cache, result, unreadCountC
 
   cache.writeFragment({
     ...discussionEntryOptions,
-    data
+    data,
   })
 }
 
@@ -92,16 +94,16 @@ export const addReplyToDiscussionEntry = (cache, variables, newDiscussionEntry) 
     // Creates an object containing the data that needs to be updated
     // Writes that new data to the cache using the id of the object
     const discussionEntryOptions = {
-      id: btoa('DiscussionEntry-' + variables.discussionEntryID),
+      id: btoa('DiscussionEntry-' + newDiscussionEntry.rootEntryId),
       fragment: DiscussionEntry.fragment,
-      fragmentName: 'DiscussionEntry'
+      fragmentName: 'DiscussionEntry',
     }
     const data = JSON.parse(JSON.stringify(cache.readFragment(discussionEntryOptions)))
     if (data) {
       if (data.rootEntryParticipantCounts) {
         data.lastReply = {
           createdAt: newDiscussionEntry.createdAt,
-          __typename: 'DiscussionEntry'
+          __typename: 'DiscussionEntry',
         }
       }
 
@@ -110,34 +112,127 @@ export const addReplyToDiscussionEntry = (cache, variables, newDiscussionEntry) 
 
       cache.writeFragment({
         ...discussionEntryOptions,
-        data
+        data,
       })
     }
+
     // The writeQuery creates a subentry query shape using the data from the new discussion entry
     // Using that query object it tries to find the cached subentry query for that reply and add the new reply to the cache
-    const subEntriesOptions = {
-      query: DISCUSSION_SUBENTRIES_QUERY,
-      variables
+    const parentEntryOptions = {
+      id: btoa('DiscussionEntry-' + newDiscussionEntry.rootEntryId),
+      fragment: DiscussionEntry.fragment,
+      fragmentName: 'DiscussionEntry',
     }
+    const parentEntryData = JSON.parse(JSON.stringify(cache.readFragment(parentEntryOptions)))
 
-    const currentSubentriesQueryData = JSON.parse(
-      JSON.stringify(cache.readQuery(subEntriesOptions))
-    )
-    if (currentSubentriesQueryData) {
-      const subentriesLegacyNode = currentSubentriesQueryData.legacyNode
-      if (variables.sort === 'desc') {
-        subentriesLegacyNode.discussionSubentriesConnection.nodes.unshift(newDiscussionEntry)
-      } else {
-        subentriesLegacyNode.discussionSubentriesConnection.nodes.push(newDiscussionEntry)
+    if (parentEntryData.subentriesCount) {
+      const subEntriesOptions = {
+        query: DISCUSSION_SUBENTRIES_QUERY,
+        variables,
       }
 
-      cache.writeQuery({...subEntriesOptions, data: currentSubentriesQueryData})
+      const currentSubentriesQueryData = JSON.parse(
+        JSON.stringify(cache.readQuery(subEntriesOptions))
+      )
+      if (currentSubentriesQueryData) {
+        const subentriesLegacyNode = currentSubentriesQueryData.legacyNode
+        if (variables.sort === 'desc') {
+          subentriesLegacyNode.discussionSubentriesConnection.nodes.unshift(newDiscussionEntry)
+        } else {
+          subentriesLegacyNode.discussionSubentriesConnection.nodes.push(newDiscussionEntry)
+        }
+
+        cache.writeQuery({...subEntriesOptions, data: currentSubentriesQueryData})
+      }
+
+      const parentQueryOptions = {
+        query: DISCUSSION_SUBENTRIES_QUERY,
+        variables: {
+          ...variables,
+          discussionEntryID:
+            parentEntryData.parentId || parentEntryData.rootEntryId || parentEntryData._id,
+        },
+      }
+
+      const parentQueryData = JSON.parse(JSON.stringify(cache.readQuery(parentQueryOptions)))
+
+      if (parentQueryData) {
+        const nodes = parentQueryData.legacyNode.discussionSubentriesConnection.nodes
+        const entryIndex = nodes.findIndex(entry => entry._id === newDiscussionEntry.parentId)
+        const currentEntry = nodes[entryIndex]
+
+        currentEntry.subentriesCount = (currentEntry.subentriesCount || 0) + 1
+
+        cache.writeQuery({...parentQueryOptions, data: parentQueryData})
+      }
+
+      return true
+    } else {
+      return false
     }
   } catch (e) {
     // If a subentry query has never been called for the entry being replied to, an exception will be thrown
     // This doesn't matter functionally because the expansion button will be visible and upon clicking it the
     // subentry query will be called, getting the new reply
     // Future new replies to the thread will not throw an exception because the subentry query is now in the cache
+  }
+}
+
+export const addReplyToAllRootEntries = (cache, newDiscussionEntry) => {
+  try {
+    const options = {
+      query: DISCUSSION_ENTRY_ALL_ROOT_ENTRIES_QUERY,
+      variables: {
+        discussionEntryID: newDiscussionEntry.rootEntryId,
+      },
+    }
+    const rootEntry = JSON.parse(JSON.stringify(cache.readQuery(options)))
+    if (rootEntry) {
+      if (
+        rootEntry.legacyNode.allRootEntries &&
+        Array.isArray(rootEntry.legacyNode.allRootEntries)
+      ) {
+        rootEntry.legacyNode.allRootEntries.push(newDiscussionEntry)
+      } else {
+        rootEntry.legacyNode.allRootEntries = [newDiscussionEntry]
+      }
+    }
+
+    cache.writeQuery({...options, data: rootEntry})
+  } catch (e) {
+    // do nothing for errors updating the cache on all root entries. This will happen when the thread hasn't been expanded.
+  }
+}
+
+export const addSubentriesCountToParentEntry = (cache, newDiscussionEntry) => {
+  // If the new discussion entry is a reply to a reply, update the subentries count on the parent entry.
+  // Otherwise, it already happens correctly in the root entry level.
+  if (newDiscussionEntry.parentId !== newDiscussionEntry.rootEntryId) {
+    const discussionEntryOptions = {
+      id: btoa('DiscussionEntry-' + newDiscussionEntry.parentId),
+      fragment: DiscussionEntry.fragment,
+      fragmentName: 'DiscussionEntry',
+    }
+    const data = JSON.parse(JSON.stringify(cache.readFragment(discussionEntryOptions)))
+    if (data) {
+      if (data.rootEntryParticipantCounts) {
+        data.lastReply = {
+          createdAt: newDiscussionEntry.createdAt,
+          __typename: 'DiscussionEntry',
+        }
+      }
+
+      if (data.subentriesCount) {
+        data.subentriesCount += 1
+      } else {
+        data.subentriesCount = 1
+      }
+
+      cache.writeFragment({
+        ...discussionEntryOptions,
+        data,
+      })
+    }
   }
 }
 
@@ -174,9 +269,10 @@ export const getOptimisticResponse = ({
   message = '',
   parentId = 'PLACEHOLDER',
   rootEntryId = null,
-  isolatedEntryId = null,
   quotedEntry = null,
-  isAnonymous = false
+  isAnonymous = false,
+  depth = null,
+  attachment = null,
 } = {}) => {
   if (quotedEntry && Object.keys(quotedEntry).length !== 0) {
     quotedEntry = {
@@ -184,12 +280,12 @@ export const getOptimisticResponse = ({
       previewMessage: quotedEntry.previewMessage,
       author: {
         shortName: quotedEntry.author.shortName,
-        __typename: 'User'
+        __typename: 'User',
       },
       anonymousAuthor: null,
       editor: null,
       deleted: false,
-      __typename: 'DiscussionEntry'
+      __typename: 'DiscussionEntry',
     }
   } else {
     quotedEntry = null
@@ -205,18 +301,18 @@ export const getOptimisticResponse = ({
         message,
         ratingCount: null,
         ratingSum: null,
-        subentriesCount: null,
+        subentriesCount: 0,
         entryParticipant: {
           rating: false,
           read: true,
           forcedReadState: false,
           reportType: null,
-          __typename: 'EntryParticipant'
+          __typename: 'EntryParticipant',
         },
         rootEntryParticipantCounts: {
           unreadCount: 0,
           repliesCount: 0,
-          __typename: 'DiscussionEntryCounts'
+          __typename: 'DiscussionEntryCounts',
         },
         author: !isAnonymous
           ? {
@@ -225,7 +321,8 @@ export const getOptimisticResponse = ({
               avatarUrl: ENV.current_user.avatar_image_url,
               displayName: ENV.current_user.display_name,
               courseRoles: [],
-              __typename: 'User'
+              pronouns: null,
+              __typename: 'User',
             }
           : null,
         anonymousAuthor: isAnonymous
@@ -233,7 +330,8 @@ export const getOptimisticResponse = ({
               id: null,
               avatarUrl: null,
               shortName: CURRENT_USER,
-              __typename: 'AnonymousUser'
+              pronouns: null,
+              __typename: 'AnonymousUser',
             }
           : null,
         editor: null,
@@ -247,19 +345,50 @@ export const getOptimisticResponse = ({
           reply: false,
           update: false,
           viewRating: false,
-          __typename: 'DiscussionEntryPermissions'
+          __typename: 'DiscussionEntryPermissions',
         },
         parentId,
         rootEntryId,
-        isolatedEntryId,
         quotedEntry,
-        attachment: null,
-        __typename: 'DiscussionEntry'
+        attachment: attachment
+          ? {...attachment, id: 'ATTACHMENT_PLACEHOLDER', __typename: 'File'}
+          : null,
+        discussionEntryVersionsConnection: {
+          nodes: [],
+          __typename: 'DiscussionEntryVersionConnection',
+        },
+        reportTypeCounts: {
+          inappropriateCount: 0,
+          offensiveCount: 0,
+          otherCount: 0,
+          total: 0,
+          __typename: 'DiscussionEntryReportTypeCounts',
+        },
+        depth,
+        __typename: 'DiscussionEntry',
       },
       errors: null,
-      __typename: 'CreateDiscussionEntryPayload'
-    }
+      __typename: 'CreateDiscussionEntryPayload',
+    },
   }
+}
+
+export const buildQuotedReply = (nodes, previewId) => {
+  if (!nodes) return ''
+  let preview = {}
+  nodes.every(reply => {
+    if (reply._id === previewId) {
+      preview = {
+        id: previewId,
+        author: {shortName: getDisplayName(reply)},
+        createdAt: reply.createdAt,
+        previewMessage: reply.message,
+      }
+      return false
+    }
+    return true
+  })
+  return preview
 }
 
 export const isAnonymous = discussionEntry =>
@@ -278,4 +407,23 @@ export const getDisplayName = discussionEntry => {
     return I18n.t('Anonymous %{id}', {id: discussionEntry.anonymousAuthor.id})
   }
   return discussionEntry.author?.displayName || discussionEntry.author?.shortName
+}
+
+export const showErrorWhenMessageTooLong = message => {
+  // use DISCUSSION_ENTRY_SIZE_LIMIT for tests,
+  // keep in mind, messages have opening and closing p tags,
+  // which are 7 characters in total
+  // since this is only to be used for testing
+  // that consideration will be up to the tester using
+  // this ENV var
+  //
+  // backend limitation is 64Kb -1
+  const limit = ENV.DISCUSSION_ENTRY_SIZE_LIMIT || 63999
+  const tooLong = new Blob([message]).size > limit
+  if (tooLong === true) {
+    const tooLongMessage = I18n.t('The message size has exceeded the maximum text length.')
+    $.flashError(tooLongMessage, 2000)
+    return true
+  }
+  return false
 }

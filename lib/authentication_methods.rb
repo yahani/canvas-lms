@@ -47,6 +47,8 @@ module AuthenticationMethods
 
     auth_context = ::AuthenticationMethods::InstAccessToken.load_user_and_pseudonym_context(token, @domain_root_account)
 
+    raise AccessTokenError unless ::AuthenticationMethods::InstAccessToken.usable_developer_key?(token, @domain_root_account)
+
     @current_user = auth_context[:current_user]
     @current_pseudonym = auth_context[:current_pseudonym]
     raise AccessTokenError unless @current_user && @current_pseudonym
@@ -104,7 +106,7 @@ module AuthenticationMethods
     return unless @access_token
 
     developer_key = @access_token.developer_key
-    request_method = request.method.casecmp("HEAD") == 0 ? "GET" : request.method.upcase
+    request_method = (request.method.casecmp("HEAD") == 0) ? "GET" : request.method.upcase
 
     if developer_key.try(:require_scopes)
       scope_patterns = @access_token.url_scopes_for_method(request_method).concat(AccessToken.always_allowed_scopes)
@@ -370,12 +372,13 @@ module AuthenticationMethods
     return unless fix_ms_office_redirects
 
     respond_to do |format|
-      format.json { render_json_unauthorized }
-      format.all do
+      format.any(:html, :pdf) do
         store_location
         flash[:warning] = I18n.t("lib.auth.errors.not_authenticated", "You must be logged in to access this page") unless request.path == "/"
         redirect_to login_url(params.permit(:canvas_login, :authentication_provider))
       end
+      format.json { render_json_unauthorized }
+      format.all { render plain: "Unauthenticated", status: :unauthorized }
     end
   end
 
@@ -402,7 +405,7 @@ module AuthenticationMethods
         message = I18n.t("lib.auth.authentication_required", "user authorization required")
       end
     end
-    render status: code, json: { status: status, errors: [{ message: message }] }
+    render status: code, json: { status:, errors: [{ message: }] }
   end
 
   def add_www_authenticate_header

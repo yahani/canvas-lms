@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2018 - present Instructure, Inc.
  *
@@ -18,8 +19,8 @@
 
 import React, {Component} from 'react'
 import {bool, func, instanceOf, number, oneOf, shape, string} from 'prop-types'
-import {ApplyTheme} from '@instructure/ui-themeable'
-import {Button} from '@instructure/ui-buttons'
+import {InstUISettingsProvider} from '@instructure/emotion'
+import {IconButton} from '@instructure/ui-buttons'
 import {Text} from '@instructure/ui-text'
 import {IconCheckMarkSolid, IconExpandStartLine, IconEndSolid} from '@instructure/ui-icons'
 
@@ -28,11 +29,11 @@ import GradeFormatHelper from '@canvas/grading/GradeFormatHelper'
 
 const I18n = useI18nScope('gradebook')
 
-const themeOverrides = {
-  [Button.theme]: {
+const componentOverrides = {
+  IconButton: {
     iconPadding: '0 3px',
-    smallHeight: '23px'
-  }
+    smallHeight: '23px',
+  },
 }
 
 function formatGrade(submission, assignment, gradingScheme, enterGradesAs) {
@@ -41,7 +42,7 @@ function formatGrade(submission, assignment, gradingScheme, enterGradesAs) {
     formatType: enterGradesAs,
     gradingScheme,
     pointsPossible: assignment.pointsPossible,
-    version: 'final'
+    version: 'final',
   }
 
   return GradeFormatHelper.formatSubmissionGrade(submission, formatOptions)
@@ -77,14 +78,14 @@ export default class ReadOnlyCell extends Component {
   static propTypes = {
     assignment: shape({
       id: string.isRequired,
-      pointsPossible: number
+      pointsPossible: number,
     }).isRequired,
     enterGradesAs: oneOf(['gradingScheme', 'passFail', 'percent', 'points']).isRequired,
     gradeIsVisible: bool.isRequired,
     gradingScheme: instanceOf(Array).isRequired,
     onToggleSubmissionTrayOpen: func.isRequired,
     student: shape({
-      id: string.isRequired
+      id: string.isRequired,
     }).isRequired,
     submission: shape({
       assignmentId: string.isRequired,
@@ -92,8 +93,8 @@ export default class ReadOnlyCell extends Component {
       grade: string,
       id: string,
       rawGrade: string,
-      score: number
-    }).isRequired
+      score: number,
+    }).isRequired,
   }
 
   constructor(props) {
@@ -152,7 +153,7 @@ export default class ReadOnlyCell extends Component {
     }
 
     return (
-      <ApplyTheme theme={themeOverrides}>
+      <InstUISettingsProvider theme={{componentOverrides}}>
         <div className="Grid__GradeCell Grid__ReadOnlyCell">
           <div className="Grid__GradeCell__StartContainer" />
 
@@ -160,18 +161,18 @@ export default class ReadOnlyCell extends Component {
 
           <div className="Grid__GradeCell__EndContainer">
             <div className="Grid__GradeCell__Options">
-              <Button
+              <IconButton
                 elementRef={this.bindToggleTrayButtonRef}
                 onClick={this.handleToggleTrayButtonClick}
                 size="small"
-                variant="icon"
-              >
-                <IconExpandStartLine title={I18n.t('Open submission tray')} />
-              </Button>
+                color="secondary"
+                screenReaderLabel={I18n.t('Open submission tray')}
+                renderIcon={IconExpandStartLine}
+              />
             </div>
           </div>
         </div>
-      </ApplyTheme>
+      </InstUISettingsProvider>
     )
   }
 }

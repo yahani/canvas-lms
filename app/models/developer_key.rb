@@ -23,7 +23,7 @@ require "aws-sdk-sns"
 class DeveloperKey < ActiveRecord::Base
   class CacheOnAssociation < ActiveRecord::Associations::BelongsToAssociation
     def find_target
-      DeveloperKey.find_cached(owner._read_attribute(reflection.foreign_key))
+      DeveloperKey.find_cached(owner.attribute(reflection.foreign_key))
     end
   end
 
@@ -33,6 +33,7 @@ class DeveloperKey < ActiveRecord::Base
   belongs_to :user
   belongs_to :account
   belongs_to :root_account, class_name: "Account"
+  belongs_to :service_user, class_name: "User"
 
   has_many :page_views
   has_many :access_tokens, -> { where(workflow_state: "active") }
@@ -41,9 +42,11 @@ class DeveloperKey < ActiveRecord::Base
 
   has_one :tool_consumer_profile, class_name: "Lti::ToolConsumerProfile", inverse_of: :developer_key
   has_one :tool_configuration, class_name: "Lti::ToolConfiguration", dependent: :destroy, inverse_of: :developer_key
-  serialize :scopes, Array
+  has_one :lti_registration, class_name: "Lti::IMS::Registration", dependent: :destroy, inverse_of: :developer_key
+  serialize :scopes, type: Array
 
   before_validation :normalize_public_jwk_url
+  before_validation :normalize_scopes
   before_validation :validate_scopes!
   before_create :generate_api_key
   before_create :set_auto_expire_tokens
@@ -93,7 +96,8 @@ class DeveloperKey < ActiveRecord::Base
     state :deleted
   end
 
-  self.ignored_columns = %i[oidc_login_uri tool_id]
+  # https://stackoverflow.com/a/2500819
+  alias_method :referenced_tool_configuration, :tool_configuration
 
   alias_method :destroy_permanently!, :destroy
   def destroy
@@ -121,14 +125,20 @@ class DeveloperKey < ActiveRecord::Base
     super(value)
   end
 
+  def lti_registration?
+    lti_registration.present?
+  end
+
   def validate_redirect_uris
     uris = redirect_uris&.map do |value|
       value, _ = CanvasHttp.validate_url(value, allowed_schemes: nil)
       value
     end
 
+    errors.add :redirect_uris, "a redirect_uri is too long" if uris.any? { |uri| uri.length > 4096 }
+
     self.redirect_uris = uris unless uris == redirect_uris
-  rescue URI::Error, ArgumentError
+  rescue CanvasHttp::Error, URI::Error, ArgumentError
     errors.add :redirect_uris, "is not a valid URI"
   end
 
@@ -169,14 +179,6 @@ class DeveloperKey < ActiveRecord::Base
       Shard.birth.activate do
         @special_keys ||= {}
 
-        if Rails.env.test?
-          # TODO: we have to do this because tests run in transactions
-          testkey = DeveloperKey.where(name: default_key_name).first_or_initialize
-          testkey.auto_expire_tokens = false if testkey.new_record?
-          testkey.save! if testkey.changed?
-          return @special_keys[default_key_name] = testkey
-        end
-
         key = @special_keys[default_key_name]
         return key if key
 
@@ -194,13 +196,14 @@ class DeveloperKey < ActiveRecord::Base
     end
 
     # for now, only one AWS account for SNS is supported
-    def sns
-      unless defined?(@sns)
-        settings = ConfigFile.load("sns")
-        @sns = nil
-        @sns = Aws::SNS::Client.new(settings) if settings
+    def sns(region:)
+      @sns ||= {}
+
+      unless @sns[region].present?
+        settings = Rails.application.credentials.sns_creds
+        @sns[region] = Aws::SNS::Client.new(settings.merge(region:)) if settings
       end
-      @sns
+      @sns[region]
     end
 
     def test_cluster_checks_enabled?
@@ -218,7 +221,14 @@ class DeveloperKey < ActiveRecord::Base
 
     def by_cached_vendor_code(vendor_code)
       MultiCache.fetch("developer_keys/#{vendor_code}") do
-        DeveloperKey.shard([Shard.current, Account.site_admin.shard].uniq).where(vendor_code: vendor_code).to_a
+        DeveloperKey.shard([Shard.current, Account.site_admin.shard].uniq).where(vendor_code:).to_a
+      end
+    end
+
+    def mobile_app_keys(active: true)
+      GuardRail.activate(:secondary) do
+        keys = shard(Shard.default).where.not(sns_arn: nil)
+        active ? keys.nondeleted : keys
       end
     end
   end
@@ -242,8 +252,14 @@ class DeveloperKey < ActiveRecord::Base
     return true if account_id.blank?
     return true if target_account.id == account_id
 
-    # Include the federated parent unless we are the federated parent
-    target_account.account_chain_ids(include_federated_parent_id: !target_account.primary_settings_root_account?).include?(account_id)
+    include_federated_parent_id =
+      if target_account.feature_enabled?(:developer_key_consortia_fix_inheritance_logic)
+        !target_account.root_account.primary_settings_root_account?
+      else
+        !target_account.primary_settings_root_account?
+      end
+
+    target_account.account_chain_ids(include_federated_parent_id:).include?(account_id)
   end
 
   def account_name
@@ -286,14 +302,17 @@ class DeveloperKey < ActiveRecord::Base
 
     # Search for bindings in the account chain starting with the highest account,
     # and include consortium parent if necessary
-    accounts = binding_account.account_chain(include_federated_parent: !binding_account.primary_settings_root_account?).reverse
-    binding = DeveloperKeyAccountBinding.find_in_account_priority(accounts, id)
+    include_federated_parent =
+      if binding_account.root_account.feature_enabled?(:developer_key_consortia_fix_inheritance_logic)
+        !binding_account.root_account.primary_settings_root_account?
+      else
+        !binding_account.primary_settings_root_account?
+      end
+    accounts = binding_account.account_chain(include_federated_parent:).reverse
+    binding = DeveloperKeyAccountBinding.find_in_account_priority(accounts, self)
 
     # If no explicity set bindings were found check for 'allow' bindings
-    binding ||= DeveloperKeyAccountBinding.find_in_account_priority(accounts.reverse, id, explicitly_set: false)
-
-    # Check binding not for wrong account (on different shard from any shard in account chain)
-    return nil if binding && accounts.map { |a| a.shard.id }.exclude?(binding.shard.id)
+    binding ||= DeveloperKeyAccountBinding.find_in_account_priority(accounts.reverse, self, explicitly_set: false)
 
     binding
   end
@@ -363,6 +382,35 @@ class DeveloperKey < ActiveRecord::Base
     sessions_settings[:mobile_timeout]&.to_f&.minutes
   end
 
+  # In an OAuth context, setting this field to true means that access tokens
+  # from this key will not be displayed on the user profile page.
+  #
+  # In an LTI context, setting this field to true means that any tools associated
+  # with this key are considered "internal" tools (like Quizzes, etc) and are
+  # eligible for internal-only features. These features are opt-in only and not
+  # required, and internally-developed tools are not required to set this field
+  # to true if they don't need any of the features. These tools may be LTI 1.1
+  # or LTI 1.3 tools.
+  def internal_service?
+    internal_service
+  end
+
+  # If true, this key can be used for "service authentication" (a token request
+  # using a client_credentials grant type and a pre-determined service user).
+  #
+  # For now we will only allow this pattern for internal services in the
+  # site admin account.
+  def site_admin_service_auth?
+    Account.site_admin.feature_enabled?(:site_admin_service_auth) &&
+      service_user.present? &&
+      internal_service? &&
+      site_admin?
+  end
+
+  def tool_configuration
+    lti_registration.presence || referenced_tool_configuration
+  end
+
   private
 
   def validate_lti_fields
@@ -382,28 +430,73 @@ class DeveloperKey < ActiveRecord::Base
     self.public_jwk_url = nil if public_jwk_url.blank?
   end
 
+  def normalize_scopes
+    self.scopes = scopes.uniq
+  end
+
   def manage_external_tools(enqueue_args, method, affected_account)
     return if tool_configuration.blank?
 
+    start_time = Time.zone.now.to_i
     if affected_account.blank? || affected_account.site_admin?
       # Cleanup tools across all shards
       delay(**enqueue_args)
-        .manage_external_tools_multi_shard(enqueue_args, method, affected_account)
+        .manage_external_tools_multi_shard(enqueue_args, method, affected_account, start_time)
     else
-      delay(**enqueue_args).__send__(method, affected_account)
+      delay(**enqueue_args).manage_external_tools_on_shard(method, affected_account, start_time)
     end
   end
 
-  def manage_external_tools_multi_shard(enqueue_args, method, affected_account)
-    Shard.with_each_shard do
-      delay(**enqueue_args).__send__(method, affected_account)
+  def manage_external_tools_multi_shard_in_region(enqueue_args, method, affected_account, start_time)
+    Shard.with_each_shard(Shard.in_current_region) do
+      delay(**enqueue_args).manage_external_tools_on_shard(method, affected_account, start_time)
+    rescue
+      raise Delayed::RetriableError
+    end
+  end
+
+  def manage_external_tools_multi_shard(enqueue_args, method, affected_account, start_time)
+    DatabaseServer.send_in_each_region(
+      self,
+      :manage_external_tools_multi_shard_in_region,
+      enqueue_args, # args passed to delay() this time when creating job in each region
+      enqueue_args, # first argument to manage_external_tools_multi_shard_in_region
+      method,
+      affected_account,
+      start_time
+    )
+  rescue
+    raise Delayed::RetriableError
+  end
+
+  def manage_external_tools_on_shard(method, account, start_time)
+    __send__(method, account)
+    instrument_tool_management(method, start_time)
+  rescue => e
+    instrument_tool_management(method, start_time, e)
+    raise e
+  end
+
+  def instrument_tool_management(method, start_time, exception = nil)
+    stat_prefix = "developer_key.manage_external_tools"
+    stat_prefix += ".error" if exception
+
+    tags = { method: }
+    latency = (Time.zone.now.to_i - start_time) * 1000 # ms for DD
+
+    InstStatsd::Statsd.increment("#{stat_prefix}.count", tags:)
+    InstStatsd::Statsd.timing("#{stat_prefix}.latency", latency, tags:)
+
+    if exception
+      Canvas::Errors.capture_exception(:developer_keys, exception, :error)
     end
   end
 
   def tool_management_enqueue_args
     {
       n_strand: ["developer_key_tool_management", account&.global_id || "site_admin"],
-      priority: Delayed::LOW_PRIORITY
+      priority: Delayed::LOW_PRIORITY,
+      max_attempts: 4
     }
   end
 
@@ -448,7 +541,11 @@ class DeveloperKey < ActiveRecord::Base
 
     base_scope = ContextExternalTool.where.not(workflow_state: "deleted")
     tool_management_scope(base_scope, account).select(:id).find_in_batches do |tool_ids|
+      # There appear to be broken tools with no context, which break later on in the process.
+      # Skip them.
       ContextExternalTool.where(id: tool_ids).preload(:context).each do |tool|
+        next unless tool.context
+
         tool_configuration.new_external_tool(
           tool.context,
           existing_tool: tool

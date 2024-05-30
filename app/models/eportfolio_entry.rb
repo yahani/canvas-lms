@@ -18,7 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "atom"
 require "sanitize"
 
 class EportfolioEntry < ActiveRecord::Base
@@ -75,7 +74,9 @@ class EportfolioEntry < ActiveRecord::Base
   end
 
   def full_slug
-    (eportfolio_category.slug rescue "") + "_" + slug
+    fs = (eportfolio_category.slug rescue "") + "_" + slug
+    fs = Digest::SHA256.hexdigest(fs) if fs.length > 250 # ".html" will push this over the 255-char max filename
+    fs
   end
 
   def attachments
@@ -143,7 +144,7 @@ class EportfolioEntry < ActiveRecord::Base
     self.name ||= t(:default_name, "Page Name")
     self.slug = self.name.gsub(/\s+/, "_").gsub(/[^\w\d]/, "")
     pages = pages.where("id<>?", self) unless new_record?
-    match_cnt = pages.where(slug: slug).count
+    match_cnt = pages.where(slug:).count
     if match_cnt > 0
       self.slug = slug + "_" + (match_cnt + 1).to_s
     end
@@ -151,25 +152,26 @@ class EportfolioEntry < ActiveRecord::Base
   protected :infer_unique_slug
 
   def to_atom(opts = {})
-    Atom::Entry.new do |entry|
-      entry.title = self.name.to_s
-      entry.authors << Atom::Person.new(name: t(:atom_author, "ePortfolio Entry"))
-      entry.updated   = updated_at
-      entry.published = created_at
-      url = "http://#{HostUrl.default_host}/eportfolios/#{eportfolio_id}/#{eportfolio_category.slug}/#{slug}"
-      url += "?verifier=#{eportfolio.uuid}" if opts[:private]
-      entry.links << Atom::Link.new(rel: "alternate", href: url)
-      entry.id = "tag:#{HostUrl.default_host},#{created_at.strftime("%Y-%m-%d")}:/eportfoli_entries/#{feed_code}_#{created_at.strftime("%Y-%m-%d-%H-%M") rescue "none"}"
-      rendered_content = t(:click_through, "Click to view page content")
-      entry.content = Atom::Content::Html.new(rendered_content)
-    end
+    rendered_content = t(:click_through, "Click to view page content")
+    url = "http://#{HostUrl.default_host}/eportfolios/#{eportfolio_id}/#{eportfolio_category.slug}/#{slug}"
+    url += "?verifier=#{eportfolio.uuid}" if opts[:private]
+
+    {
+      title: self.name.to_s,
+      author: t(:atom_author, "ePortfolio Entry"),
+      updated: updated_at,
+      published: created_at,
+      link: url,
+      id: "tag:#{HostUrl.default_host},#{created_at.strftime("%Y-%m-%d")}:/eportfoli_entries/#{feed_code}_#{created_at.strftime("%Y-%m-%d-%H-%M") rescue "none"}",
+      content: rendered_content
+    }
   end
 
   private
 
   def content_contains_spam?
     content_regexp = Eportfolio.spam_criteria_regexp(type: :content)
-    return if content_regexp.blank?
+    return false if content_regexp.blank?
 
     content_bodies = content_sections.map do |section|
       case section

@@ -24,7 +24,7 @@ class CalendarEventsController < ApplicationController
   before_action :require_context
   before_action :rce_js_env, only: [:new, :edit]
 
-  add_crumb(proc { t(:"#crumbs.calendar_events", "Calendar Events") }, only: %i[show new edit]) { |c| c.send :calendar_url_for, c.instance_variable_get("@context") }
+  add_crumb(proc { t(:"#crumbs.calendar_events", "Calendar Events") }, only: %i[show new edit]) { |c| c.send :calendar_url_for, c.instance_variable_get(:@context) }
 
   def show
     @event = @context.calendar_events.find(params[:id])
@@ -43,7 +43,7 @@ class CalendarEventsController < ApplicationController
       log_asset_access(@event, "calendar", "calendar")
       respond_to do |format|
         format.html
-        format.json { render json: @event.as_json(permissions: { user: @current_user, session: session }) }
+        format.json { render json: @event.as_json(permissions: { user: @current_user, session: }) }
       end
     end
   end
@@ -65,7 +65,7 @@ class CalendarEventsController < ApplicationController
         if @event.save
           flash[:notice] = t "notices.created", "Event was successfully created."
           format.html { redirect_to calendar_url_for(@context) }
-          format.json { render json: @event.as_json(permissions: { user: @current_user, session: session }), status: :created }
+          format.json { render json: @event.as_json(permissions: { user: @current_user, session: }), status: :created }
         else
           format.html { render :new }
           format.json { render json: @event.errors, status: :bad_request }
@@ -79,9 +79,6 @@ class CalendarEventsController < ApplicationController
     event_params = permit_params(params, [:title, :start_at, :end_at, :location_name, :location_address, web_conference: strong_anything])
     return unless authorize_user_for_conference(@current_user, event_params[:web_conference])
 
-    if @event.grants_right?(@current_user, session, :update)
-      @event.update!(event_params)
-    end
     if authorized_action(@event, @current_user, :update_content)
       add_conference_types_to_js_env([@context])
       render :new
@@ -101,7 +98,7 @@ class CalendarEventsController < ApplicationController
           log_asset_access(@event, "calendar", "calendar", "participate")
           flash[:notice] = t "notices.updated", "Event was successfully updated."
           format.html { redirect_to calendar_url_for(@context) }
-          format.json { render json: @event.as_json(permissions: { user: @current_user, session: session }), status: :ok }
+          format.json { render json: @event.as_json(permissions: { user: @current_user, session: }), status: :ok }
         else
           format.html { render :edit }
           format.json { render json: @event.errors, status: :bad_request }

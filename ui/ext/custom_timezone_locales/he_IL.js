@@ -17,11 +17,10 @@
  */
 
 module.exports = {
-  // eslint-disable-line import/no-commonjs
   name: 'he_IL',
   day: {
     abbrev: ["א'", "ב'", "ג'", "ד'", "ה'", "ו'", "ש'"],
-    full: ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת']
+    full: ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'],
   },
   month: {
     abbrev: [
@@ -36,7 +35,7 @@ module.exports = {
       'ספט׳',
       'אוק׳',
       'נוב׳',
-      'דצמ׳'
+      'דצמ׳',
     ],
     full: [
       'ינואר',
@@ -50,13 +49,13 @@ module.exports = {
       'ספטמבר',
       'אוקטובר',
       'נובמבר',
-      'דצמבר'
-    ]
+      'דצמבר',
+    ],
   },
   meridiem: ['AM', 'PM'],
   date: '%d/%m/%y',
   time24: '%H:%M:%S',
   dateTime: '%Z %H:%M:%S %Y %b %d %a',
   time12: '%I:%M:%S %P',
-  full: '%a %b %e %H:%M:%S %Z %Y'
+  full: '%a %b %e %H:%M:%S %Z %Y',
 }

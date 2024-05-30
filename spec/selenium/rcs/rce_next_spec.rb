@@ -28,12 +28,12 @@ require_relative "../helpers/wiki_and_tiny_common"
 require_relative "pages/rce_next_page"
 require_relative "pages/rcs_sidebar_page"
 
-# rubocop:disable Specs/NoNoSuchElementError
+# rubocop:disable Specs/NoNoSuchElementError, Specs/NoExecuteScript
 
 # while there's a mix of instui 6 and 7 in canvas we're getting
 # "Warning: [themeable] A theme registry has already been initialized." js errors
 # Ignore js errors so specs can pass
-describe "RCE next tests", ignore_js_errors: true do
+describe "RCE next tests", :ignore_js_errors do
   include_context "in-process server selenium tests"
   include QuizzesCommon
   include WikiAndTinyCommon
@@ -94,7 +94,7 @@ describe "RCE next tests", ignore_js_errors: true do
       @course.wiki_pages.create!(title: page_title, body: content)
     end
 
-    it "clicks on sidebar wiki page to create link in body", ignore_js_errors: true do
+    it "clicks on sidebar wiki page to create link in body", :ignore_js_errors do
       title = "test_page"
       unpublished = false
       edit_roles = "public"
@@ -103,8 +103,7 @@ describe "RCE next tests", ignore_js_errors: true do
 
       visit_front_page_edit(@course)
 
-      click_links_toolbar_menu_button
-      click_course_links
+      click_course_links_toolbar_menuitem
 
       click_pages_accordion
       click_course_item_link(title)
@@ -116,7 +115,7 @@ describe "RCE next tests", ignore_js_errors: true do
     end
 
     context "links" do
-      it "respects selected text when creating a course link in body", ignore_js_errors: true do
+      it "respects selected text when creating a course link in body", :ignore_js_errors do
         title = "test_page"
         unpublished = false
         edit_roles = "public"
@@ -128,8 +127,7 @@ describe "RCE next tests", ignore_js_errors: true do
 
         select_all_in_tiny(f("#wiki_page_body"))
 
-        click_links_toolbar_menu_button
-        click_course_links
+        click_course_links_toolbar_menuitem
 
         click_pages_accordion
         click_course_item_link(title)
@@ -140,7 +138,7 @@ describe "RCE next tests", ignore_js_errors: true do
         end
       end
 
-      it "respects selected text when creating an external link in body", ignore_js_errors: true do
+      it "respects selected text when creating an external link in body", :ignore_js_errors do
         title = "test_page"
         unpublished = false
         edit_roles = "public"
@@ -160,7 +158,7 @@ describe "RCE next tests", ignore_js_errors: true do
         end
       end
 
-      it "updates selected text when creating an external link in body", ignore_js_errors: true do
+      it "updates selected text when creating an external link in body", :ignore_js_errors do
         title = "test_page"
         unpublished = false
         edit_roles = "public"
@@ -221,8 +219,10 @@ describe "RCE next tests", ignore_js_errors: true do
           body: "<p id='para'><a id='lnk' href='http://example.com'>delete me</a></p>"
         )
         visit_existing_wiki_edit(@course, "title")
-        f("##{rce_page_body_ifr_id}").click
-        f("##{rce_page_body_ifr_id}").send_keys([:control, "a"], :backspace)
+
+        select_all_in_tiny(f("#wiki_page_body"))
+
+        f("##{rce_page_body_ifr_id}").send_keys(:backspace)
 
         in_frame rce_page_body_ifr_id do
           expect(f("#tinymce").text).to eql ""
@@ -244,8 +244,7 @@ describe "RCE next tests", ignore_js_errors: true do
           f("#lnk").send_keys(%i[end return])
         end
 
-        click_document_toolbar_menu_button
-        click_course_documents
+        click_course_documents_toolbar_menuitem
         wait_for_ajaximations
 
         click_document_link(title)
@@ -282,7 +281,7 @@ describe "RCE next tests", ignore_js_errors: true do
         end
       end
 
-      it "does not magically create youtube video preview on a link", ignore_js_errors: true do
+      it "does not magically create youtube video preview on a link", :ignore_js_errors do
         title = "test_page"
         unpublished = false
         edit_roles = "public"
@@ -305,8 +304,7 @@ describe "RCE next tests", ignore_js_errors: true do
 
         visit_front_page_edit(@course)
 
-        click_links_toolbar_menu_button
-        click_course_links
+        click_course_links_toolbar_menuitem
 
         click_assignments_accordion
         click_course_item_link(title)
@@ -321,12 +319,11 @@ describe "RCE next tests", ignore_js_errors: true do
 
       it "clicks on sidebar quizzes page to create link in body" do
         title = "Quiz-Title"
-        @quiz = @course.quizzes.create!(workflow_state: "available", title: title)
+        @quiz = @course.quizzes.create!(workflow_state: "available", title:)
 
         visit_front_page_edit(@course)
 
-        click_links_toolbar_menu_button
-        click_course_links
+        click_course_links_toolbar_menuitem
 
         click_quizzes_accordion
         click_course_item_link(title)
@@ -339,12 +336,11 @@ describe "RCE next tests", ignore_js_errors: true do
       it "clicks on sidebar announcements page to create link in body" do
         title = "Announcement-Title"
         message = "Announcement 1 detail"
-        @announcement = @course.announcements.create!(title: title, message: message)
+        @announcement = @course.announcements.create!(title:, message:)
 
         visit_front_page_edit(@course)
 
-        click_links_toolbar_menu_button
-        click_course_links
+        click_course_links_toolbar_menuitem
 
         click_announcements_accordion
         click_course_item_link(title)
@@ -359,12 +355,11 @@ describe "RCE next tests", ignore_js_errors: true do
 
       it "clicks on sidebar discussions page to create link in body" do
         title = "Discussion-Title"
-        @discussion = @course.discussion_topics.create!(title: title)
+        @discussion = @course.discussion_topics.create!(title:)
 
         visit_front_page_edit(@course)
 
-        click_links_toolbar_menu_button
-        click_course_links
+        click_course_links_toolbar_menuitem
 
         click_discussions_accordion
         click_course_item_link(title)
@@ -377,14 +372,13 @@ describe "RCE next tests", ignore_js_errors: true do
         end
       end
 
-      it "clicks on sidebar modules page to create link in body", ignore_js_errors: true do
+      it "clicks on sidebar modules page to create link in body", :ignore_js_errors do
         title = "Module-Title"
         @module = @course.context_modules.create!(name: title)
 
         visit_front_page_edit(@course)
 
-        click_links_toolbar_menu_button
-        click_course_links
+        click_course_links_toolbar_menuitem
 
         click_modules_accordion
         click_course_item_link(title)
@@ -394,13 +388,11 @@ describe "RCE next tests", ignore_js_errors: true do
         end
       end
 
-      it "clicks on sidebar course navigation page to create link in body",
-         ignore_js_errors: true do
+      it "clicks on sidebar course navigation page to create link in body", :ignore_js_errors do
         title = "Files"
         visit_front_page_edit(@course)
 
-        click_links_toolbar_menu_button
-        click_course_links
+        click_course_links_toolbar_menuitem
 
         click_navigation_accordion
         click_course_item_link(title)
@@ -410,15 +402,13 @@ describe "RCE next tests", ignore_js_errors: true do
         end
       end
 
-      it "clicks on assignment in sidebar to create link to it in announcement page",
-         ignore_js_errors: true do
+      it "clicks on assignment in sidebar to create link to it in announcement page", :ignore_js_errors do
         title = "Assignment-Title"
         @assignment = @course.assignments.create!(name: title)
 
         visit_new_announcement_page(@course)
 
-        click_links_toolbar_menu_button
-        click_course_links
+        click_course_links_toolbar_menuitem
 
         click_assignments_accordion
         click_course_item_link(title)
@@ -431,15 +421,13 @@ describe "RCE next tests", ignore_js_errors: true do
         end
       end
 
-      it "clicks on module in sidebar to create link to it in assignment page",
-         ignore_js_errors: true do
+      it "clicks on module in sidebar to create link to it in assignment page", :ignore_js_errors do
         title = "Module-Title"
         @module = @course.context_modules.create!(name: title)
 
         visit_new_assignment_page(@course)
 
-        click_links_toolbar_menu_button
-        click_course_links
+        click_course_links_toolbar_menuitem
 
         click_modules_accordion
         click_course_item_link(title)
@@ -455,8 +443,7 @@ describe "RCE next tests", ignore_js_errors: true do
 
         visit_new_discussion_page(@course)
 
-        click_links_toolbar_menu_button
-        click_course_links
+        click_course_links_toolbar_menuitem
         click_assignments_accordion
         click_course_item_link(title)
 
@@ -475,8 +462,7 @@ describe "RCE next tests", ignore_js_errors: true do
 
         visit_new_quiz_page(@course, @quiz)
 
-        click_links_toolbar_menu_button
-        click_course_links
+        click_course_links_toolbar_menuitem
 
         click_assignments_accordion
         click_course_item_link(title)
@@ -496,8 +482,7 @@ describe "RCE next tests", ignore_js_errors: true do
         visit_syllabus(@course)
         click_edit_syllabus
 
-        click_links_toolbar_menu_button
-        click_course_links
+        click_course_links_toolbar_menuitem
 
         click_assignments_accordion
         click_course_item_link(title)
@@ -520,8 +505,7 @@ describe "RCE next tests", ignore_js_errors: true do
         switch_to_editor_view
 
         def switch_trays
-          click_links_toolbar_menu_button
-          click_course_links
+          click_course_links_toolbar_menuitem
           wait_for_ajaximations
           expect(course_links_tray).to be_displayed
 
@@ -551,8 +535,8 @@ describe "RCE next tests", ignore_js_errors: true do
         @assignment = @course.assignments.create!(name: title, workflow_state: "published")
 
         visit_new_announcement_page(@course)
-        click_links_toolbar_menu_button
-        click_course_links
+
+        click_course_links_toolbar_menuitem
         click_assignments_accordion
 
         expect(assignment_published_status).to be_displayed
@@ -561,8 +545,7 @@ describe "RCE next tests", ignore_js_errors: true do
         @assignment.save!
         visit_new_announcement_page(@course)
 
-        click_links_toolbar_menu_button
-        click_course_links
+        click_course_links_toolbar_menuitem
 
         expect(assignment_unpublished_status).to be_displayed
       end
@@ -571,14 +554,14 @@ describe "RCE next tests", ignore_js_errors: true do
         title = "Assignment-Title"
         due_at = 3.days.from_now
         @assignment =
-          @course.assignments.create!(name: title, workflow_state: "published", due_at: due_at)
+          @course.assignments.create!(name: title, workflow_state: "published", due_at:)
 
         visit_new_announcement_page(@course)
-        click_links_toolbar_menu_button
-        click_course_links
+
+        click_course_links_toolbar_menuitem
         click_assignments_accordion
         wait_for_ajaximations
-        expect(assignment_due_date_exists?(due_at)).to eq true
+        expect(assignment_due_date_exists?(due_at)).to be true
       end
 
       context "without manage files permissions" do
@@ -593,12 +576,11 @@ describe "RCE next tests", ignore_js_errors: true do
 
         it "still allows inserting course links" do
           title = "Discussion-Title"
-          @discussion = @course.discussion_topics.create!(title: title)
+          @discussion = @course.discussion_topics.create!(title:)
 
           visit_front_page_edit(@course)
 
-          click_links_toolbar_menu_button
-          click_course_links
+          click_course_links_toolbar_menuitem
 
           click_discussions_accordion
           click_course_item_link(title)
@@ -613,8 +595,71 @@ describe "RCE next tests", ignore_js_errors: true do
       end
     end
 
+    context "edit course link sidebar" do
+      before do
+        @wiki_page_title1 = "test_page"
+        @wiki_page_title2 = "test_page2"
+        unpublished = false
+        edit_roles = "public"
+        @wiki_page1 = create_wiki_page(@wiki_page_title1, unpublished, edit_roles)
+        @wiki_page2 = create_wiki_page(@wiki_page_title2, unpublished, edit_roles)
+      end
+
+      it "keeps the link label when updating the link reference" do
+        visit_front_page_edit(@course)
+        create_wiki_page_link(@wiki_page_title2)
+        open_edit_link_tray
+        # default name
+        expect(current_link_label).to include_text(@wiki_page_title2)
+        # changing link reference
+        click_course_item_link(@wiki_page_title1)
+        expect(current_link_label).to include_text(@wiki_page_title1)
+        click_replace_link_button
+        # keeps the name but updates the link reference
+        in_frame rce_page_body_ifr_id do
+          expect(wiki_body_anchor.text).to eq @wiki_page_title2
+          expect(wiki_body_anchor.attribute("href")).to include course_wiki_page_path(@course, @wiki_page1)
+        end
+      end
+
+      it "keeps the link reference when updating the link label" do
+        link_text = "custom title"
+        visit_front_page_edit(@course)
+        create_wiki_page_link(@wiki_page_title2)
+        open_edit_link_tray
+        # default name
+        expect(current_link_label).to include_text(@wiki_page_title2)
+        # changing link text
+        change_link_text_input(link_text)
+        click_replace_link_button
+        # changes the link text but keeps the reference
+        in_frame rce_page_body_ifr_id do
+          expect(wiki_body_anchor.text).to eq link_text
+          expect(wiki_body_anchor.attribute("href")).to include course_wiki_page_path(@course, @wiki_page2)
+        end
+      end
+
+      it "does not modify the link when canceling" do
+        visit_front_page_edit(@course)
+        create_wiki_page_link(@wiki_page_title2)
+        open_edit_link_tray
+
+        expect(current_link_label).to include_text(@wiki_page_title2)
+        open_edit_link_tray
+        # change title
+        change_link_text_input("different title")
+        # change reference
+        click_course_item_link(@wiki_page_title1)
+        click_cancel_replace_button
+        in_frame rce_page_body_ifr_id do
+          expect(wiki_body_anchor.text).to eq @wiki_page_title2
+          expect(wiki_body_anchor.attribute("href")).to include course_wiki_page_path(@course, @wiki_page2)
+        end
+      end
+    end
+
     context "sidebar search" do
-      it "searches for wiki course link to create link in body", ignore_js_errors: true do
+      it "searches for wiki course link to create link in body", :ignore_js_errors do
         title = "test_page"
         title2 = "test_page2"
         unpublished = false
@@ -625,8 +670,7 @@ describe "RCE next tests", ignore_js_errors: true do
 
         visit_front_page_edit(@course)
 
-        click_links_toolbar_menu_button
-        click_course_links
+        click_course_links_toolbar_menuitem
 
         click_pages_accordion
 
@@ -643,7 +687,7 @@ describe "RCE next tests", ignore_js_errors: true do
         end
       end
 
-      it "searches for document link to add to body", ignore_js_errors: true do
+      it "searches for document link to add to body", :ignore_js_errors do
         title1 = "text_file1.txt"
         title2 = "text_file2.txt"
         create_course_text_file(title1)
@@ -651,8 +695,7 @@ describe "RCE next tests", ignore_js_errors: true do
 
         visit_front_page_edit(@course)
 
-        click_document_toolbar_menu_button
-        click_course_documents
+        click_course_documents_toolbar_menuitem
 
         expect(course_document_links.count).to eq(2)
 
@@ -667,7 +710,7 @@ describe "RCE next tests", ignore_js_errors: true do
         end
       end
 
-      it "searches for an image in sidebar in image tray", ignore_js_errors: true do
+      it "searches for an image in sidebar in image tray", :ignore_js_errors do
         title1 = "email.png"
         title2 = "image_icon.gif"
         add_embedded_image(title1)
@@ -675,9 +718,7 @@ describe "RCE next tests", ignore_js_errors: true do
 
         visit_front_page_edit(@course)
 
-        click_images_toolbar_menu_button
-        click_course_images
-        wait_for_ajaximations
+        click_course_images_toolbar_menuitem
         expect(image_links.count).to eq(2)
 
         enter_search_data("ico")
@@ -690,7 +731,7 @@ describe "RCE next tests", ignore_js_errors: true do
         end
       end
 
-      it "searches for items when different accordian section opened", ignore_js_errors: true do
+      it "searches for items when different accordian section opened", :ignore_js_errors do
         # Add two pages
         title = "test_page"
         title2 = "icon_page"
@@ -713,8 +754,8 @@ describe "RCE next tests", ignore_js_errors: true do
         add_embedded_image(title2)
 
         visit_front_page_edit(@course)
-        click_links_toolbar_menu_button
-        click_course_links
+
+        click_course_links_toolbar_menuitem
         enter_search_data("ico")
         click_pages_accordion
         expect(course_item_links_list.count).to eq(1)
@@ -731,13 +772,12 @@ describe "RCE next tests", ignore_js_errors: true do
 
     it "clicks on sidebar images tab" do
       visit_front_page_edit(@course)
-      click_images_toolbar_menu_button
-      click_course_images
+      click_course_images_toolbar_menuitem
 
       expect(course_images_tray).to be_displayed
     end
 
-    it "clicks on an image in sidebar to display in body", ignore_js_errors: true do
+    it "clicks on an image in sidebar to display in body", :ignore_js_errors do
       title = "email.png"
       @root_folder = Folder.root_folders(@course).first
       @image = @root_folder.attachments.build(context: @course)
@@ -747,8 +787,7 @@ describe "RCE next tests", ignore_js_errors: true do
 
       visit_front_page_edit(@course)
 
-      click_images_toolbar_menu_button
-      click_course_images
+      click_course_images_toolbar_menuitem
 
       click_image_link(title)
 
@@ -771,8 +810,7 @@ describe "RCE next tests", ignore_js_errors: true do
       f("##{rce_page_body_ifr_id}").click
       select_text_of_element_by_id("para")
 
-      click_images_toolbar_menu_button
-      click_course_images
+      click_course_images_toolbar_menuitem
 
       click_image_link(title)
 
@@ -810,8 +848,7 @@ describe "RCE next tests", ignore_js_errors: true do
       visit_existing_wiki_edit(@course, page_title)
 
       def switch_trays
-        click_links_toolbar_menu_button
-        click_course_links
+        click_course_links_toolbar_menuitem
         wait_for_ajaximations
         expect(course_links_tray).to be_displayed
 
@@ -911,8 +948,7 @@ describe "RCE next tests", ignore_js_errors: true do
 
       visit_front_page_edit(@course)
 
-      click_document_toolbar_menu_button
-      click_course_documents
+      click_course_documents_toolbar_menuitem
 
       click_document_link(title)
 
@@ -968,23 +1004,22 @@ describe "RCE next tests", ignore_js_errors: true do
       it "opens rce in full screen with button in status bar" do
         visit_front_page_edit(@course)
 
-        click_full_screen_button
+        full_screen_button.click
+        fs_elem = driver.execute_script("return document.fullscreenElement")
+        expect(fs_elem).to eq f(".rce-wrapper")
 
-        expect(rce_page_body_ifr_style).to eq("height: 100%; width: 100%;")
-
-        driver.action.send_keys(:escape).perform
-
-        expect(rce_page_body_ifr_style).to_not eq("height: 100%; width: 100%;")
+        exit_full_screen_button.click
+        fs_elem = driver.execute_script("return document.fullscreenElement")
+        expect(fs_elem).to be_nil
       end
     end
 
-    it "closes the course links tray when pressing esc", ignore_js_errors: true do
+    it "closes the course links tray when pressing esc", :ignore_js_errors do
       visit_front_page_edit(@course)
 
-      click_links_toolbar_menu_button
-      click_course_links
+      click_course_links_toolbar_menuitem
 
-      expect(tray_container_exists?).to eq true
+      expect(tray_container_exists?).to be true
 
       driver.action.send_keys(:escape).perform
 
@@ -992,29 +1027,27 @@ describe "RCE next tests", ignore_js_errors: true do
       # and because we're waiting for something to _disappear_
       # we can't use implicit waits, so just keep trying for a bit
       keep_trying_until do
-        expect(tray_container_exists?).to eq false # Press esc key
+        expect(tray_container_exists?).to be false # Press esc key
       end
     end
 
-    it "closes the course images tray when pressing esc", ignore_js_errors: true do
+    it "closes the course images tray when pressing esc", :ignore_js_errors do
       visit_front_page_edit(@course)
 
-      click_images_toolbar_menu_button
-      click_course_images
-      expect(tray_container_exists?).to eq true
+      click_course_images_toolbar_menuitem
+      expect(tray_container_exists?).to be true
 
       driver.action.send_keys(:escape).perform
 
       keep_trying_until do
-        expect(tray_container_exists?).to eq false # Press esc key
+        expect(tray_container_exists?).to be false # Press esc key
       end
     end
 
     it "opens upload image modal when clicking upload option" do
       visit_front_page_edit(@course)
 
-      click_images_toolbar_menu_button
-      click_upload_image
+      click_upload_image_toolbar_menuitem
 
       expect(upload_image_modal).to be_displayed
     end
@@ -1024,8 +1057,8 @@ describe "RCE next tests", ignore_js_errors: true do
         double("CanvasKaltura::ClientV3")
         allow(CanvasKaltura::ClientV3).to receive(:config).and_return({})
         visit_front_page_edit(@course)
-        media_button = media_toolbar_button
-        media_toolbar_menu_button.click
+        media_button = media_toolbar_menubutton
+        media_toolbar_menubutton.click
         wait_for_animations
         menu_id = media_button.attribute("aria-owns")
         expect(menu_item_by_menu_id(menu_id, "Upload/Record Media")).to be_displayed
@@ -1038,8 +1071,8 @@ describe "RCE next tests", ignore_js_errors: true do
         double("CanvasKaltura::ClientV3")
         allow(CanvasKaltura::ClientV3).to receive(:config).and_return(nil)
         visit_front_page_edit(@course)
-        media_button = media_toolbar_button
-        media_toolbar_menu_button.click
+        media_button = media_toolbar_menubutton
+        media_toolbar_menubutton.click
         wait_for_animations
         menu_id = media_button.attribute("aria-owns")
         expect(menu_item_by_menu_id(menu_id, "Course Media")).to be_displayed
@@ -1051,8 +1084,8 @@ describe "RCE next tests", ignore_js_errors: true do
         double("CanvasKaltura::ClientV3")
         allow(CanvasKaltura::ClientV3).to receive(:config).and_return({ "hide_rte_button" => true })
         visit_front_page_edit(@course)
-        media_button = media_toolbar_button
-        media_toolbar_menu_button.click
+        media_button = media_toolbar_menubutton
+        media_toolbar_menubutton.click
         wait_for_animations
         menu_id = media_button.attribute("aria-owns")
         expect(menu_item_by_menu_id(menu_id, "Course Media")).to be_displayed
@@ -1064,8 +1097,8 @@ describe "RCE next tests", ignore_js_errors: true do
         double("CanvasKaltura::ClientV3")
         allow(CanvasKaltura::ClientV3).to receive(:config).and_return({})
         visit_front_page_edit(@course)
-        click_document_toolbar_menu_button
-        click_upload_document
+
+        click_upload_document_toolbar_menuitem
 
         expect(upload_document_modal).to be_displayed
       end
@@ -1075,8 +1108,7 @@ describe "RCE next tests", ignore_js_errors: true do
         allow(CanvasKaltura::ClientV3).to receive(:config).and_return({})
         visit_front_page_edit(@course)
 
-        click_media_toolbar_menu_button
-        click_upload_media
+        click_upload_media_toolbar_menuitem
 
         expect(upload_media_modal).to be_displayed
       end
@@ -1089,8 +1121,7 @@ describe "RCE next tests", ignore_js_errors: true do
 
       visit_front_page_edit(@course)
 
-      click_links_toolbar_menu_button
-      click_course_links
+      click_course_links_toolbar_menuitem
       click_assignments_accordion
 
       source = course_item_link(title)
@@ -1126,15 +1157,12 @@ describe "RCE next tests", ignore_js_errors: true do
 
       visit_new_assignment_page(@course)
 
-      click_images_toolbar_menu_button
-      click_user_images
-
+      click_user_images_toolbar_menuitem
       expect(user_image_links.count).to eq 1
       expect(tray_container).to include_text("myimage")
 
       click_close_button
-      click_images_toolbar_menu_button
-      click_user_images
+      click_user_images_toolbar_menuitem
 
       expect(user_image_links.count).to eq 1
       expect(tray_container).to include_text("myimage")
@@ -1228,7 +1256,7 @@ describe "RCE next tests", ignore_js_errors: true do
         @tool.save!
       end
 
-      it "displays lti icon with a tool enabled for the course", ignore_js_errors: true do
+      it "displays lti icon with a tool enabled for the course", :ignore_js_errors do
         page_title = "Page1"
         create_wiki_page_with_embedded_image(page_title)
 
@@ -1239,7 +1267,7 @@ describe "RCE next tests", ignore_js_errors: true do
 
       # we are now only using the menu button regardless of presence/absence
       # of mru data in local storage
-      it "displays the lti tool modal", ignore_js_errors: true do
+      it "displays the lti tool modal", :ignore_js_errors do
         page_title = "Page1"
         create_wiki_page_with_embedded_image(page_title)
 
@@ -1257,7 +1285,7 @@ describe "RCE next tests", ignore_js_errors: true do
         expect(lti_tools_modal).to be_displayed
       end
 
-      it "displays the lti tool modal, reprise", ignore_js_errors: true do
+      it "displays the lti tool modal, reprise", :ignore_js_errors do
         page_title = "Page1"
         create_wiki_page_with_embedded_image(page_title)
 
@@ -1277,7 +1305,7 @@ describe "RCE next tests", ignore_js_errors: true do
         driver.local_storage.clear
       end
 
-      it "shows favorited LTI tool icon when a tool is favorited", ignore_js_errors: true do
+      it "shows favorited LTI tool icon when a tool is favorited", :ignore_js_errors do
         page_title = "Page1"
         create_wiki_page_with_embedded_image(page_title)
 
@@ -1286,7 +1314,7 @@ describe "RCE next tests", ignore_js_errors: true do
         expect(lti_favorite_button).to be_displayed
       end
 
-      it "displays the favorited lti tool modal", ignore_js_errors: true do
+      it "displays the favorited lti tool modal", :ignore_js_errors do
         page_title = "Page1"
         create_wiki_page_with_embedded_image(page_title)
 
@@ -1296,7 +1324,28 @@ describe "RCE next tests", ignore_js_errors: true do
         expect(lti_favorite_modal).to be_displayed
       end
 
-      describe "Tools menubar menu", ignore_js_errors: true do
+      describe "Paste", :ignore_js_errors do
+        it "edit menubar menu shows tinymce flash alert on selecting 'Paste'" do
+          rce_wysiwyg_state_setup(@course)
+          menubar_open_menu("Edit")
+          menubar_menu_item("Paste").click
+          alert = f('.tox-notification--error[role="alert"]')
+          expect(alert).to be_displayed
+          expect(alert.text).to include "Your browser doesn't support direct access to the clipboard."
+        end
+
+        it "does not load the instructure_paste plugin when RCS is unavailable" do
+          allow(DynamicSettings).to receive(:find)
+            .with("rich-content-service", default_ttl: 5.minutes)
+            .and_return(DynamicSettings::FallbackProxy.new)
+          rce_wysiwyg_state_setup(@course)
+          plugins = driver.execute_script("return Object.keys(tinymce.activeEditor.plugins)") # rubocop:disable Specs/NoExecuteScript
+          expect(plugins.include?("instructure_paste")).to be(false)
+          expect(plugins.include?("paste")).to be(true)
+        end
+      end
+
+      describe "Tools menubar menu", :ignore_js_errors do
         it "includes Apps menu item in" do
           rce_wysiwyg_state_setup(@course)
 
@@ -1304,7 +1353,7 @@ describe "RCE next tests", ignore_js_errors: true do
           expect(menubar_menu_item("Apps")).to be_displayed
         end
 
-        it 'shows "View All" in the Tools > Apps submenu', ignore_js_errors: true do
+        it 'shows "View All" in the Tools > Apps submenu', :ignore_js_errors do
           rce_wysiwyg_state_setup(@course)
 
           click_menubar_submenu_item("Tools", "Apps")
@@ -1312,7 +1361,7 @@ describe "RCE next tests", ignore_js_errors: true do
           expect(f("body")).not_to contain_css(menubar_menu_item_css("Commons Favorites"))
         end
 
-        it "shows MRU tools in the Tools > Apps submenu", ignore_js_errors: true do
+        it "shows MRU tools in the Tools > Apps submenu", :ignore_js_errors do
           rce_wysiwyg_state_setup(@course)
           driver.local_storage["ltimru"] = "[#{@tool.id}]"
 
@@ -1324,8 +1373,8 @@ describe "RCE next tests", ignore_js_errors: true do
       end
     end
 
-    context "fonts", ignore_js_errors: true do
-      it "successfullies change to Balsamiq Sans font with menubar options" do
+    context "fonts", :ignore_js_errors do
+      it "changes to Balsamiq Sans font with menubar options" do
         text = "Hello font"
         rce_wysiwyg_state_setup(@course, text)
         select_all_in_tiny(f("#wiki_page_body"))
@@ -1338,17 +1387,33 @@ describe "RCE next tests", ignore_js_errors: true do
         )
       end
 
-      it "successfullies change to Architects Daughter font with menubar options" do
+      it "changes to Architects Daughter font with menubar options" do
         text = "Hello font"
         rce_wysiwyg_state_setup(@course, text)
         select_all_in_tiny(f("#wiki_page_body"))
         click_menubar_submenu_item("Format", "Fonts")
-        menu_option_by_name("Architect's Daughter").click
+        menu_option_by_name("Architect\\'s Daughter").click
         fj('button:contains("Save")').click
         wait_for_ajaximations
         expect(f(".show-content.user_content p span").attribute("style")).to eq(
           'font-family: "Architects Daughter", lato, "Helvetica Neue", Helvetica, Arial, sans-serif;'
         )
+      end
+    end
+
+    describe "Format/Formats menubar menu" do
+      it "shows correct heading options" do
+        rce_wysiwyg_state_setup(@course)
+        menubar_open_menu("Format")
+        expect(menubar_menu_item("Formats")).to be_displayed
+        click_menubar_menu_item("Formats")
+        click_menubar_menu_item("Headings")
+        expect(f("body")).to contain_css(menubar_menu_item_css("Heading 2"))
+        expect(f("body")).to contain_css(menubar_menu_item_css("Heading 3"))
+        expect(f("body")).to contain_css(menubar_menu_item_css("Heading 4"))
+        expect(f("body")).to contain_css(menubar_menu_item_css("Heading 5"))
+        expect(f("body")).to contain_css(menubar_menu_item_css("Heading 6"))
+        expect(f("body")).not_to contain_css(menubar_menu_item_css("Heading 1"))
       end
     end
 
@@ -1361,8 +1426,8 @@ describe "RCE next tests", ignore_js_errors: true do
 
         expect(menubar_menu_item("Link")).to be_displayed
         click_menubar_menu_item("Link")
-        expect(f("body")).to contain_css(menubar_menu_item_css("External Links"))
-        expect(f("body")).to contain_css(menubar_menu_item_css("Course Links"))
+        expect(f("body")).to contain_css(menubar_menu_item_css("External Link"))
+        expect(f("body")).to contain_css(menubar_menu_item_css("Course Link"))
 
         expect(menubar_menu_item("Image")).to be_displayed
         click_menubar_menu_item("Image")
@@ -1384,49 +1449,26 @@ describe "RCE next tests", ignore_js_errors: true do
       end
     end
 
-    describe "Insert content toolbar button default actions" do
-      it "does the right thing when clicking the toolbar button" do
-        double("CanvasKaltura::ClientV3")
-        allow(CanvasKaltura::ClientV3).to receive(:config).and_return({})
-        rce_wysiwyg_state_setup(@course)
-
-        click_links_toolbar_button
-        expect(insert_link_modal).to be_displayed
-        f("body").send_keys :escape # close the modal
-
-        click_images_toolbar_button
-        expect(upload_image_modal).to be_displayed
-        f("body").send_keys :escape
-
-        click_media_toolbar_button
-        expect(upload_media_modal).to be_displayed
-        f("body").send_keys :escape
-
-        click_document_toolbar_button
-        expect(upload_file_modal).to be_displayed
-        f("body").send_keys :escape
-      end
-    end
-
     describe "the content tray" do
       after { driver.local_storage.clear }
 
       it "shows course links after user files" do
+        get "/"
+        driver.session_storage["canvas_rce_links_accordion_index"] = "assignments"
+
         title = "Assignment-Title"
         @assignment = @course.assignments.create!(name: title)
 
         rce_wysiwyg_state_setup(@course)
 
-        driver.session_storage["canvas_rce_links_accordion_index"] = "assignments"
-        click_links_toolbar_menu_button
-        click_course_links
+        click_course_links_toolbar_menuitem
         wait_for_ajaximations
         expect(fj("li:contains('#{title}')")).to be_displayed
 
         click_content_tray_close_button
         wait_for_animations
-        click_document_toolbar_menu_button
-        click_user_documents
+
+        click_user_documents_toolbar_menuitem
         wait_for_ajaximations
 
         change_content_tray_content_type("Links")
@@ -1511,7 +1553,6 @@ describe "RCE next tests", ignore_js_errors: true do
       end
 
       it "sanitizes the HTML set in the HTML editor" do
-        skip "still flakey. Needs to be addressed in MAT-386"
         get "/"
 
         html = <<~HTML
@@ -1530,7 +1571,231 @@ describe "RCE next tests", ignore_js_errors: true do
         end
       end
     end
+
+    context "Icon Maker Tray" do
+      before do
+        Account.site_admin.enable_feature!(:buttons_and_icons_root_account)
+      end
+
+      it "can add image" do
+        skip("Works IRL but fails in selenium. Fix with MAT-1127")
+        rce_wysiwyg_state_setup(@course)
+        create_icon_toolbar_menuitem.click
+        iconmaker_addimage_menu.click
+        iconmaker_singlecolor_option.click
+        iconmaker_singlecolor_articon.click
+        expect(iconmaker_image_preview).to be_displayed
+      end
+    end
+
+    # rubocop:disable Specs/NoSeleniumWebDriverWait
+    describe "fullscreen" do
+      it "restores the rce to its original size on exiting fullscreen" do
+        skip "FOO-3817 (10/7/2023)"
+        visit_front_page_edit(@course)
+
+        rce_wrapper = f(".rce-wrapper")
+        orig_height = rce_wrapper.css_value("height")
+
+        full_screen_button.click
+        fs_elem = driver.execute_script("return document.fullscreenElement")
+        expect(fs_elem).to eq f(".rce-wrapper")
+
+        exit_full_screen_button.click
+        rce_wrapper = f(".rce-wrapper")
+        Selenium::WebDriver::Wait.new(timeout: 1.0).until do
+          expect(orig_height).to eql(rce_wrapper.css_value("height"))
+        end
+      end
+
+      it "restores the rce to its original size after switching to pretty html view" do
+        visit_front_page_edit(@course)
+
+        rce_wrapper = f(".rce-wrapper")
+        orig_height = rce_wrapper.css_value("height").to_i
+
+        full_screen_button.click
+        fs_elem = driver.execute_script("return document.fullscreenElement")
+        expect(fs_elem).to eq f(".rce-wrapper")
+
+        switch_to_html_view
+        exit_full_screen_button.click
+        rce_wrapper = f(".rce-wrapper")
+        new_height = rce_wrapper.css_value("height").to_i
+        Selenium::WebDriver::Wait.new(timeout: 1.0).until do
+          expect((orig_height - new_height).abs).to be < 3
+        end
+      end
+
+      it "restores the rce to its original while in pretty html view" do
+        skip("Flaky. addressed in LF-746")
+        visit_front_page_edit(@course)
+        switch_to_html_view
+
+        rce_wrapper = f(".rce-wrapper")
+        orig_height = rce_wrapper.css_value("height").to_i
+
+        full_screen_button.click
+        fs_elem = driver.execute_script("return document.fullscreenElement")
+        expect(fs_elem).to eq f(".rce-wrapper")
+
+        exit_full_screen_button.click
+        rce_wrapper = f(".rce-wrapper")
+        new_height = rce_wrapper.css_value("height").to_i
+        Selenium::WebDriver::Wait.new(timeout: 1.0).until do
+          expect((orig_height - new_height).abs).to be < 3
+        end
+      end
+
+      it "restores the rce to its original size after switching from pretty html view" do
+        visit_front_page_edit(@course)
+        switch_to_html_view
+
+        rce_wrapper = f(".rce-wrapper")
+        orig_height = rce_wrapper.css_value("height").to_i
+
+        full_screen_button.click
+        fs_elem = driver.execute_script("return document.fullscreenElement")
+        expect(fs_elem).to eq f(".rce-wrapper")
+
+        switch_to_editor_view
+        exit_full_screen_button.click
+        rce_wrapper = f(".rce-wrapper")
+        new_height = rce_wrapper.css_value("height").to_i
+        Selenium::WebDriver::Wait.new(timeout: 1.0).until do
+          expect((orig_height - new_height).abs).to be < 3
+        end
+      end
+
+      it "stil shows tinymce menus when in fullscreen" do
+        # ideally we'd do this test with multiple RCEs on the page
+        # but the setup effort isn't worth it.
+        visit_front_page_edit(@course)
+        full_screen_button.click
+        doc_btn = document_toolbar_menubutton
+        doc_btn.click
+        menu_id = doc_btn.attribute("aria-owns")
+        expect(f("##{menu_id}")).to be_displayed
+      end
+
+      it "traps focus in fullscreen" do
+        visit_front_page_edit(@course)
+        full_screen_button.click
+        active_elem = driver.execute_script("return document.activeElement") # content area
+        active_elem.send_keys(:tab)
+        driver.execute_script("return document.activeElement").send_keys(:tab) # status bar button
+        driver.execute_script("return document.activeElement").send_keys(:tab) # kb shortcut button
+        new_active_elem = driver.execute_script("return document.activeElement") # content area
+        expect(new_active_elem).to eq(active_elem)
+        exit_full_screen_button.click
+      end
+    end
+    # rubocop:enable Specs/NoSeleniumWebDriverWait
+
+    describe "CanvasContentTray" do
+      it "displays all its dropdowns" do
+        visit_front_page_edit(@course)
+
+        document_toolbar_menubutton.click
+        course_documents_toolbar_menuitem.click
+        expect(tray_container).to be_displayed
+
+        content_tray_content_type.click
+        expect(content_tray_content_type_links).to be_displayed
+        content_tray_content_type.click # close the dropdown
+
+        content_tray_content_subtype.click
+        expect(content_tray_content_subtype_images).to be_displayed
+        content_tray_content_subtype.click
+
+        content_tray_sort_by.click
+        expect(content_tray_sort_by_date_added).to be_displayed
+        content_tray_sort_by.click
+
+        exit_full_screen_menu_item.click
+      end
+
+      it "displays all its dropdowns in fullscreen" do
+        visit_front_page_edit(@course)
+
+        document_toolbar_menubutton.click
+        course_documents_toolbar_menuitem.click
+        expect(tray_container).to be_displayed
+        full_screen_button.click
+        wait_for_animations
+        expect(tray_container).to be_displayed
+
+        content_tray_content_type.click
+        expect(content_tray_content_type_links).to be_displayed
+        content_tray_content_type.click # close the dropdown
+
+        content_tray_content_subtype.click
+        expect(content_tray_content_subtype_images).to be_displayed
+        content_tray_content_subtype.click
+
+        content_tray_sort_by.click
+        expect(content_tray_sort_by_date_added).to be_displayed
+        content_tray_sort_by.click
+
+        exit_full_screen_menu_item.click
+      end
+    end
+
+    describe "selection management" do
+      it "restores selection on focus after being reset while blurred" do
+        visit_front_page_edit(@course)
+        insert_tiny_text("select me")
+
+        select_all_in_tiny(f("#wiki_page_body"))
+
+        expect(rce_selection_focus_offset).to be > 0
+
+        # Click outside the RCE and clear selection (simulate Cmd+F)
+        f("#wiki_page_body_statusbar").click
+        clear_rce_selection
+        expect(rce_selection_focus_offset).to be 0
+
+        # Click back into the iframe
+        f("#wiki_page_body_ifr").click
+
+        # Ensure the selection has been restored
+        expect(rce_selection_focus_offset).to be > 0
+      end
+
+      it "restores selection before creating a link", :ignore_js_errors do
+        title = "test_page"
+        unpublished = false
+        edit_roles = "public"
+
+        create_wiki_page(title, unpublished, edit_roles)
+
+        visit_front_page_edit(@course)
+        insert_tiny_text("select me")
+
+        select_all_in_tiny(f("#wiki_page_body"))
+
+        expect(rce_selection_focus_offset).to be > 0
+
+        external_link_toolbar_menuitem.click
+        expect(insert_link_modal).to be_displayed
+
+        clear_rce_selection
+        expect(rce_selection_focus_offset).to be 0
+
+        f('input[name="linklink"]').send_keys("http://example.com/")
+        fj('[role="dialog"] button:contains("Done")').click
+
+        in_frame rce_page_body_ifr_id do
+          expect(wiki_body_anchor.attribute("href")).to eq "http://example.com/"
+          expect(wiki_body_anchor.text).to eq "select me"
+
+          # If the selection was restored, there will only be one paragraph
+          # If the selection wasn't restored, an additional paragraph will have been created.
+          expect(ff("#tinymce p").size).to be 1
+        end
+      end
+    end
   end
 end
 
-# rubocop:enable Specs/NoNoSuchElementError
+# rubocop:enable Specs/NoNoSuchElementError, Specs/NoExecuteScript

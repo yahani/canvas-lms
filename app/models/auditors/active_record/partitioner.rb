@@ -29,21 +29,25 @@ module Auditors::ActiveRecord
       PseudonymRecord
     ].freeze
 
-    def self.precreate_tables
-      Setting.get("auditors_precreate_tables", 2).to_i
-    end
+    PRECREATE_TABLES = 2
 
-    def self.process
+    def self.process(prune: false)
       Shard.current.database_server.unguard do
         GuardRail.activate(:deploy) do
           AUDITOR_CLASSES.each do |auditor_cls|
             log "*" * 80
             log "-" * 80
+
             partman = CanvasPartman::PartitionManager.create(auditor_cls)
-            partman.ensure_partitions(precreate_tables)
-            Shard.current.database_server.unguard do
-              partman.prune_partitions(retention_months)
+
+            partman.ensure_partitions(PRECREATE_TABLES)
+
+            if prune
+              Shard.current.database_server.unguard do
+                partman.prune_partitions(retention_months)
+              end
             end
+
             log "*" * 80
           end
           unless Rails.env.test?
@@ -51,6 +55,10 @@ module Auditors::ActiveRecord
           end
         end
       end
+    end
+
+    def self.prune
+      process(prune: true)
     end
 
     def self.retention_months

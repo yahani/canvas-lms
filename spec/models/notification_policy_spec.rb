@@ -37,9 +37,9 @@ describe NotificationPolicy do
     it "causes message dispatch to specified channel on triggered policies" do
       communication_channel(@student, { username: "default@example.com", active_cc: true })
       communication_channel(@student, { username: "secondary@example.com", active_cc: true })
-      @policy = NotificationPolicy.create(notification: @notif, communication_channel: @cc, frequency: "immediately")
+      @cc.notification_policies.first.update_attribute(:frequency, "immediately")
       @assignment = @course.assignments.create!(title: "test assignment")
-      expect(@assignment.messages_sent).to be_include("Assignment Created")
+      expect(@assignment.messages_sent).to include("Assignment Created")
       m = @assignment.messages_sent["Assignment Created"].find { |message| message.to == "default@example.com" }
       expect(m).to be_nil
       m = @assignment.messages_sent["Assignment Created"].find { |message| message.to == "secondary@example.com" }
@@ -48,7 +48,7 @@ describe NotificationPolicy do
 
     it "prevents message dispatches if set to 'never' on triggered policies" do
       communication_channel(@student, { username: "secondary@example.com", active_cc: true })
-      @policy = NotificationPolicy.create(notification: @notif, communication_channel: @cc, frequency: "never")
+      @cc.notification_policies.first.update_attribute(:frequency, "never")
       @assignment = @course.assignments.create!(title: "test assignment")
       m = @assignment.messages_sent["Assignment Created"].find { |message| message.to == "default@example.com" }
       expect(m).to be_nil
@@ -140,14 +140,14 @@ describe NotificationPolicy do
       end
 
       it "is able to differentiate by several frequencies at once" do
-        expect(NotificationPolicy.by_frequency([:immediately, :daily])).to be_include(@n1)
-        expect(NotificationPolicy.by_frequency([:immediately, :daily])).to be_include(@n2)
+        expect(NotificationPolicy.by_frequency([:immediately, :daily])).to include(@n1)
+        expect(NotificationPolicy.by_frequency([:immediately, :daily])).to include(@n2)
       end
 
       it "is able to combine an array of frequencies with a for scope" do
-        expect(NotificationPolicy.for(@user).by_frequency([:daily, :weekly])).to be_include(@n2)
-        expect(NotificationPolicy.for(@user).by_frequency([:daily, :weekly])).to be_include(@n3)
-        expect(NotificationPolicy.for(@user).by_frequency([:daily, :weekly])).not_to be_include(@n1)
+        expect(NotificationPolicy.for(@user).by_frequency([:daily, :weekly])).to include(@n2)
+        expect(NotificationPolicy.for(@user).by_frequency([:daily, :weekly])).to include(@n3)
+        expect(NotificationPolicy.for(@user).by_frequency([:daily, :weekly])).not_to include(@n1)
       end
     end
 
@@ -195,16 +195,16 @@ describe NotificationPolicy do
       params[:root_account] = Account.default
       params[:user] = { send_observed_names_in_notifications: "true" }
       NotificationPolicy.setup_for(@user, params)
-      expect(@user.send_observed_names_in_notifications?).to eq true
+      expect(@user.send_observed_names_in_notifications?).to be true
       params[:user] = { send_observed_names_in_notifications: "false" }
       NotificationPolicy.setup_for(@user, params)
-      expect(@user.send_observed_names_in_notifications?).to eq false
+      expect(@user.send_observed_names_in_notifications?).to be false
 
       # Verify KNO-298
       params[:root_account].settings[:allow_sending_scores_in_emails] = false
       params[:user] = { send_observed_names_in_notifications: "true" }
       NotificationPolicy.setup_for(@user, params)
-      expect(@user.send_observed_names_in_notifications?).to eq true
+      expect(@user.send_observed_names_in_notifications?).to be true
     end
 
     it "sets all notification entries within the same category" do
@@ -236,7 +236,7 @@ describe NotificationPolicy do
       expect do
         NotificationPolicy.setup_for(hax0r, channel_id: @cc.id, frequency: Notification::FREQ_IMMEDIATELY, category: "test_immediately")
       end.to raise_error(ActiveRecord::RecordNotFound)
-      expect(@user.notification_policies.any?).to eq false
+      expect(@user.notification_policies.any?).to be false
     end
 
     context "sharding" do
@@ -346,12 +346,25 @@ describe NotificationPolicy do
       notification = Notification.create!(name: "Panda Express", subject: "Test", category: "Whatever")
 
       NotificationPolicy.create(notification: course_type_notification, communication_channel: channel, frequency: "immediately")
-      NotificationPolicy.create(notification: notification, communication_channel: channel, frequency: "daily")
+      NotificationPolicy.create(notification:, communication_channel: channel, frequency: "daily")
       NotificationPolicy.create(communication_channel: channel, frequency: "daily")
 
       policies = NotificationPolicy.find_all_for(channel, context_type: "Course")
       expect(policies.count).to eq 1
       expect(policies.first.notification.name).to eq course_type_notification.name
+    end
+
+    it "creates NotificationPolicies with default frequencies when they don't exist" do
+      student = factory_with_protected_attributes(User, name: "student", workflow_state: "registered")
+      channel = communication_channel(student, { username: "default@example.com", active_cc: true })
+      notification = Notification.create!(name: "Panda Express", subject: "Test", category: "Whatever")
+
+      # No existing policie with active communication channel
+      expect(channel.notification_policies.count).to eq 0
+      NotificationPolicy.find_all_for(channel)
+
+      expect(channel.notification_policies.count).to eq 1
+      expect(channel.notification_policies.first.frequency).to eq notification.default_frequency(channel.user)
     end
   end
 end

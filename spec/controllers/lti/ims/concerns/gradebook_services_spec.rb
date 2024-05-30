@@ -18,11 +18,9 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_dependency "lti/ims/concerns/gradebook_services"
-
 module Lti
   module IMS::Concerns
-    describe GradebookServices, type: :controller do
+    describe GradebookServices do
       controller(ApplicationController) do
         include Lti::IMS::Concerns::GradebookServices
         before_action :prepare_line_item_for_ags!, :verify_user_in_context, :verify_line_item_in_context
@@ -66,18 +64,18 @@ module Lti
       let_once(:developer_key) { DeveloperKey.create! }
       let_once(:tool) do
         ContextExternalTool.create!(
-          context: context,
+          context:,
           consumer_key: "key",
           shared_secret: "secret",
           name: "test tool",
           url: "http://www.tool.com/launch",
-          developer_key: developer_key,
-          settings: { use_1_3: true },
+          developer_key:,
+          lti_version: "1.3",
           workflow_state: "public"
         )
       end
       let_once(:line_item) { assignment.line_items.first }
-      let(:parsed_response_body) { JSON.parse(response.body) }
+      let(:parsed_response_body) { response.parsed_body }
       let(:valid_params) { { course_id: context.id, userId: user.id, line_item_id: line_item.id } }
 
       describe "#before_actions" do
@@ -93,7 +91,48 @@ module Lti
         context "with user not active in context" do
           it "fails to process the request" do
             get :index, params: valid_params
-            expect(response.code).to eq "422"
+            expect(response).to have_http_status :unprocessable_entity
+          end
+        end
+
+        context "the ags_improved_course_concluded_response_codes flag is enabled" do
+          before(:once) do
+            Account.site_admin.enable_feature!(:ags_improved_course_concluded_response_codes)
+          end
+
+          it "responds with 422 if course is hard concluded" do
+            context.update!(workflow_state: "completed")
+            get :index, params: valid_params
+            expect(response).to have_http_status(:unprocessable_entity)
+          end
+
+          it "responds with 422 if course end date has passed" do
+            context.update!(start_at: Time.now - 2.days, conclude_at: Time.now - 1.day, restrict_enrollments_to_course_dates: true)
+            get :index, params: valid_params
+            expect(response).to have_http_status(:unprocessable_entity)
+          end
+
+          it "still responds with a 404 if an invalid course_id is passed" do
+            get :index, params: valid_params.merge({ course_id: Course.last.id + 1 })
+            expect(response).to have_http_status(:not_found)
+          end
+        end
+
+        context "the ags_improved_course_concluded_response_codes flag is disabled" do
+          before(:once) do
+            Account.site_admin.disable_feature!(:ags_improved_course_concluded_response_codes)
+          end
+
+          it "responds with a 404 if the course is hard concluded" do
+            context.update!(workflow_state: :completed)
+            get :index, params: valid_params
+            expect(response).to have_http_status(:not_found)
+          end
+
+          it "responds with a 404 if the course end has passed" do
+            context.update!(start_at: Time.now - 2.days, conclude_at: Time.now - 1.day, restrict_enrollments_to_course_dates: true)
+            get :index, params: valid_params
+            expect(response).to have_http_status(:not_found)
           end
         end
 
@@ -102,7 +141,7 @@ module Lti
 
           it "fails to process the request" do
             get :index, params: valid_params
-            expect(response.code).to eq "422"
+            expect(response).to have_http_status :unprocessable_entity
           end
         end
 
@@ -116,15 +155,15 @@ module Lti
 
           it "fails to find user" do
             get :index, params: valid_params
-            expect(response.code).to eq "422"
-            expect(JSON.parse(response.body)["errors"]["message"]).to eq("User not found in course or is not a student")
+            expect(response).to have_http_status :unprocessable_entity
+            expect(response.parsed_body["errors"]["message"]).to eq("User not found in course or is not a student")
           end
 
           it "still uses such a user_id to look up by lti_id" do
             User.where(id: user.id).update_all lti_id: some_lti_id
             get :index, params: valid_params
 
-            expect(response.code).to eq "200"
+            expect(response).to have_http_status :ok
             expect(parsed_response_body["user_id"]).to eq user.id
           end
         end
@@ -148,7 +187,7 @@ module Lti
             it "successfuly finds the active user using the user past lti id" do
               get :index, params: valid_params
 
-              expect(response.code).to eq "200"
+              expect(response).to have_http_status :ok
               expect(parsed_response_body["user_id"]).to eq user.id
             end
           end
@@ -161,7 +200,7 @@ module Lti
             it "successfuly finds the active user using the user past lti id" do
               get :index, params: valid_params
 
-              expect(response.code).to eq "200"
+              expect(response).to have_http_status :ok
               expect(parsed_response_body["user_id"]).to eq user.id
             end
           end
@@ -179,8 +218,8 @@ module Lti
 
           it "fails to find user" do
             get :index, params: valid_params
-            expect(response.code).to eq "422"
-            expect(JSON.parse(response.body)["errors"]["message"]).to eq("User not found in course or is not a student")
+            expect(response).to have_http_status :unprocessable_entity
+            expect(response.parsed_body["errors"]["message"]).to eq("User not found in course or is not a student")
           end
         end
 
@@ -203,7 +242,7 @@ module Lti
           let(:valid_params) { { course_id: context.id, userId: user.id, line_item_id: line_item.id } }
 
           it "is ignored" do
-            expect_any_instance_of(Assignment).not_to receive(:prepare_for_ags_if_needed!)
+            expect_any_instance_of(Assignment).not_to receive(:migrate_to_1_3_if_needed!)
             get :index, params: valid_params
           end
         end
@@ -218,7 +257,7 @@ module Lti
 
           it "fails to match assignment tool" do
             get :index, params: valid_params
-            expect(response.code).to eq "422"
+            expect(response).to have_http_status :unprocessable_entity
             expect(parsed_response_body["errors"]["message"]).to eq("Resource link id points to Tool not associated with this Context")
           end
         end
@@ -227,7 +266,7 @@ module Lti
           let(:valid_params) { { course_id: context.id, userId: user.id, resourceLinkId: assignment.lti_context_id } }
 
           it "fixes up line items on assignment" do
-            expect_any_instance_of(Assignment).to receive(:prepare_for_ags_if_needed!)
+            expect_any_instance_of(Assignment).to receive(:migrate_to_1_3_if_needed!)
             get :index, params: valid_params
           end
         end

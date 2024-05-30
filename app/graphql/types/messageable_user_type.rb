@@ -23,10 +23,12 @@ module Types
     graphql_name "MessageableUser"
 
     implements GraphQL::Types::Relay::Node
-    global_id_field :id  # this is a relay-style "global" identifier
+    global_id_field :id # this is a relay-style "global" identifier
     field :_id, ID, "legacy canvas id", method: :id, null: false
 
     field :name, String, null: false
+
+    field :short_name, String, null: false
 
     field :common_courses_connection, Types::EnrollmentType.connection_type, null: true
     def common_courses_connection
@@ -37,6 +39,17 @@ module Types
                       end
                     end
                   ]).then { object.enrollments.where(course_id: object.common_courses.keys) }
+    end
+
+    field :observer_enrollments_connection, Types::EnrollmentType.connection_type, null: true do
+      argument :context_code, String, required: true
+    end
+    def observer_enrollments_connection(context_code: nil)
+      course_context = Context.find_by_asset_string(context_code)
+      return nil unless course_context.is_a?(Course)
+      return nil unless course_context.user_is_instructor?(current_user)
+
+      course_context.observer_enrollments.where(user: object).active_or_pending.where.not(associated_user_id: nil).distinct
     end
 
     field :common_groups_connection, Types::GroupType.connection_type, null: true

@@ -57,7 +57,7 @@ describe Mutations::MarkSubmissionCommentsRead do
   end
 
   def run_mutation(opts = {}, current_user = @teacher)
-    result = CanvasSchema.execute(mutation_str(opts), context: { current_user: current_user })
+    result = CanvasSchema.execute(mutation_str(**opts), context: { current_user: })
     result.to_h.with_indifferent_access
   end
 
@@ -72,14 +72,14 @@ describe Mutations::MarkSubmissionCommentsRead do
     expect(ViewedSubmissionComment.count).to eq 1
     expect(ViewedSubmissionComment.last.user).to eq @teacher
     expect(ViewedSubmissionComment.last.submission_comment_id).to eq @student_comment.id
-    expect(@student_comment.read?(@teacher)).to eq true
+    expect(@student_comment.read?(@teacher)).to be true
   end
 
   it "requires permission to mark submission as read" do
     result = run_mutation({ submission_comment_ids: @student_comment.id.to_s }, @student2)
     expect(
       result.dig(:data, :markSubmissionCommentsRead, :submissionComments)
-    ).to eq nil
+    ).to be_nil
   end
 
   it "will mark multiple submission comments as read" do
@@ -93,7 +93,25 @@ describe Mutations::MarkSubmissionCommentsRead do
       result.dig(:data, :markSubmissionCommentsRead, :submissionComments).pluck(:_id)
     ).to eq [@student_comment.id.to_s, student_comment2.id.to_s]
     expect(ViewedSubmissionComment.count).to eq 2
-    expect(@student_comment.read?(@teacher)).to eq true
-    expect(student_comment2.read?(@teacher)).to eq true
+    expect(@student_comment.read?(@teacher)).to be true
+    expect(student_comment2.read?(@teacher)).to be true
+  end
+
+  describe "observer context" do
+    it "will mark a comment as read for observers" do
+      observer = @course.enroll_user(User.create!, "ObserverEnrollment", enrollment_state: "active", associated_user_id: @student.id).user
+      result = run_mutation({ submission_comment_ids: [@teacher_comment.id.to_s] }, observer)
+
+      expect(
+        result.dig(:data, :markSubmissionCommentsRead, :submissionComments).count
+      ).to eq 1
+      expect(
+        result.dig(:data, :markSubmissionCommentsRead, :submissionComments)[0][:_id].to_i
+      ).to eq @teacher_comment.id
+      expect(ViewedSubmissionComment.count).to eq 1
+      expect(ViewedSubmissionComment.last.user).to eq observer
+      expect(ViewedSubmissionComment.last.submission_comment_id).to eq @teacher_comment.id
+      expect(@teacher_comment.read?(observer)).to be true
+    end
   end
 end

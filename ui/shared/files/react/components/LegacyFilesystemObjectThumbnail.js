@@ -24,14 +24,14 @@ export default {
   displayName: 'FilesystemObjectThumbnail',
 
   propTypes: {
-    model: customPropTypes.filesystemObject
+    model: customPropTypes.filesystemObject,
   },
 
   mixins: [BackboneMixin('model')],
 
   getInitialState() {
     return {
-      thumbnail_url: this.props.model && this.props.model.get('thumbnail_url')
+      thumbnail_url: this.props.model && this.props.model.get('thumbnail_url'),
     }
   },
 
@@ -75,7 +75,7 @@ export default {
 
     if (this.props.model)
       return this.props.model.fetch({
-        success: (model, response, options) =>
+        success: (model, response, _options) =>
           setTimeout(() => {
             if (response && response.thumbnail_url) {
               this.setState({thumbnail_url: response.thumbnail_url})
@@ -83,7 +83,7 @@ export default {
           }, 0),
         error() {
           return clearTimeout(timeout)
-        }
+        },
       })
-  }
+  },
 }

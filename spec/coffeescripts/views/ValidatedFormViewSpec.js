@@ -1,3 +1,6 @@
+/* eslint-disable qunit/no-test-expect-argument */
+/* eslint-disable qunit/literal-compare-order */
+/* eslint-disable qunit/no-ok-equality */
 /*
  * Copyright (C) 2012 - present Instructure, Inc.
  *
@@ -17,8 +20,9 @@
  */
 
 import $ from 'jquery'
+import 'jquery-migrate'
 import {Model} from '@canvas/backbone'
-import ValidatedFormView from '@canvas/forms/backbone/views/ValidatedFormView.coffee'
+import ValidatedFormView from '@canvas/forms/backbone/views/ValidatedFormView'
 
 QUnit.module('ValidatedFormView', {
   setup() {
@@ -35,29 +39,31 @@ QUnit.module('ValidatedFormView', {
     this.clock.tick(250) // tick past errorBox animations
     this.clock.restore()
     $('#fixtures').empty()
-  }
+  },
 })
 
-function sendFail(server, response) {
+function sendFail(server, clock, response) {
   if (response == null) {
     response = ''
   }
-  return server.respond('POST', '/fail', [
+  server.respond('POST', '/fail', [
     400,
     {'Content-Type': 'application/json'},
-    JSON.stringify(response)
+    JSON.stringify(response),
   ])
+  clock.tick(1)
 }
 
-function sendSuccess(server, response) {
+function sendSuccess(server, clock, response) {
   if (response == null) {
     response = ''
   }
-  return server.respond('POST', '/success', [
+  server.respond('POST', '/success', [
     200,
     {'Content-Type': 'application/json'},
-    JSON.stringify(response)
+    JSON.stringify(response),
   ])
+  clock.tick(1)
 }
 
 // #
@@ -97,7 +103,7 @@ form.$el.appendTo $('#fixtures')
 form.showErrors json
 */
 
-test('displays errors when validation fails and remove them on click', 4, function() {
+test('displays errors when validation fails and remove them on click', 4, function () {
   this.form.on('fail', errors => {
     ok(errors.first_name.$errorBox.is(':visible'))
     ok(errors.last_name.$errorBox.is(':visible'))
@@ -108,25 +114,25 @@ test('displays errors when validation fails and remove them on click', 4, functi
 
   this.form.submit()
 
-  sendFail(this.server, {
+  sendFail(this.server, this.clock, {
     errors: {
       first_name: [
         {
           message: 'first name required',
-          type: 'required'
-        }
+          type: 'required',
+        },
       ],
       last_name: [
         {
           message: 'last name required',
-          type: 'required'
-        }
-      ]
-    }
+          type: 'required',
+        },
+      ],
+    },
   })
 })
 
-test('triggers success, submit events', 3, function() {
+test('triggers success, submit events', 3, function () {
   this.form.model.url = '/success'
   this.form.on('submit', () => ok(true, 'submit handler called'))
 
@@ -135,10 +141,10 @@ test('triggers success, submit events', 3, function() {
     equal('ok', resp, 'passes response in')
   })
   this.form.submit()
-  sendSuccess(this.server, 'ok')
+  sendSuccess(this.server, this.clock, 'ok')
 })
 
-test('triggers fail, submit events', 6, function() {
+test('triggers fail, submit events', 6, function () {
   this.form.model.url = '/fail'
   this.form.on('submit', () => ok(true, 'submit handler called'))
   this.form.on('fail', (errors, xhr, status, statusText) => {
@@ -149,69 +155,69 @@ test('triggers fail, submit events', 6, function() {
     equal(statusText, 'Bad Request', 'passes statusText in')
   })
   this.form.submit()
-  sendFail(this.server, {
+  sendFail(this.server, this.clock, {
     errors: {
       first_name: [
         {
           message: 'first name required',
-          type: 'required'
-        }
-      ]
-    }
+          type: 'required',
+        },
+      ],
+    },
   })
 })
 
-test('calls submit on DOM form submit', 1, function() {
+test('calls submit on DOM form submit', 1, function () {
   this.form.on('submit', () => ok(true, 'submitted'))
   this.form.$el.submit()
 })
 
-test('disables inputs while loading', 2, function() {
+test('disables inputs while loading', 2, function () {
   equal(this.form.$(':disabled').length, 0)
   this.form.on('submit', () => {
     this.clock.tick(20) // disableWhileLoading does its thing in a setTimeout
     equal(this.form.$(':disabled').length, 3)
   })
   this.form.submit()
-  sendSuccess(this.server)
+  sendSuccess(this.server, this.clock)
 })
 
-test('submit delegates to saveFormData', 1, function() {
+test('submit delegates to saveFormData', 1, function () {
   sandbox.spy(this.form, 'saveFormData')
 
   this.form.submit()
   ok(this.form.saveFormData.called, 'saveFormData called')
 })
 
-test('submit calls validateBeforeSave', 1, function() {
+test('submit calls validateBeforeSave', 1, function () {
   sandbox.spy(this.form, 'validateBeforeSave')
 
   this.form.submit()
   ok(this.form.validateBeforeSave.called, 'validateBeforeSave called')
 })
 
-test('submit always calls hideErrors', 1, function() {
+test('submit always calls hideErrors', 1, function () {
   sandbox.spy(this.form, 'hideErrors')
 
   this.form.submit()
   ok(this.form.hideErrors.called, 'hideErrors called')
 })
 
-test('validateBeforeSave delegates to validateFormData, by default', 1, function() {
+test('validateBeforeSave delegates to validateFormData, by default', 1, function () {
   sandbox.spy(this.form, 'validateFormData')
 
   this.form.validateBeforeSave({})
   ok(this.form.validateFormData.called, 'validateFormData called')
 })
 
-test('validate delegates to validateFormData', 1, function() {
+test('validate delegates to validateFormData', 1, function () {
   sandbox.spy(this.form, 'validateFormData')
 
   this.form.validate()
   ok(this.form.validateFormData.called, 'validateFormData called')
 })
 
-test('validate always calls hideErrors', 2, function() {
+test('validate always calls hideErrors', 2, function () {
   sandbox.stub(this.form, 'validateFormData')
   sandbox.spy(this.form, 'hideErrors')
 
@@ -224,15 +230,15 @@ test('validate always calls hideErrors', 2, function() {
     errors: [
       {
         type: 'required',
-        message: 'REQUIRED!'
-      }
-    ]
+        message: 'REQUIRED!',
+      },
+    ],
   })
   this.form.validate()
   ok(this.form.hideErrors.called, 'hideErrors called with errors')
 })
 
-test('validate always calls showErrors', 2, function() {
+test('validate always calls showErrors', 2, function () {
   sandbox.stub(this.form, 'validateFormData')
   sandbox.spy(this.form, 'showErrors')
 
@@ -245,15 +251,15 @@ test('validate always calls showErrors', 2, function() {
     errors: [
       {
         type: 'required',
-        message: 'REQUIRED!'
-      }
-    ]
+        message: 'REQUIRED!',
+      },
+    ],
   })
   this.form.validate()
   ok(this.form.showErrors.called, 'showErrors called with errors')
 })
 
-test('RCE Present: Calls the sendFunc to determine if it is ready', function() {
+test('RCE Present: Calls the sendFunc to determine if it is ready', function () {
   const origVal = window.ENV.use_rce_enhancements
   window.ENV.use_rce_enhancements = true
   const fakeSendFunc = sinon.stub().returns(true)
@@ -267,7 +273,7 @@ test('RCE Present: Calls the sendFunc to determine if it is ready', function() {
   window.ENV.use_rce_enhancements = origVal
 })
 
-test('RCE Present: Ends execution if sendFunc returns false', function() {
+test('RCE Present: Ends execution if sendFunc returns false', function () {
   const origVal = window.ENV.use_rce_enhancements
   window.ENV.use_rce_enhancements = true
   sandbox.spy(this.form, 'validateFormData')

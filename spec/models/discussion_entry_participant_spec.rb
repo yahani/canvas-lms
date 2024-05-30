@@ -33,7 +33,7 @@ describe DiscussionEntryParticipant do
 
     it "throws error on regular create" do
       user = user_model
-      expect { @entry.discussion_entry_participants.create!(user: user, workflow_state: "read") }
+      expect { @entry.discussion_entry_participants.create!(user:, workflow_state: "read") }
         .to raise_error(ActiveRecord::RecordInvalid)
     end
 
@@ -66,6 +66,35 @@ describe DiscussionEntryParticipant do
         discussion_entry_participant = DiscussionEntryParticipant.where(discussion_entry: @entry, user_id: user).take
 
         expect(discussion_entry_participant.report_type).to eq("other")
+      end
+    end
+
+    context "workflow_state.changed to read" do
+      it "set read_at to Time.now" do
+        Timecop.freeze do
+          # Make a new user a discussion entry participant to the old entry, so they will default unread.
+          student_2 = student_in_course(active_all: true).user
+          @entry.change_read_state("read", student_2)
+
+          participant_2 = @entry.find_existing_participant(student_2)
+          expect(participant_2.read_at).to be_within(10.seconds).of Time.now.utc
+        end
+      end
+    end
+
+    context "workflow_state.changed to not read" do
+      it "set read_at to nil" do
+        Timecop.freeze do
+          student_2 = student_in_course(active_all: true).user
+          @entry.change_read_state("read", student_2)
+
+          participant_2 = @entry.find_existing_participant(student_2)
+          expect(participant_2.read_at).to be_within(10.seconds).of Time.now.utc
+
+          @entry.change_read_state("unread", student_2)
+          participant_2.reload
+          expect(participant_2.read_at).to be_nil
+        end
       end
     end
 

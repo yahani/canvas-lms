@@ -18,6 +18,7 @@
 
 import formatMessage from '../../../format-message'
 import {scaleForHeight, scaleForWidth} from '../shared/DimensionUtils'
+import RCEGlobals from '../../RCEGlobals'
 
 export const MIN_HEIGHT = 10
 export const MIN_WIDTH = 10
@@ -37,7 +38,7 @@ const sizeByMaximumDimension = {
   200: SMALL,
   320: MEDIUM,
   400: LARGE,
-  640: EXTRA_LARGE
+  640: EXTRA_LARGE,
 }
 
 function parsedOrNull($element, attribute) {
@@ -80,7 +81,7 @@ export function fromImageEmbed($element) {
     usePercentageUnits: !!percentageUnits,
     altText: altText || '',
     isDecorativeImage: altText !== null && altText.replace(/\s/g, '') === '',
-    url: $element.src
+    url: $element.src,
   }
 
   imageOptions.imageSize = imageSizeFromKnownOptions(imageOptions)
@@ -102,10 +103,14 @@ export function fromVideoEmbed($element) {
     $videoDoc = $videoIframe.contentDocument
     if ($videoDoc) {
       $videoElem = $videoDoc.querySelector('video')
-    }
-    if ($videoElem && ($videoElem.loadedmetadata || $videoElem.readyState >= 1)) {
-      naturalWidth = $videoElem.videoWidth
-      naturalHeight = $videoElem.videoHeight
+
+      if ($videoElem && ($videoElem.loadedmetadata || $videoElem.readyState >= 1)) {
+        naturalWidth = $videoElem.videoWidth
+        naturalHeight = $videoElem.videoHeight
+      }
+    } else {
+      naturalHeight = $videoIframe.clientHeight
+      naturalWidth = $videoIframe.clientWidth
     }
   }
 
@@ -123,7 +128,7 @@ export function fromVideoEmbed($element) {
     appliedWidth: rect.width,
     naturalHeight,
     naturalWidth,
-    source: $videoElem && $videoElem.querySelector('source')
+    source: $videoElem && $videoElem.querySelector('source'),
   }
 
   try {
@@ -136,6 +141,14 @@ export function fromVideoEmbed($element) {
   }
 
   videoOptions.videoSize = imageSizeFromKnownOptions(videoOptions)
+
+  if (RCEGlobals.getFeatures().media_links_use_attachment_id) {
+    const source = $videoIframe.getAttribute('src')
+    const matches = source?.match(/\/media_attachments_iframe\/(\d+)/)
+    if (matches) {
+      videoOptions.attachmentId = matches[1]
+    }
+  }
 
   return videoOptions
 }
@@ -159,7 +172,7 @@ export function scaleToSize(imageSize, naturalWidth, naturalHeight) {
   const scaleFactor = dimension / Math.max(naturalWidth, naturalHeight)
   return {
     height: Math.round(naturalHeight * scaleFactor),
-    width: Math.round(naturalWidth * scaleFactor)
+    width: Math.round(naturalWidth * scaleFactor),
   }
 }
 

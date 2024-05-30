@@ -187,9 +187,11 @@
 #     }
 
 class OutcomeResultsController < ApplicationController
+  CACHE_EXPIRATION = 5.minutes
   include Api::V1::OutcomeResults
   include Outcomes::Enrollments
   include Outcomes::ResultAnalytics
+  include CanvasOutcomesHelper
 
   before_action :require_user
   before_action :require_context
@@ -231,14 +233,39 @@ class OutcomeResultsController < ApplicationController
   #    {
   #      outcome_results: [OutcomeResult]
   #    }
+  # used in sLMGB
   def index
-    @results = find_results(
-      include_hidden: value_to_boolean(params[:include_hidden])
-    )
-    @results = Api.paginate(@results, self, api_v1_course_outcome_results_url)
-    json = outcome_results_json(@results)
+    include_hidden_value = value_to_boolean(params[:include_hidden])
+    @results, @outcome_service_results = find_canvas_os_results(include_hidden: include_hidden_value)
+
+    json = nil
+    if @outcome_service_results.nil?
+      @results = Api.paginate(@results, self, api_v1_course_outcome_results_url)
+      json = outcome_results_json(@results)
+    else
+      @outcome_service_results.push(@results).flatten!
+      @outcome_service_results.select! { |outcome| params[:outcome_ids].include? outcome.learning_outcome_id.to_s } if params[:outcome_ids].present?
+      @outcome_service_results = Api.paginate(@outcome_service_results, self, api_v1_course_outcome_results_url)
+      json = outcome_results_json(@outcome_service_results)
+    end
     json[:linked] = linked_include_collections if params[:include].present?
-    render json: json
+    render json:
+  end
+
+  # @API Set outcome ordering for LMGB
+  #
+  # Saves the ordering of outcomes in LMGB for a user
+  def outcome_order
+    outcome_position_map = JSON.parse(request.body.read)
+
+    # Validate outcomes belong to this course
+    course_outcome_ids = @outcomes.pluck(:id).to_set
+    outcome_position_map.each do |outcome|
+      reject! "Outcomes do not belong to Course" unless course_outcome_ids.include?(outcome["outcome_id"])
+    end
+
+    # Save Lmgb Outcome Ordering
+    UserLmgbOutcomeOrderings.set_lmgb_outcome_ordering(@context.root_account_id, @current_user.id, @context.id, outcome_position_map)
   end
 
   # @API Get outcome result rollups
@@ -286,6 +313,15 @@ class OutcomeResultsController < ApplicationController
   # @argument sort_order [String, "asc", "desc"]
   #   If sorting requested, then this allows changing the default sort order of
   #   ascending to descending.
+  #
+  # @argument add_defaults [Boolean]
+  #   If defaults are requested, then color and mastery level defaults will be
+  #   added to outcome ratings in the rollup. This will only take effect if
+  #   the Account Level Mastery Scales FF is DISABLED
+  #
+  # @argument contributing_scores [Boolean]
+  #   If contributing scores are requested, then each individual outcome score will
+  #   also include all graded artifacts that contributed to the outcome score
   #
   # @example_response
   #    {
@@ -337,22 +373,112 @@ class OutcomeResultsController < ApplicationController
 
   private
 
-  def find_results(opts = {})
-    find_outcome_results(
+  def find_new_quiz_assignments
+    # check if the logged in user has manage_grades & view_all_grades permissions
+    # if not, apply exclude_muted_associations to the assignment query
+    @new_quiz_assignments =
+      if context.grants_any_right?(@current_user, :manage_grades, :view_all_grades)
+        Assignment.active.where(context:).quiz_lti
+      else
+        # return if there is more than one user in users as this would indicate
+        # user with insufficient permissions accessing the LMGB
+        return if @users.length > 1
+
+        Assignment.active.where(context:).quiz_lti.exclude_muted_associations_for_user(@users[0])
+      end
+  end
+
+  def fetch_and_handle_os_results_for_all_users(opts)
+    os_results_json = find_outcomes_service_outcome_results(
+      users: @all_users,
+      context: @context,
+      outcomes: @outcomes,
+      assignments: @new_quiz_assignments,
+      **opts
+    )
+    return if os_results_json.nil?
+
+    handle_outcomes_service_results(os_results_json, @context, @outcomes, @all_users, @new_quiz_assignments)
+  end
+
+  def fetch_and_convert_os_results(opts)
+    # Returns a list of new quiz assignments for the current context
+    # If it is empty then no need to continue
+    return if find_new_quiz_assignments.empty?
+
+    # fetches and converts OS results json to LearningOutcomeResult objects then removes duplicate rubric results, if found.
+    results = Rails.cache.fetch(generate_cache_results_key, expires_in: CACHE_EXPIRATION) do
+      fetch_and_handle_os_results_for_all_users(opts)
+    end
+
+    # Remove users that are filtered out since we are pulling all results from OS.
+    # See filter_users_by_excludes for why this is needed.
+    unless opts[:all_users]
+      user_map = @users.index_by(&:uuid)
+      results = results&.filter do |r|
+        user_map.key?(r.user_uuid)
+      end
+    end
+    results
+  end
+
+  def find_canvas_os_results(opts = { all_users: false })
+    canvas_results = find_outcome_results(
       @current_user,
       users: opts[:all_users] ? @all_users : @users,
       context: @context,
       outcomes: @outcomes,
       **opts
     )
+
+    os_results = fetch_and_convert_os_results(opts)
+
+    [canvas_results, os_results]
   end
 
-  def user_rollups(opts = {})
+  # There are two other parameters that could be concatenated that are
+  # specific when viewing sLMGB and course section LMGB
+  # For sLMGB ... user_ids plus a delimited list of students' user ids will be present in the cache key in the form of:
+  # slmgb_user_ids_1|2|3
+  # For course section LMGB ... student_id plus the section id will be present in the cache key in the form of:
+  # lmgb_section_id_123
+  # FURTHERMORE... to ensure the cache key is unique, the key also includes the @current_user.uuid, @context.uuid, & @domain_root_account.uuid
+  # example of cache key:
+  # slmgb_user_ids_5319/context_uuid/xDlV3Ca2nBRtRHX2K0ie0Wxng6grJKzEXSuIGoey/
+  #    current_user_uuid/dPu5lwmdwEJxBUqfiNlzyod3jbvVtdD0u8GrnVje/account_uuid/SYMqtl31AbcfmV6WfKkO5gqwpNr7Mvx21RHgG1bc
+  def generate_cache_results_key
+    # lmgb overall course
+    results_type = "lmgb"
+    # if section_id params is present then it is a course section and should be cached with section_id param
+    results_type = "lmgb_section_id_#{params[:section_id]}" unless params[:section_id].nil?
+    # slmgb is identified with the user_ids parameter and should be cached with user_ids params
+    results_type = "slmgb_user_ids_#{params[:user_ids].join("|")}" unless params[:user_ids].nil?
+
+    # Adding the currently logged in course, currently logged in user, and domain_root_account for session uniqueness
+    # looking around at other Rails.cache implementations, context and/or current_user and/or domain_root_account
+    # are used for uniqueness. We will use all 3's uuid for tripley safe measures.
+    # Refer to the below controllers for examples of cache keys
+    #   app/controllers/quizzes/quizzes_controller.rb
+    #   app/controllers/quizzes_next/quizzes_api_controller.rb
+    #   app/controllers/application_controller.rb
+    [results_type, "context_uuid", @context.uuid, "current_user_uuid", @current_user.uuid, "account_uuid", @domain_root_account.uuid]
+  end
+
+  # used in sLMGB/LMGB
+  def user_rollups(opts = { all_users: false })
     excludes = Api.value_to_array(params[:exclude]).uniq
     filter_users_by_excludes
 
-    @results = find_results(opts).preload(:user)
-    outcome_results_rollups(results: @results, users: @users, excludes: excludes, context: @context)
+    @results, @outcome_service_results = find_canvas_os_results(opts)
+
+    @results = @results.preload(:user)
+    ActiveRecord::Associations.preload(@results, :learning_outcome)
+    if @outcome_service_results.nil?
+      outcome_results_rollups(results: @results, users: @users, excludes:, context: @context)
+    else
+      @outcome_service_results.push(@results).flatten!
+      outcome_results_rollups(results: @outcome_service_results, users: @users, excludes:, context: @context)
+    end
   end
 
   def filter_users_by_excludes(aggregate = false)
@@ -372,12 +498,39 @@ class OutcomeResultsController < ApplicationController
     filters << "inactive" if exclude_inactive
 
     ActiveRecord::Associations.preload(@users, :enrollments)
-    @users = @users.reject { |u| u.enrollments.all? { |e| filters.include? e.workflow_state } }
+    # Only pull enrollment records for students included in the current course
+    # If a user is enrolled more than once in a course - i.e. the student could be in multiple
+    # sections of the course. Then we will need to one of two things:
+    # 1. If the section parameter is available - filter only by the user's enrollment status in
+    #    the section
+    # 2. If the section parameter is not available - filter by the user's enrollment status(es) in the course.
+    #    If there are multiple enrollments available for the user, `.all?` will return false if the user is
+    #    active in one of the sections.
+    # NOTE: If viewing all sections and a user is concluded or inactive in one section and not another,
+    # the student should always be visible
+    @users = if params[:section_id]
+               @users.reject { |u| u.enrollments.where(course_id: @context.id, course_section_id: params[:section_id]).all? { |e| filters.include? e.workflow_state } }
+             else
+               @users.reject { |u| u.enrollments.where(course_id: @context.id).all? { |e| filters.include? e.workflow_state } }
+             end
   end
 
+  # used in LMGB
+  # For merge & after performance testing
+  # Flagging potential issue - no reason to pull all the results for finding users
+  # why not send the already pulled results to the definition and use that to filter
   def remove_users_with_no_results
-    userids_with_results = find_results.pluck(:user_id).uniq
-    @users = @users.select { |u| userids_with_results.include? u.id }
+    userids_with_results, os_userids_with_results = find_canvas_os_results
+    userids_with_results = userids_with_results.pluck(:user_id).uniq
+
+    if os_userids_with_results.nil?
+      @users = @users.select { |u| userids_with_results.include? u.id }
+
+    else
+      os_userids_with_results = os_userids_with_results.pluck(:user_id).uniq
+      os_userids_with_results.push(userids_with_results).flatten!
+      @users = @users.select { |u| os_userids_with_results.include? u.id }
+    end
   end
 
   def current_user_enrollments
@@ -422,7 +575,7 @@ class OutcomeResultsController < ApplicationController
     # (sorting by name for duplicate scores), then reorder users
     # from those rollups, then paginate those users, and finally
     # only include rollups for those users
-    missing_score_sort = params[:sort_order] == "desc" ? CanvasSort::First : CanvasSort::Last
+    missing_score_sort = (params[:sort_order] == "desc") ? CanvasSort::First : CanvasSort::Last
     rollups = user_rollups.sort_by do |r|
       score = r.scores.find { |s| s.outcome.id.to_s == params[:sort_outcome_id] }&.score
       [score || missing_score_sort, Canvas::ICU.collation_key(r.context.sortable_name)]
@@ -439,14 +592,25 @@ class OutcomeResultsController < ApplicationController
     json
   end
 
+  # used in LMGB
   def aggregate_rollups_json
     # calculating averages for all users in the context and only returning one
     # rollup, so don't paginate users in this method.
     filter_users_by_excludes(true)
-    @results = find_results(all_users: false).preload(:user)
-    aggregate_rollups = [aggregate_outcome_results_rollup(@results, @context, params[:aggregate_stat])]
+
+    @results, @outcome_service_results = find_canvas_os_results(all_users: false)
+    @results = @results.preload(:user)
+
+    ActiveRecord::Associations.preload(@results, :learning_outcome)
+    aggregate_rollups = nil
+    if @outcome_service_results.nil?
+      aggregate_rollups = [aggregate_outcome_results_rollup(@results, @context, params[:aggregate_stat])]
+    else
+      @outcome_service_results.push(@results).flatten!
+      aggregate_rollups = [aggregate_outcome_results_rollup(@outcome_service_results, @context, params[:aggregate_stat])]
+    end
+
     aggregate_outcome_results_rollups_json(aggregate_rollups)
-    # no pagination, so no meta field
   end
 
   def linked_include_collections
@@ -496,8 +660,9 @@ class OutcomeResultsController < ApplicationController
   end
 
   def include_assignments
-    assignments = @results.map { |result| result.assignment || result.alignment&.content }
-    outcome_results_assignments_json(assignments)
+    results = @outcome_service_results.nil? ? @results : @outcome_service_results
+    assignments = results.map { |result| result.assignment || result.alignment&.content }
+    outcome_results_assignments_json(assignments.uniq)
   end
 
   def require_outcome_context
@@ -581,8 +746,19 @@ class OutcomeResultsController < ApplicationController
       reject! "can only include id's of outcomes in the outcome context" if @outcomes.count != outcome_ids.count
     else
       outcome_group_ids.each_slice(100) do |outcome_group_ids_slice|
-        @outcome_links += ContentTag.learning_outcome_links.active.where(associated_asset_id: outcome_group_ids_slice)
+        @outcome_links += ContentTag.learning_outcome_links.active
+                                    .where(associated_asset_id: outcome_group_ids_slice)
+                                    .joins("LEFT OUTER JOIN #{UserLmgbOutcomeOrderings.quoted_table_name} as u
+                                              ON u.learning_outcome_id = content_tags.content_id
+                                              AND u.user_id = #{@current_user.id}
+                                              AND u.course_id = #{@context.id}")
+                                    .select("#{ContentTag.quoted_table_name}.*, u.position")
       end
+
+      # Sort outcomes by lmgb_position
+      # If there is no lmgb_position for an outcome, then place it at the end
+      @outcome_links.sort_by! { |link| link[:position] || link[:id] }
+
       associations = [:learning_outcome_content]
       if Api.value_to_array(params[:include]).include? "outcome_paths"
         associations << { associated_asset: :learning_outcome_group }
@@ -597,7 +773,7 @@ class OutcomeResultsController < ApplicationController
   def build_outcome_paths
     @outcome_paths = @outcome_links.map do |link|
       parts = outcome_group_prefix(link.associated_asset).push({ name: link.learning_outcome_content.title })
-      { id: link.learning_outcome_content.id, parts: parts }
+      { id: link.learning_outcome_content.id, parts: }
     end
   end
 
@@ -621,7 +797,7 @@ class OutcomeResultsController < ApplicationController
       @users = apply_sort_order(@section.all_students).to_a
     end
     @users ||= users_for_outcome_context.to_a
-    @users.sort! { |a, b| a.id <=> b.id } unless params[:sort_by]
+    @users.sort_by!(&:id) unless params[:sort_by]
     # cache all users, since pagination in #user_rollups_json may remove some
     # when we need all users when calculating rating percents
     @all_users = @users

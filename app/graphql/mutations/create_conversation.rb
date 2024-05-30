@@ -45,21 +45,9 @@ class Mutations::CreateConversation < Mutations::BaseMutation
 
     context = input[:context_code] ? Context.find_by_asset_string(input[:context_code]) : nil
     validate_context(context, recipients) if context
-    context_type = context ? context.class.name : nil
-    context_id = context ? context.id : nil
+    context_type = context&.class&.name
+    context_id = context&.id
     shard = context ? context.shard : Shard.current
-
-    # TODO: Refactor this, it doesnt work anymore. recipient =~ /\A(course_\d+)(?:_([a-z]+))?$/  returns nil
-    # It was also built with recipient = User object instead of MessagbleUser
-    recipients.each do |recipient|
-      if recipient =~ /\A(course_\d+)(?:_([a-z]+))?$/ && [nil, "students", "observers"].include?(Regexp.last_match(2)) &&
-         !Context.find_by_asset_string(Regexp.last_match(1)).try(:grants_right?, @current_user, session, :send_messages_all)
-        return validation_error(
-          I18n.t("Recipients restricted by role"),
-          attribute: "recipients"
-        )
-      end
-    end
 
     if context.blank? && !@current_user.associated_root_accounts.first.try(:grants_right?, @current_user, session, :read_roster)
       return validation_error(
@@ -70,7 +58,7 @@ class Mutations::CreateConversation < Mutations::BaseMutation
 
     group_conversation = input[:group_conversation]
     batch_private_messages = !group_conversation && recipients.size > 1
-    batch_group_messages = (group_conversation && input[:bulk_message] && input[:force_new])
+    batch_group_messages = (group_conversation && input[:bulk_message]) || input[:force_new]
     message = Conversation.build_message(*build_message_args(
       body: input[:body],
       attachment_ids: input[:attachment_ids],
@@ -94,11 +82,11 @@ class Mutations::CreateConversation < Mutations::BaseMutation
         batch = ConversationBatch.generate(
           message,
           recipients,
-          :sync,
+          (recipients.size > Conversation.max_group_conversation_size) ? :async : :sync,
           subject: input[:subject],
-          context_type: context_type,
-          context_id: context_id,
-          tags: tags,
+          context_type:,
+          context_id:,
+          tags:,
           group: batch_group_messages
         )
 
@@ -108,21 +96,59 @@ class Mutations::CreateConversation < Mutations::BaseMutation
                                                .order("visible_last_authored_at DESC, last_message_at DESC, id DESC")
         Conversation.preload_participants(conversations.map(&:conversation))
         ConversationParticipant.preload_latest_messages(conversations, @current_user)
-        return { conversations: conversations }
+        InstStatsd::Statsd.increment("inbox.message.sent.react")
+        InstStatsd::Statsd.count("inbox.conversation.created.react", conversations.count)
+        InstStatsd::Statsd.increment("inbox.conversation.sent.react")
+        InstStatsd::Statsd.count("inbox.message.sent.recipients.react", recipients.count)
+        if context_type == "Account" || context_type.nil?
+          InstStatsd::Statsd.increment("inbox.conversation.sent.account_context.react")
+        end
+        if message.has_media_objects || input[:media_comment_id]
+          InstStatsd::Statsd.increment("inbox.message.sent.media.react")
+        end
+        if message[:attachment_ids].present?
+          InstStatsd::Statsd.increment("inbox.message.sent.attachment.react")
+        end
+        if !Account.site_admin.feature_enabled?(:deprecate_faculty_journal) && input[:user_note]
+          InstStatsd::Statsd.increment("inbox.conversation.sent.faculty_journal.react")
+        end
+        if input[:bulk_message]
+          InstStatsd::Statsd.increment("inbox.conversation.sent.individual_message_option.react")
+        end
+        return { conversations: }
       else
         conversation = @current_user.initiate_conversation(
           recipients,
           !group_conversation,
           subject: input[:subject],
-          context_type: context_type,
-          context_id: context_id
+          context_type:,
+          context_id:
         )
         conversation.add_message(
           message,
-          tags: tags,
+          tags:,
           update_for_sender: false,
           cc_author: true
         )
+        InstStatsd::Statsd.increment("inbox.conversation.created.react")
+        InstStatsd::Statsd.increment("inbox.message.sent.react")
+        InstStatsd::Statsd.increment("inbox.conversation.sent.react")
+        InstStatsd::Statsd.count("inbox.message.sent.recipients.react", recipients.count)
+        if message.has_media_objects || input[:media_comment_id]
+          InstStatsd::Statsd.increment("inbox.message.sent.media.react")
+        end
+        if message[:attachment_ids].present?
+          InstStatsd::Statsd.increment("inbox.message.sent.attachment.react")
+        end
+        if context_type == "Account" || context_type.nil?
+          InstStatsd::Statsd.increment("inbox.conversation.sent.account_context.react")
+        end
+        if !Account.site_admin.feature_enabled?(:deprecate_faculty_journal) && input[:user_note]
+          InstStatsd::Statsd.increment("inbox.conversation.sent.faculty_journal.react")
+        end
+        if input[:bulk_message]
+          InstStatsd::Statsd.increment("inbox.conversation.sent.individual_message_option.react")
+        end
         return { conversations: [conversation] }
       end
     end
@@ -153,7 +179,7 @@ class Mutations::CreateConversation < Mutations::BaseMutation
   end
 
   def get_recipients(recipient_ids, context_code, conversation_id)
-    recipients = normalize_recipients(recipients: recipient_ids, context_code: context_code, conversation_id: conversation_id)
+    recipients = normalize_recipients(recipients: recipient_ids, context_code:, conversation_id:)
     raise ConversationsHelper::InvalidRecipientsError if recipients.blank?
 
     recipients

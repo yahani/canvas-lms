@@ -17,8 +17,8 @@
  */
 
 import $ from 'jquery'
-import htmlEscape from 'html-escape'
-import '@canvas/jquery/jquery.instructure_misc_helpers' /* replaceTags */
+import htmlEscape, {raw} from '@instructure/html-escape'
+import replaceTags from './replaceTags'
 
 // Fills the selected object(s) with data values as specified.  Plaintext values should be specified in the
 //  data: data used to fill template.
@@ -29,13 +29,13 @@ import '@canvas/jquery/jquery.instructure_misc_helpers' /* replaceTags */
 //    and globally replaces "{{ value }}" with data[value].  Useful for adding
 //    new elements asynchronously, when you don't know what their URL will be
 //    until they're created.
-$.fn.fillTemplateData = function(options) {
+$.fn.fillTemplateData = function (options) {
   if (this.length && options) {
     if (options.iterator) {
       //  todo: replace .andSelf with .addBack when JQuery is upgraded.
       this.find('*')
         .andSelf()
-        .each(function() {
+        .each(function () {
           const $el = $(this)
           $.each(['name', 'id', 'class'], (i, attr) => {
             if ($el.attr(attr)) {
@@ -49,53 +49,58 @@ $.fn.fillTemplateData = function(options) {
     }
     let contentChange = false
     if (options.data) {
-      for (var item in options.data) {
-        if (options.except && $.inArray(item, options.except) != -1) {
+      for (const item in options.data) {
+        if (options.except && $.inArray(item, options.except) !== -1) {
           continue
         }
-        if (options.data[item] && options.dataValues && $.inArray(item, options.dataValues) != -1) {
+        if (
+          options.data[item] &&
+          options.dataValues &&
+          $.inArray(item, options.dataValues) !== -1
+        ) {
           this.data(item, options.data[item].toString())
         }
         const $found_all = this.find('.' + item)
-        var avoid = options.avoid || ''
-        $found_all.each(function() {
+        const avoid = options.avoid || ''
+        // eslint-disable-next-line no-loop-func
+        $found_all.each(function () {
           const $found = $(this)
           if ($found.length > 0 && $found.closest(avoid).length === 0) {
             if (typeof options.data[item] === 'undefined' || options.data[item] === null) {
               options.data[item] = ''
             }
-            if (options.htmlValues && $.inArray(item, options.htmlValues) != -1) {
-              $found.html($.raw(options.data[item].toString()))
+            if (options.htmlValues && $.inArray(item, options.htmlValues) !== -1) {
+              $found.html(raw(options.data[item].toString()))
               if ($found.hasClass('user_content')) {
                 contentChange = true
                 $found.removeClass('enhanced')
                 $found.data('unenhanced_content_html', options.data[item].toString())
               }
-            } else if ($found[0].tagName.toUpperCase() == 'INPUT') {
+            } else if ($found[0].tagName.toUpperCase() === 'INPUT') {
               $found.val(options.data[item])
             } else {
               try {
                 const str = options.data[item].toString()
                 $found.html(htmlEscape(str))
-              } catch (e) {}
+              } catch (e) {
+                // no-op
+              }
             }
           }
         })
       }
     }
     if (options.hrefValues && options.data) {
-      this.find('a,span[rel]').each(function() {
-        let $obj = $(this),
-          oldHref,
-          oldRel,
-          oldName
+      this.find('a,span[rel]').each(function () {
+        let oldHref, oldRel, oldName
+        const $obj = $(this)
         for (const i in options.hrefValues) {
           if (!options.hrefValues.hasOwnProperty(i)) {
             continue
           }
           const name = options.hrefValues[i]
           if ((oldHref = $obj.attr('href'))) {
-            const newHref = $.replaceTags(oldHref, name, encodeURIComponent(options.data[name]))
+            const newHref = replaceTags(oldHref, name, encodeURIComponent(options.data[name]))
             const orig = $obj.text() === $obj.html() ? $obj.text() : null
             if (oldHref !== newHref) {
               $obj.attr('href', newHref)
@@ -105,10 +110,10 @@ $.fn.fillTemplateData = function(options) {
             }
           }
           if ((oldRel = $obj.attr('rel'))) {
-            $obj.attr('rel', $.replaceTags(oldRel, name, options.data[name]))
+            $obj.attr('rel', replaceTags(oldRel, name, options.data[name]))
           }
           if ((oldName = $obj.attr('name'))) {
-            $obj.attr('name', $.replaceTags(oldName, name, options.data[name]))
+            $obj.attr('name', replaceTags(oldName, name, options.data[name]))
           }
         }
       })
@@ -124,18 +129,16 @@ $.fn.fillTemplateData.defaults = {htmlValues: null, hrefValues: null}
 
 // Reverse version of fillTemplateData.  Lets you pull out the string versions of values held in divs, spans, etc.
 // Based on the usage of class names within an object to specify an object's sub-parts.
-$.fn.getTemplateData = function(options) {
+$.fn.getTemplateData = function (options) {
   if (!this.length || !options) {
     return {}
   }
-  var result = {},
-    item,
-    val
+  const result = {}
   if (options.textValues) {
     const _this = this
     options.textValues.forEach(item => {
       const $item = _this.find('.' + item.replace(/\[/g, '\\[').replace(/\]/g, '\\]') + ':first')
-      val = $.trim($item.text())
+      let val = $.trim($item.text())
       if ($item.html() === '&nbsp;') {
         val = ''
       }
@@ -146,19 +149,19 @@ $.fn.getTemplateData = function(options) {
     })
   }
   if (options.dataValues) {
-    for (item in options.dataValues) {
-      var val = this.data(options.dataValues[item])
-      if (val) {
-        result[options.dataValues[item]] = val
+    for (const item in options.dataValues) {
+      const val_ = this.data(options.dataValues[item])
+      if (val_) {
+        result[options.dataValues[item]] = val_
       }
     }
   }
   if (options.htmlValues) {
-    for (item in options.htmlValues) {
+    for (const item in options.htmlValues) {
       const $elem = this.find(
         '.' + options.htmlValues[item].replace(/\[/g, '\\[').replace(/\]/g, '\\]') + ':first'
       )
-      val = null
+      let val = null
       if ($elem.hasClass('user_content') && $elem.data('unenhanced_content_html')) {
         val = $elem.data('unenhanced_content_html')
       } else {
@@ -170,7 +173,7 @@ $.fn.getTemplateData = function(options) {
   return result
 }
 
-$.fn.getTemplateValue = function(value, options) {
+$.fn.getTemplateValue = function (value, options) {
   const opts = $.extend({}, options, {textValues: [value]})
   return this.getTemplateData(opts)[value]
 }

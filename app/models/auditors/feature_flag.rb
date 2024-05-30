@@ -76,12 +76,13 @@ class Auditors::FeatureFlag
       attributes["feature_name"] = @feature_flag.feature
       # this should be safe because we don't care about auditing feature
       # flags that are for specific users.
-      attributes["root_account_id"] = Shard.global_id_for(@feature_flag.context.root_account_id)
-      if attributes["root_account_id"].nil? && @feature_flag.context.is_a?(Account)
-        # if the context IS a root account, we still need to tie it to this
-        # record, and it's root_account_id will be nil.
-        attributes["root_account_id"] = @feature_flag.context.global_id
-      end
+      attributes["root_account_id"] =
+        if @feature_flag.context.is_a?(Account) && @feature_flag.context.root_account?
+          # if the context IS a root account, we still need to tie it to this record
+          @feature_flag.context.global_id
+        else
+          Shard.global_id_for(@feature_flag.context.root_account_id)
+        end
     end
 
     def user
@@ -95,14 +96,10 @@ class Auditors::FeatureFlag
     end
   end
 
-  Stream = Audits.stream do
+  Stream = Auditors.stream do
     ff_ar_type = Auditors::ActiveRecord::FeatureFlagRecord
-    backend_strategy -> { Audits.backend_strategy }
     active_record_type ff_ar_type
-    database -> { CanvasCassandra::DatabaseBuilder.from_config(:auditors) }
-    table :feature_flags
     record_type Auditors::FeatureFlag::Record
-    read_consistency_level -> { CanvasCassandra::DatabaseBuilder.read_consistency_setting(:auditors) }
     self.raise_on_error = true
 
     add_index :feature_flag do
@@ -115,7 +112,7 @@ class Auditors::FeatureFlag
 
   def self.for_feature_flag(feature_flag, options = {})
     feature_flag.shard.activate do
-      Auditors::FeatureFlag::Stream.for_feature_flag(feature_flag, Audits.read_stream_options(options))
+      Auditors::FeatureFlag::Stream.for_feature_flag(feature_flag, options)
     end
   end
 
@@ -126,8 +123,7 @@ class Auditors::FeatureFlag
     post_state ||= feature_flag.state
     feature_flag.shard.activate do
       event_record = Auditors::FeatureFlag::Record.generate(feature_flag, user, previous_state, post_state)
-      Auditors::FeatureFlag::Stream.insert(event_record, { backend_strategy: :cassandra }) if Audits.write_to_cassandra?
-      Auditors::FeatureFlag::Stream.insert(event_record, { backend_strategy: :active_record }) if Audits.write_to_postgres?
+      Auditors::FeatureFlag::Stream.insert(event_record)
     end
     event_record
   end

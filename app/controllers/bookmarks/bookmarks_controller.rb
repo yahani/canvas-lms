@@ -48,6 +48,7 @@
 #     }
 class Bookmarks::BookmarksController < ApplicationController
   before_action :require_user
+  around_action :activate_user_shard
   before_action :find_bookmark, only: %i[show update destroy]
 
   # @API List bookmarks
@@ -60,8 +61,11 @@ class Bookmarks::BookmarksController < ApplicationController
   #
   # @returns [Bookmark]
   def index
-    @bookmarks = Bookmarks::Bookmark.where(user_id: user_id).ordered
-    @bookmarks = Api.paginate(@bookmarks, self, api_v1_bookmarks_url)
+    GuardRail.activate(:secondary) do
+      @bookmarks = Bookmarks::Bookmark.where(user_id:).ordered
+      @bookmarks = Api.paginate(@bookmarks, self, api_v1_bookmarks_url)
+    end
+
     render json: @bookmarks.as_json
   end
 
@@ -160,14 +164,20 @@ class Bookmarks::BookmarksController < ApplicationController
     @current_user.id
   end
 
+  def activate_user_shard(&)
+    @current_user.shard.activate(&)
+  end
+
   def find_bookmark
-    unless (@bookmark = Bookmarks::Bookmark.where(id: params[:id], user_id: user_id).first)
-      head :not_found
+    GuardRail.activate(:secondary) do
+      @bookmark = Bookmarks::Bookmark.where(id: params[:id], user_id:).take
     end
+
+    head :not_found unless @bookmark.present?
   end
 
   def valid_params
-    params.permit(:name, :url, data: strong_anything).merge(user_id: user_id)
+    params.permit(:name, :url, data: strong_anything).merge(user_id:)
   end
 
   def set_position

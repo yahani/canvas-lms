@@ -20,17 +20,17 @@ import {mount} from 'enzyme'
 import {
   pinnedDiscussionBackground,
   unpinnedDiscussionsBackground,
-  closedDiscussionBackground
-} from 'ui/features/discussion_topics_index/react/components/DiscussionBackgrounds.js'
+  closedDiscussionBackground,
+} from 'ui/features/discussion_topics_index/react/components/DiscussionBackgrounds'
 
 const defaultProps = () => ({
   permissions: {
     create: true,
     manage_content: true,
-    moderate: true
+    moderate: true,
   },
   courseID: 12,
-  contextType: 'Course'
+  contextType: 'Course',
 })
 
 QUnit.module('DiscussionBackgrounds components')
@@ -40,7 +40,7 @@ test('renders correct student view for the pinnedDiscussionBackground ', () => {
   props.permissions.manage_content = false
   const tree = mount(pinnedDiscussionBackground(props))
   const node = tree.find('Text')
-  equal(node.length, '1')
+  equal(node.length, '2')
   tree.unmount()
 })
 
@@ -58,6 +58,6 @@ test('renders correct student view for the closedDiscussionBackground decorative
   props.permissions.manage_content = false
   const tree = mount(closedDiscussionBackground(props))
   const node = tree.find('Text')
-  equal(node.length, '1')
+  equal(node.length, '2')
   tree.unmount()
 })

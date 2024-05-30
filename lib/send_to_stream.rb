@@ -46,8 +46,7 @@ module SendToStream
       block = self.class.send_to_stream_block rescue nil
       stream_recipients = Array(instance_eval(&block)) if block
       if stream_recipients.present?
-        strand = "create_stream_items:#{Digest::SHA256.hexdigest(stream_recipients.compact.filter_map { |u| User.infer_id(u) }.uniq.join("_"))}"
-        delay_if_production(priority: Delayed::LOW_PRIORITY, strand: strand).create_stream_items
+        delay_if_production(priority: Delayed::LOW_PRIORITY).create_stream_items
       end
       true
     end
@@ -98,12 +97,12 @@ module SendToStream
     def clear_stream_items
       # We need to pass the asset_string, not the asset itself, since we're about to delete the asset
       root_object = StreamItem.root_object(self)
-      StreamItem.delay_if_production.delete_all_for([root_object.class.base_class.name, root_object.id], [self.class.base_class.name, id])
+      StreamItem.delay_if_production.delete_all_for([root_object.class.polymorphic_name, root_object.id], [self.class.polymorphic_name, id])
     end
   end
 
   def self.included(klass)
-    klass.send :include, SendToStreamInstanceMethods
+    klass.include SendToStreamInstanceMethods
     klass.extend SendToStreamClassMethods
   end
 end

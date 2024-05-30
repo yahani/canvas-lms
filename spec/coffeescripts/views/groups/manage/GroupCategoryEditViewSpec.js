@@ -1,3 +1,4 @@
+/* eslint-disable qunit/resolve-async */
 /*
  * Copyright (C) 2014 - present Instructure, Inc.
  *
@@ -17,8 +18,9 @@
  */
 
 import $ from 'jquery'
-import GroupCategory from '@canvas/groups/backbone/models/GroupCategory.coffee'
-import GroupCategoryEditView from '@canvas/groups/backbone/views/GroupCategoryEditView.coffee'
+import 'jquery-migrate'
+import GroupCategory from '@canvas/groups/backbone/models/GroupCategory'
+import GroupCategoryEditView from '@canvas/groups/backbone/views/GroupCategoryEditView'
 import fakeENV from 'helpers/fakeENV'
 import assertions from 'helpers/assertions'
 
@@ -37,7 +39,7 @@ QUnit.module('GroupCategoryEditView', {
     fakeENV.teardown()
     view.remove()
     document.getElementById('fixtures').innerHTML = ''
-  }
+  },
 })
 
 test('it should be accessible', assert => {

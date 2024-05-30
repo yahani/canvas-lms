@@ -20,7 +20,6 @@
 
 require_relative "../../../conditional_release_spec_helper"
 require_relative "../../api_spec_helper"
-require_dependency "conditional_release/stats_controller"
 
 module ConditionalRelease
   describe StatsController, type: :request do
@@ -34,7 +33,7 @@ module ConditionalRelease
 
     context "rules stats" do
       before(:once) do
-        @rule = create :rule, course: @course
+        @rule = create(:rule, course: @course)
       end
 
       describe "GET students_per_range" do

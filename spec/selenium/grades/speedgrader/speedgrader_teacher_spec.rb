@@ -77,7 +77,7 @@ describe "speed grader" do
       driver.navigate.refresh
       alert_shown = alert_present?
       dismiss_alert
-      expect(alert_shown).to eq(true)
+      expect(alert_shown).to be(true)
     end
   end
 
@@ -207,31 +207,27 @@ describe "speed grader" do
         Speedgrader.submit_settings_form
       end
 
-      list_items = ff("#students_selectmenu option").map { |i| i["value"] }
+      list_items = ff("#students_selectmenu option").pluck("value")
       expect(list_items).to contain_exactly(@student1.id.to_s, @student3.id.to_s, @student2.id.to_s)
     end
 
     it "sorts by submission status when eg_sort_by is submission_status" do
-      skip "update => update! made this spec fail GRADE-1086"
       @submission1 = @assignment.submit_homework(@student1, submission_type: "online_text_entry", body: "student one")
       @submission2 = @assignment.submit_homework(@student2, submission_type: "online_text_entry", body: "student three")
-      @submission2.update!(
-        grade: "90", score: 90, workflow_state: "graded", grade_matches_current_submission: true,
-        published_score: 90, published_grade: 90
-      )
+      @assignment.grade_student(@student2, grade: "90", grader: @teacher)
 
       get "/courses/#{@course.id}/gradebook/speed_grader?assignment_id=#{@assignment.id}"
 
       Speedgrader.click_settings_link
       Speedgrader.click_options_link
       click_option("#eg_sort_by", "submission_status", :value)
-      Speedgrader.select_hide_student_names.click
+      Speedgrader.select_hide_student_names
 
       expect_new_page_load do
         Speedgrader.submit_settings_form
       end
 
-      list_items = ff("#students_selectmenu option").map { |i| i["value"] }
+      list_items = ff("#students_selectmenu option").pluck("value")
 
       expect(list_items).to contain_exactly(@student2.id.to_s, @student1.id.to_s, @student3.id.to_s)
     end

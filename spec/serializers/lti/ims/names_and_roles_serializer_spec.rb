@@ -34,7 +34,7 @@ describe Lti::IMS::NamesAndRolesSerializer do
       shared_secret: "secret",
       name: "test tool",
       url: "http://www.tool.com/launch",
-      settings: { use_1_3: true },
+      lti_version: "1.3",
       workflow_state: privacy_level
     )
   end
@@ -52,7 +52,7 @@ describe Lti::IMS::NamesAndRolesSerializer do
 
   def be_lti_membership
     matcher_opts = {
-      privacy_level: privacy_level
+      privacy_level:
     }
     if page[:opts].present? && page[:opts][:rlid].present?
       matcher_opts[:message_matcher] = message_matcher
@@ -76,6 +76,44 @@ describe Lti::IMS::NamesAndRolesSerializer do
                             })
   end
 
+  shared_context "course and tool for variable substitution" do
+    let(:course) do
+      course = super()
+      course.name = "Brand new course"
+      course.start_at = 3.days.ago
+      course.conclude_at = 1.day.ago
+      course.grade_passback_setting = "nightly_sync"
+      course.save!
+      course
+    end
+
+    let(:tool) do
+      tool = super()
+      tool.settings[:custom_fields] = {
+        canvas_course_endAt: "$Canvas.course.endAt",
+        canvas_course_gradePassbackSetting: "$Canvas.course.gradePassbackSetting",
+        canvas_course_hideDistributionGraphs: "$Canvas.course.hideDistributionGraphs",
+        canvas_course_id: "$Canvas.course.id",
+        canvas_course_name: "$Canvas.course.name",
+        canvas_course_previousContextIds: "$Canvas.course.previousContextIds",
+        canvas_course_previousContextIds_recursive: "$Canvas.course.previousContextIds.recursive",
+        canvas_course_previousCourseIds: "$Canvas.course.previousCourseIds",
+        canvas_course_sectionIds: "$Canvas.course.sectionIds",
+        canvas_course_sectionRestricted: "$Canvas.course.sectionRestricted",
+        canvas_course_sectionSisSourceIds: "$Canvas.course.sectionSisSourceIds",
+        canvas_course_sisSourceId: "$Canvas.course.sisSourceId",
+        canvas_course_startAt: "$Canvas.course.startAt",
+        canvas_course_workflowState: "$Canvas.course.workflowState"
+      }
+      tool.save!
+      tool
+    end
+
+    let(:page) do
+      super().merge(opts: { rlid: "rlid-value" })
+    end
+  end
+
   shared_examples "enrollment serialization" do
     it "properly formats NRPS json" do
       json = serialize
@@ -86,7 +124,7 @@ describe Lti::IMS::NamesAndRolesSerializer do
 
     context "with past lti ids" do
       before do
-        UserPastLtiId.create!(user: user, context: course, user_lti_id: "current_lti_key", user_lti_context_id: "old_lti_id", user_uuid: "old")
+        UserPastLtiId.create!(user:, context: course, user_lti_id: "current_lti_key", user_lti_context_id: "old_lti_id", user_uuid: "old")
       end
 
       it "properly formats NRPS json" do
@@ -108,17 +146,26 @@ describe Lti::IMS::NamesAndRolesSerializer do
       tool.save!
       tool
     end
+    let(:resource_link) do
+      Lti::ResourceLink.create!(
+        context: course,
+        context_external_tool: tool,
+        url: "https://www.example.com/launch/resource_link",
+        custom: custom_params
+      )
+    end
+    let(:custom_params) { { foo: "bar" } }
     let(:page) do
-      super().merge(opts: { rlid: "rlid-value" })
+      super().merge(opts: { rlid: resource_link.resource_link_uuid })
     end
     let(:message_matcher) do
       {
         "https://purl.imsglobal.org/spec/lti/claim/custom" => {
-          "user_id" => user.id,
-          "canvas_user_id" => user.id,
+          "user_id" => user.id.to_s,
+          "canvas_user_id" => user.id.to_s,
           "unsupported_param_1" => "$unsupported.param.1",
           "unsupported_param_2" => "$unsupported.param.2"
-        }
+        }.merge(custom_params)
       }
     end
 
@@ -171,7 +218,7 @@ describe Lti::IMS::NamesAndRolesSerializer do
     context "with a course" do
       let(:context_type) { :course }
       let(:enrollment) do
-        enrollment = teacher_in_course(course: course, active_all: true, name: "Marta Perkins")
+        enrollment = teacher_in_course(course:, active_all: true, name: "Marta Perkins")
         user = enrollment.user
         user.email = "marta.perkins@school.edu"
         user.avatar_image_url = "http://school.edu/image/url.png"
@@ -186,13 +233,13 @@ describe Lti::IMS::NamesAndRolesSerializer do
       let(:decorated_course) { Lti::IMS::Providers::CourseMembershipsProvider::CourseContextDecorator.new(course) }
       let(:page) do
         {
-          url: url,
+          url:,
           memberships: [decorated_enrollment],
           context: decorated_course,
           assignment: nil,
           api_metadata: nil,
           controller: nil,
-          tool: tool,
+          tool:,
           opts: {}
         }
       end
@@ -224,6 +271,33 @@ describe Lti::IMS::NamesAndRolesSerializer do
       end
 
       it_behaves_like "serializes message array if rlid param present"
+
+      context "variables expansion" do
+        include_context "course and tool for variable substitution"
+
+        it "expand course-related variables from the tool settings" do
+          json = serialize
+          received_custom_claim = json[:members][0][:message].first["https://purl.imsglobal.org/spec/lti/claim/custom"]
+
+          expect(received_custom_claim["canvas_course_endat"]).to eq course.end_at.utc.iso8601
+          expect(received_custom_claim["canvas_course_gradepassbacksetting"]).to eq course.grade_passback_setting
+          expect(received_custom_claim["canvas_course_hidedistributiongraphs"]).to eq course.hide_distribution_graphs?
+          expect(received_custom_claim["canvas_course_id"]).to eq course.id.to_s
+          expect(received_custom_claim["canvas_course_name"]).to eq course.name
+
+          lti_helper = Lti::SubstitutionsHelper.new(course, course.root_account, user, tool)
+          expect(received_custom_claim["canvas_course_previouscontextids"]).to eq lti_helper.previous_lti_context_ids
+          expect(received_custom_claim["canvas_course_previouscontextids_recursive"]).to eq lti_helper.recursively_fetch_previous_lti_context_ids
+          expect(received_custom_claim["canvas_course_previouscourseids"]).to eq lti_helper.previous_course_ids
+          expect(received_custom_claim["canvas_course_sectionids"]).to eq lti_helper.section_ids
+          expect(received_custom_claim["canvas_course_sectionrestricted"]).to eq lti_helper.section_restricted
+          expect(received_custom_claim["canvas_course_sectionsissourceids"]).to eq lti_helper.section_sis_ids
+
+          expect(received_custom_claim["canvas_course_sissourceid"]).to eq course.sis_source_id
+          expect(received_custom_claim["canvas_course_startat"]).to eq course.start_at.utc.iso8601
+          expect(received_custom_claim["canvas_course_workflowstate"]).to eq course.workflow_state
+        end
+      end
     end
 
     context "with a group" do
@@ -245,13 +319,13 @@ describe Lti::IMS::NamesAndRolesSerializer do
       let(:decorated_group) { Lti::IMS::Providers::GroupMembershipsProvider::GroupContextDecorator.new(group_record) }
       let(:page) do
         {
-          url: url,
+          url:,
           memberships: [decorated_group_member],
           context: decorated_group,
           assignment: nil,
           api_metadata: nil,
           controller: nil,
-          tool: tool,
+          tool:,
           opts: {}
         }
       end
@@ -283,6 +357,31 @@ describe Lti::IMS::NamesAndRolesSerializer do
       end
 
       it_behaves_like "serializes message array if rlid param present"
+
+      context "variables expansion" do
+        include_context "course and tool for variable substitution"
+
+        it "does not expand course-related variables from the tool settings" do
+          # the variable expander needs the Course as a @context
+          json = serialize
+          received_custom_claim = json[:members][0][:message].first["https://purl.imsglobal.org/spec/lti/claim/custom"]
+
+          expect(received_custom_claim["canvas_course_endat"]).to eq "$Canvas.course.endAt"
+          expect(received_custom_claim["canvas_course_gradepassbacksetting"]).to eq "$Canvas.course.gradePassbackSetting"
+          expect(received_custom_claim["canvas_course_hidedistributiongraphs"]).to eq "$Canvas.course.hideDistributionGraphs"
+          expect(received_custom_claim["canvas_course_id"]).to eq "$Canvas.course.id"
+          expect(received_custom_claim["canvas_course_name"]).to eq "$Canvas.course.name"
+          expect(received_custom_claim["canvas_course_previouscontextids"]).to eq "$Canvas.course.previousContextIds"
+          expect(received_custom_claim["canvas_course_previouscontextids_recursive"]).to eq "$Canvas.course.previousContextIds.recursive"
+          expect(received_custom_claim["canvas_course_previouscourseids"]).to eq "$Canvas.course.previousCourseIds"
+          expect(received_custom_claim["canvas_course_sectionids"]).to eq "$Canvas.course.sectionIds"
+          expect(received_custom_claim["canvas_course_sectionrestricted"]).to eq "$Canvas.course.sectionRestricted"
+          expect(received_custom_claim["canvas_course_sectionsissourceids"]).to eq "$Canvas.course.sectionSisSourceIds"
+          expect(received_custom_claim["canvas_course_sissourceid"]).to eq "$Canvas.course.sisSourceId"
+          expect(received_custom_claim["canvas_course_startat"]).to eq "$Canvas.course.startAt"
+          expect(received_custom_claim["canvas_course_workflowstate"]).to eq "$Canvas.course.workflowState"
+        end
+      end
     end
   end
 end

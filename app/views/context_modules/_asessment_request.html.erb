@@ -20,7 +20,11 @@
   assignment = module_item.assignment
   is_anonymous_peer_reviews_enabled = assignment.anonymous_peer_reviews?
   title = t "Required Peer Review %{index}", :index => index
-  reviewee_username = is_anonymous_peer_reviews_enabled ? t("Not Available") : assessment.user.name
+  reviewee_username = if assessment.available?
+    is_anonymous_peer_reviews_enabled ? t("Anonymous User") : assessment.user.name
+  else
+    t("Not Available")
+  end
 %>
 
 <li
@@ -44,8 +48,8 @@
     <span class="type_icon display_icons" title="<%= title %>" role="none">
       <span class="screenreader-only"><%= title %></span>
       <span>
-        <i class="icon-forward"></i>
-        <i class="icon-peer-review"></i>
+        <i class="icon-forward" style="margin: 0px 0px 0px 1.5rem; width: 1em; height: 1em;"></i>
+        <i class="icon-peer-review" style="margin: 0px 0px 0px .75rem; width: 1em; height: 1em;"></i>
       </span>
     </span>
 

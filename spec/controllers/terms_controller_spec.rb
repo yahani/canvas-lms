@@ -28,12 +28,15 @@ describe TermsController do
     term = a.default_enrollment_term
     expect_any_instantiation_of(term).to receive(:touch_all_courses).once
 
-    put "update", params: { account_id: a.id, id: term.id, enrollment_term: { start_at: 1.day.ago, end_at: 1.day.from_now,
-                                                                              overrides: {
-                                                                                student_enrollment: { start_at: 1.day.ago, end_at: 1.day.from_now },
-                                                                                teacher_enrollment: { start_at: 1.day.ago, end_at: 1.day.from_now },
-                                                                                ta_enrollment: { start_at: 1.day.ago, end_at: 1.day.from_now },
-                                                                              } } }
+    put "update", params: { account_id: a.id,
+                            id: term.id,
+                            enrollment_term: { start_at: 1.day.ago,
+                                               end_at: 1.day.from_now,
+                                               overrides: {
+                                                 student_enrollment: { start_at: 1.day.ago, end_at: 1.day.from_now },
+                                                 teacher_enrollment: { start_at: 1.day.ago, end_at: 1.day.from_now },
+                                                 ta_enrollment: { start_at: 1.day.ago, end_at: 1.day.from_now },
+                                               } } }
   end
 
   it "is not able to change the name for a default term" do
@@ -46,6 +49,24 @@ describe TermsController do
     expect(response).to_not be_successful
     error = json_parse(response.body)["errors"]["name"].first["message"]
     expect(error).to eq "Cannot change the default term name"
+  end
+
+  it "doesn't overwrite stuck sis fields" do
+    account = Account.default
+    user = user_factory(active_all: true)
+    account.account_users.create!(user:)
+    user_session(@user)
+
+    term = account.default_enrollment_term
+    start_at = 5.days.ago
+    term.update_attribute(:start_at, start_at)
+
+    put "update", params: { account_id: account.id, id: term.id, override_sis_stickiness: false, enrollment_term: { start_at: 1.day.ago } }
+
+    term.reload
+
+    expect(response).to be_successful
+    expect(term.start_at).to eq start_at
   end
 
   it "is not able to delete a default term" do
@@ -92,7 +113,6 @@ describe TermsController do
       course_model(account: @account)
       account_admin_user(account: @account)
       @course.account.enable_feature!(:course_paces)
-      @course.restrict_enrollments_to_course_dates = false
       @course.enable_course_paces = true
       @course.save!
       @course_pace = course_pace_model(course: @course)

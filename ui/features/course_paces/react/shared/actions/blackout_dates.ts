@@ -16,12 +16,12 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {Action} from 'redux'
-import {ThunkAction} from 'redux-thunk'
+import type {Action} from 'redux'
+import type {ThunkAction} from 'redux-thunk'
 
 import {actions as uiActions} from '../../actions/ui'
-import {StoreState} from '../../types'
-import {createAction, ActionsUnion, BlackoutDate} from '../types'
+import type {StoreState} from '../../types'
+import {createAction, type ActionsUnion, type BlackoutDate} from '../types'
 import * as BlackoutDatesApi from '../../api/blackout_dates_api'
 
 export enum Constants {
@@ -29,7 +29,7 @@ export enum Constants {
   BLACKOUT_DATES_SYNCED = 'BLACKOUT_DATES/SYNCED',
   BLACKOUT_DATES_SYNC_FAILED = 'BLACKOUT_DATES/SYNC_FAILED',
   UPDATE_BLACKOUT_DATES = 'BLACKOUT_DATES/UPDATE',
-  RESET_BLACKOUT_DATES = 'BLACKOUT_DATES/RESET'
+  RESET_BLACKOUT_DATES = 'BLACKOUT_DATES/RESET',
 }
 
 /* Action Creators */
@@ -42,7 +42,7 @@ const regularActions = {
   updateBlackoutDates: (blackoutDates: BlackoutDate[]) =>
     createAction(Constants.UPDATE_BLACKOUT_DATES, blackoutDates),
   resetBlackoutDates: (originalBlackoutDates: BlackoutDate[]) =>
-    createAction(Constants.RESET_BLACKOUT_DATES, originalBlackoutDates)
+    createAction(Constants.RESET_BLACKOUT_DATES, originalBlackoutDates),
 }
 
 const thunkActions = {
@@ -60,17 +60,21 @@ const thunkActions = {
       const course_id = getState().coursePace.course_id
       dispatch(regularActions.blackoutDatesSyncing())
 
-      return BlackoutDatesApi.sync(blackoutDates, course_id)
-        .then(results => {
-          dispatch(regularActions.blackoutDatesSynced(results))
+      return BlackoutDatesApi.sync(course_id)
+        .then(() => {
+          const remainingCalendarEvents = BlackoutDatesApi.calendarEventsSync(
+            blackoutDates,
+            course_id
+          )
+          dispatch(regularActions.blackoutDatesSynced(remainingCalendarEvents))
         })
-        .catch(error => {
+        .catch((error: Error) => {
           dispatch(regularActions.blackoutDatesSyncFailed())
           dispatch(uiActions.setCategoryError('blackout_dates', error?.toString()))
           throw error
         })
     }
-  }
+  },
 }
 
 export const actions = {...regularActions, ...thunkActions}

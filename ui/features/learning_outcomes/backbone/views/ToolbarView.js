@@ -18,8 +18,8 @@
 
 import $ from 'jquery'
 import Backbone from '@canvas/backbone'
-import Outcome from '@canvas/outcomes/backbone/models/Outcome.coffee'
-import OutcomeGroup from '@canvas/outcomes/backbone/models/OutcomeGroup.coffee'
+import Outcome from '@canvas/outcomes/backbone/models/Outcome'
+import OutcomeGroup from '@canvas/outcomes/backbone/models/OutcomeGroup'
 
 // Manage the toolbar buttons.
 export default class ToolbarView extends Backbone.View {
@@ -29,7 +29,7 @@ export default class ToolbarView extends Backbone.View {
       'click .add_outcome_link': 'addOutcome',
       'click .add_outcome_group': 'addGroup',
       'click .import_outcomes': 'importOutcomes',
-      'click .find_outcome': 'findDialog'
+      'click .find_outcome': 'findDialog',
     }
   }
 
@@ -63,7 +63,7 @@ export default class ToolbarView extends Backbone.View {
 
   disable() {
     return this.$el.find('button').each((i, button) => {
-      $(button).attr('disabled', 'disabled')
+      $(button).prop('disabled', true)
       $(button).attr('aria-disabled', 'true')
     })
   }

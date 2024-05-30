@@ -18,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 require_relative "../../common"
-require_relative "./course_wizard_page_component"
+require_relative "course_wizard_page_component"
 
 module CoursesHomePage
   #------------------------- Sections ---------------------------
@@ -48,7 +48,7 @@ module CoursesHomePage
   end
 
   def course_course_pace_selector
-    "#course_paces_link"
+    ".course_paces"
   end
 
   def course_menu_toggle_selector

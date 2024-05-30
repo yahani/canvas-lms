@@ -29,24 +29,18 @@ class AuthenticationProvider::Microsoft < AuthenticationProvider::OpenIDConnect
     false
   end
 
-  # Rename db fields
-  alias_attribute :application_id, :client_id
-  alias_attribute :application_secret, :client_secret
+  alias_attribute :application_id, :entity_id
+  alias_attribute :tenant, :auth_filter
+  alias_method :application_secret, :client_secret
+  alias_method :application_secret=, :client_secret=
 
   def client_id
-    self.class.globally_configured? ? application_id : super
+    application_id
   end
 
+  # see {Facebooke#client_secret} for the reasoning here
   def client_secret
-    self.class.globally_configured? ? application_secret : super
-  end
-
-  def tenant=(val)
-    self.auth_filter = val
-  end
-
-  def tenant
-    auth_filter
+    application_secret
   end
 
   def self.recognized_params
@@ -73,6 +67,17 @@ class AuthenticationProvider::Microsoft < AuthenticationProvider::OpenIDConnect
     super || "id"
   end
 
+  def unique_id(token)
+    id_token = claims(token)
+    settings["known_tenants"] ||= []
+    (settings["known_tenants"] << id_token["tid"]).uniq!
+    settings["known_idps"] ||= []
+    idp = id_token["idp"] || id_token["iss"]
+    (settings["known_idps"] << idp).uniq!
+    save! if changed?
+    id_token[login_attribute]
+  end
+
   protected
 
   def authorize_url
@@ -85,8 +90,8 @@ class AuthenticationProvider::Microsoft < AuthenticationProvider::OpenIDConnect
 
   def scope
     result = []
-    requested_attributes = [login_attribute] + federated_attributes.values.map { |v| v["attribute"] }
-    result << "profile" unless (requested_attributes & %w[name oid preferred_username]).empty?
+    requested_attributes = [login_attribute] + federated_attributes.values.pluck("attribute")
+    result << "profile" if requested_attributes.intersect?(%w[name oid preferred_username])
     result << "email" if requested_attributes.include?("email")
     result.join(" ")
   end

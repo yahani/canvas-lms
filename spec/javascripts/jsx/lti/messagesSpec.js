@@ -17,6 +17,7 @@
  */
 
 import $ from 'jquery'
+import 'jquery-migrate'
 import sinon from 'sinon'
 import {ltiMessageHandler} from '@canvas/lti/jquery/messages'
 
@@ -28,46 +29,46 @@ const ltiToolWrapperFixture = $('#fixtures')
 
 const resizeMessage = {
   subject: 'lti.frameResize',
-  height: finalHeight
+  height: finalHeight,
 }
 
 const fetchWindowSize = {
-  subject: 'lti.fetchWindowSize'
+  subject: 'lti.fetchWindowSize',
 }
 
 const hideRightSideWrapper = {
-  subject: 'lti.hideRightSideWrapper'
+  subject: 'lti.hideRightSideWrapper',
 }
 
 const removeUnloadMessage = {
-  subject: 'lti.removeUnloadMessage'
+  subject: 'lti.removeUnloadMessage',
 }
 
 function showMessage(show = true) {
   return {
     subject: 'lti.showModuleNavigation',
-    show
+    show,
   }
 }
 
 function alertMessage(message = 'Alert message') {
   return {
     subject: 'lti.screenReaderAlert',
-    body: message
+    body: message,
   }
 }
 
-function unloadMessage(message = 'unload message') {
+function unloadMessage(message = undefined) {
   return {
     subject: 'lti.setUnloadMessage',
-    message
+    message,
   }
 }
 
-function postMessageEvent(data, source) {
+function postMessageEvent(data, source = {postMessage: () => {}}) {
   return {
     data: JSON.stringify(data),
-    source
+    source,
   }
 }
 
@@ -93,9 +94,10 @@ QUnit.module('Messages', suiteHooks => {
     `)
     const el = $('#content-wrapper')
     const toolContentWrapper = el.find('.tool_content_wrapper')
+    const iframe = $('iframe')
 
     equal(toolContentWrapper.height(), 100)
-    await ltiMessageHandler(postMessageEvent(resizeMessage))
+    await ltiMessageHandler(postMessageEvent(resizeMessage, iframe[0].contentWindow))
     equal(toolContentWrapper.height(), finalHeight)
   })
 
@@ -111,6 +113,34 @@ QUnit.module('Messages', suiteHooks => {
     equal(iframe.height(), 100)
     await ltiMessageHandler(postMessageEvent(resizeMessage, iframe[0].contentWindow))
     equal(iframe.height(), finalHeight)
+  })
+
+  test('finds and resizes an iframe in embedded RCE iframes', async () => {
+    ltiToolWrapperFixture.append(`
+      <div>
+        <h1 class="page-title">LTI resize test</h1>
+        <div class="tox-tinymce">
+          <iframe src="about:blank" />
+        </div>
+      </div>
+    `)
+    const iframeDoc = $('iframe')[0].contentWindow.document
+    iframeDoc.open()
+    iframeDoc.write(`
+      <html>
+        <body>
+          <div>
+            <iframe style="width: 100%; height: ${intialHeight}px;" src="https://canvas.example.com/courses/4/external_tools/retrieve?display=borderless" width="100%" height="${intialHeight}px" allowfullscreen="allowfullscreen" webkitallowfullscreen="webkitallowfullscreen" mozallowfullscreen="mozallowfullscreen"></iframe>
+          </div>
+        </body>
+      </html>
+    `)
+    iframeDoc.close()
+    const innerIframe = $('iframe', iframeDoc)
+
+    equal(innerIframe.height(), 100)
+    await ltiMessageHandler(postMessageEvent(resizeMessage, innerIframe[0].contentWindow))
+    equal(innerIframe.height(), finalHeight)
   })
 
   test('returns the height and width of the page along with the iframe offset', async () => {
@@ -142,8 +172,20 @@ QUnit.module('Messages', suiteHooks => {
   test('sets the unload message', async () => {
     sinon.spy(window, 'addEventListener')
     notOk(window.addEventListener.calledOnce)
+    await ltiMessageHandler(postMessageEvent(unloadMessage('unload message')))
+    ok(window.addEventListener.calledOnce)
+  })
+
+  test('sets the unload message event if no "message" is given', async () => {
+    sinon.spy(window, 'addEventListener')
+    notOk(window.addEventListener.calledOnce)
     await ltiMessageHandler(postMessageEvent(unloadMessage()))
     ok(window.addEventListener.calledOnce)
+    // handler needs to set the returnValue to a truthy value to work
+    const handler = window.addEventListener.getCall(0).args[1]
+    const event = {}
+    handler(event)
+    ok(event.returnValue)
   })
 
   test('hide the right side wrapper', async () => {

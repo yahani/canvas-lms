@@ -18,7 +18,7 @@
 
 import {Course} from './Course'
 import gql from 'graphql-tag'
-import {shape, string} from 'prop-types'
+import {shape, string, bool} from 'prop-types'
 
 export const Enrollment = {
   fragment: gql`
@@ -27,18 +27,21 @@ export const Enrollment = {
       course {
         ...Course
       }
+      concluded
     }
     ${Course.fragment}
   `,
 
   shape: shape({
     type: string,
-    course: Course.shape
+    course: Course.shape,
+    concluded: bool,
   }),
 
-  mock: ({type = 'StudentEnrollment', course = Course.mock()} = {}) => ({
+  mock: ({type = 'StudentEnrollment', course = Course.mock(), concluded = false} = {}) => ({
     type,
     course,
-    __typename: 'Enrollment'
-  })
+    concluded,
+    __typename: 'Enrollment',
+  }),
 }

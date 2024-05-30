@@ -17,8 +17,9 @@
  */
 
 import $ from 'jquery'
+import 'jquery-migrate'
 import Backbone from '@canvas/backbone'
-import MigrationConverterView from 'ui/features/content_migrations/backbone/views/MigrationConverterView.coffee'
+import MigrationConverterView from 'ui/features/content_migrations/backbone/views/MigrationConverterView'
 
 class SomeBackboneView extends Backbone.View {
   static initClass() {
@@ -38,17 +39,17 @@ QUnit.module('MigrationConverterView', {
       selectOptions: [
         {
           id: 'some_converter',
-          label: 'Some Converter'
-        }
+          label: 'Some Converter',
+        },
       ],
-      progressView: new Backbone.View()
+      progressView: new Backbone.View(),
     })
     return $('#fixtures').append(this.migrationConverterView.render().el)
   },
   teardown() {
     this.clock.restore()
     return this.migrationConverterView.remove()
-  }
+  },
 })
 
 test("renders a backbone view into it's main view container", function () {

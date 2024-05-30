@@ -58,9 +58,9 @@ describe Lti::ExternalToolTab do
       consumer_key: "asdf",
       shared_secret: "hjkl",
       name: "external tool",
-      course_navigation: course_navigation,
-      account_navigation: account_navigation,
-      user_navigation: user_navigation
+      course_navigation:,
+      account_navigation:,
+      user_navigation:
     )
     allow(tool).to receive(:id).and_return(2)
     tool
@@ -70,12 +70,25 @@ describe Lti::ExternalToolTab do
     expect(subject.tabs.first[:id]).to eq tool.asset_string
   end
 
+  context "sharding" do
+    specs_require_sharding
+
+    it "sets the tab id to the tools asset_string relative to the context's shard" do
+      course = @shard1.activate { course_model(account: account_model) }
+      tool = external_tool_model(context: course)
+      tabs = @shard2.activate do
+        described_class.new(course, nil, [tool]).tabs
+      end
+      expect(tabs.first[:id]).to eq(@shard1.activate { tool.asset_string })
+    end
+  end
+
   it "sets the css_class" do
     expect(subject.tabs.first[:css_class]).to eq tool.asset_string
   end
 
   it "sets the external value to true" do
-    expect(subject.tabs.first[:external]).to eq true
+    expect(subject.tabs.first[:external]).to be true
   end
 
   it "sets the args to the context_id and tool_id" do
@@ -110,12 +123,51 @@ describe Lti::ExternalToolTab do
       consumer_key: "asdf",
       shared_secret: "hjkl",
       name: "Tool2",
-      course_navigation: course_navigation,
-      account_navigation: account_navigation
+      course_navigation:,
+      account_navigation:
     )
     allow(tool2).to receive(:id).and_return(9)
     subject = described_class.new(context, nil, [tool2, tool])
     expect(subject.tabs.pluck(:id)).to eq [tool.asset_string, tool2.asset_string]
+  end
+
+  describe "#tool_id_for_tab" do
+    it "returns nil when given nil" do
+      expect(described_class.tool_id_for_tab(nil)).to be_nil
+    end
+
+    it "returns nil when given a hash that is not a tab" do
+      expect(described_class.tool_id_for_tab({ abc: 123 })).to be_nil
+    end
+
+    it "returns nil when given a tab that is not a tool tab" do
+      expect(
+        described_class.tool_id_for_tab(
+          { label: "foo", href: "http://google.com", id: "something", args: [tool.id, tool.id] }
+        )
+      ).to be_nil
+    end
+
+    it "returns the id of the tool in the tab when given a tool tab" do
+      tool = external_tool_model
+      tab = described_class.new(course_model, nil, [tool]).tabs.first
+      expect(described_class.tool_id_for_tab(tab)).to eq(tool.id)
+    end
+  end
+
+  describe "#tool_for_tab" do
+    it "returns nil when given a tool tab with an invalid id" do
+      tool = external_tool_model
+      tab = described_class.new(course_model, nil, [tool]).tabs.first
+      tab[:args][1] = ContextExternalTool.last.id + 999
+      expect(described_class.tool_for_tab(tab)).to be_nil
+    end
+
+    it "returns the tool when given a tool tab with a valid tool" do
+      tool = external_tool_model
+      tab = described_class.new(course_model, nil, [tool]).tabs.first
+      expect(described_class.tool_for_tab(tab)).to eq(tool)
+    end
   end
 
   describe "course_navigation" do
@@ -166,7 +218,7 @@ describe Lti::ExternalToolTab do
     end
 
     it "sets hidden" do
-      expect(subject.tabs.first[:hidden]).to eq true
+      expect(subject.tabs.first[:hidden]).to be true
     end
 
     it "sets the target if windowTarget is set on the tool" do

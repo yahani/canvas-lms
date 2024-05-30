@@ -22,16 +22,21 @@ export interface BlackoutDate {
   readonly id?: number | string
   temp_id?: string
   readonly course_id?: number | string
-  readonly event_title: string
+  event_title: string
   start_date: moment.Moment
   end_date: moment.Moment
   readonly admin_level?: boolean
+  is_calendar_event?: boolean
+  // Only for CalendarEvent blackout dates:
+  readonly title?: string
+  readonly start_at?: moment.Moment
+  readonly end_at?: moment.Moment
 }
 
 export enum SyncState {
   SYNCED, // up to date
   SYNCING, // actively syncing
-  UNSYNCED // there are pending changes
+  UNSYNCED, // there are pending changes
 }
 export interface BlackoutDateState {
   syncing: SyncState
@@ -48,6 +53,9 @@ export interface Course {
   readonly end_at: string
   readonly created_at: string
   readonly time_zone?: string
+  readonly default_view?: 'feed' | 'wiki' | 'modules' | 'assignments' | 'syllabus' | null
+  readonly is_student?: boolean
+  readonly is_instructor?: boolean
 }
 
 /* Redux action types */

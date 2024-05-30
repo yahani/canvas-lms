@@ -23,10 +23,9 @@ if Qti.migration_executable
   describe "Converting Blackboard 9 qti" do
     it "converts matching questions" do
       manifest_node = get_manifest_node("matching", interaction_type: "choiceInteraction", bb_question_type: "Matching")
-      hash = Qti::ChoiceInteraction.create_instructure_question(manifest_node: manifest_node, base_dir: bb9_question_dir)
+      hash = Qti::ChoiceInteraction.create_instructure_question(manifest_node:, base_dir: bb9_question_dir)
       # make sure the ids are correctly referencing each other
-      matches = []
-      hash[:matches].each { |m| matches << m[:match_id] }
+      matches = hash[:matches].pluck(:match_id)
       hash[:answers].each do |a|
         expect(matches.include?(a[:match_id])).to be_truthy
       end
@@ -41,10 +40,9 @@ if Qti.migration_executable
 
     it "converts matching questions if the divs precede the choice Interactions" do
       manifest_node = get_manifest_node("matching3", interaction_type: "choiceInteraction", bb_question_type: "Matching")
-      hash = Qti::ChoiceInteraction.create_instructure_question(manifest_node: manifest_node, base_dir: bb9_question_dir)
+      hash = Qti::ChoiceInteraction.create_instructure_question(manifest_node:, base_dir: bb9_question_dir)
       # make sure the ids are correctly referencing each other
-      matches = []
-      hash[:matches].each { |m| matches << m[:match_id] }
+      matches = hash[:matches].pluck(:match_id)
       hash[:answers].each do |a|
         expect(matches.include?(a[:match_id])).to be_truthy
       end
@@ -66,6 +64,23 @@ if Qti.migration_executable
       hash = get_quiz_data(bb9_question_dir, "multiple_answers")[0].detect { |qq| qq[:migration_id] == "question_22_1" }
       expect(hash[:question_type]).to eq "multiple_answers_question"
       expect(hash[:answers].sort_by { |answer| answer[:migration_id] }.pluck(:weight)).to eq [100, 0, 100, 100]
+    end
+
+    it "imports BB Ultra multiple choice questions" do
+      hash = get_quiz_data(bbultra_question_dir, "multiple_choice")[0][0]
+      expect(hash[:question_type]).to eq "multiple_choice_question"
+      expect(hash[:answers].map { |a| [a[:migration_id], a[:weight]] }).to match_array(
+        [["new_737b553c-d6a6-44a5-b35f-9db46dee58df", 0],
+         ["new_abe0e40b-beb3-4429-b6cb-57724daec7b9", 0],
+         ["new_dc28d500-df92-4572-afc5-bcb3caee7448", 100],
+         ["new_458c2d9d-0b9a-4bb9-9689-6051771cf7f7", 0]]
+      )
+    end
+
+    it "imports BB Ultra Presentation Only questions" do
+      hash = get_quiz_data(bbultra_question_dir, "text_only_question")[0][0]
+      expect(hash[:question_type]).to eq "text_only_question"
+      expect(hash[:question_text]).to eq "oi"
     end
 
     it "converts matching questions where the answers are given out of order" do

@@ -19,7 +19,8 @@
 // https://github.com/rails/jquery-ujs
 
 import $ from 'jquery'
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
+import authenticityToken from '@canvas/authenticity-token'
 
 // #
 // Handles "data-method" on links such as:
@@ -29,18 +30,15 @@ function handleMethod(link) {
   const href = link.data('url') || link.attr('href')
   const method = link.data('method')
   const target = link.attr('target')
+  const token = authenticityToken() || 'tokenWasEmpty'
   const form = $(`<form method="post" action="${htmlEscape(href)}"></form>`)
   const metadataInputHtml = `
     <input name="_method" value="${htmlEscape(method)}" type="hidden" />
-    <input name="authenticity_token" type="hidden" />
+    <input name="authenticity_token" value="${htmlEscape(token)}" type="hidden" />
   `
 
   if (target) form.attr('target', target)
-  form
-    .hide()
-    .append(metadataInputHtml)
-    .appendTo('body')
-    .submit()
+  form.hide().append(metadataInputHtml).appendTo('body').submit()
 }
 
 // For 'data-confirm' attribute:
@@ -49,10 +47,11 @@ function allowAction(element) {
   const message = element.data('confirm')
   if (!message) return true
 
-  return confirm(message)
+  // eslint-disable-next-line no-alert
+  return window.confirm(message)
 }
 
-$(document).delegate('a[data-confirm], a[data-method], a[data-remove]', 'click', function(event) {
+$(document).on('click', 'a[data-confirm], a[data-method], a[data-remove]', function (_event) {
   const $link = $(this)
 
   if ($link.data('handled') || !allowAction($link)) return false
@@ -80,10 +79,7 @@ function handleRemove($link) {
 
   // special case for handling links inside of a KyleMenu that were appendedTo the body and are
   // no longer children of where they should be
-  const closestKyleMenu = $link
-    .closest(':ui-popup')
-    .popup('option', 'trigger')
-    .data('KyleMenu')
+  const closestKyleMenu = $link.closest(':ui-popup').popup('option', 'trigger').data('KyleMenu')
   if (closestKyleMenu && closestKyleMenu.opts.appendMenuTo) {
     $startLookingFrom = closestKyleMenu.$placeholder
   }
@@ -98,7 +94,7 @@ function handleRemove($link) {
     },
     remove() {
       $elToRemove.remove()
-    }
+    },
   })
 
   $elToRemove.trigger('beforeremove')

@@ -17,10 +17,11 @@
  */
 
 import $ from 'jquery'
+import 'jquery-migrate'
 import fakeENV from 'helpers/fakeENV'
-import OutcomeContentBase from '@canvas/outcome-content-view/backbone/views/OutcomeContentBase'
-import OutcomeGroup from '@canvas/outcomes/backbone/models/OutcomeGroup.coffee'
-import OutcomeGroupView from '@canvas/outcome-content-view/backbone/views/OutcomeGroupView'
+import OutcomeContentBase from '@canvas/outcomes/content-view/backbone/views/OutcomeContentBase'
+import OutcomeGroup from '@canvas/outcomes/backbone/models/OutcomeGroup'
+import OutcomeGroupView from '@canvas/outcomes/content-view/backbone/views/OutcomeGroupView'
 import fixtures from 'helpers/fixtures'
 
 // stub function that creates the RCE to avoid
@@ -44,19 +45,19 @@ QUnit.module('OutcomeGroupView as a teacher', {
       context_id: 1,
       parent_outcome_group: {subgroups_url: 'www.example.com'},
       description: 'blah',
-      can_edit: true
+      can_edit: true,
     })
   },
   teardown() {
     fixtures.teardown()
     fakeENV.teardown()
-  }
+  },
 })
 
 test('placeholder text is rendered properly for new outcome groups', function () {
   const view = createView({
     state: 'add',
-    model: this.outcomeGroup
+    model: this.outcomeGroup,
   })
   equal(view.$('input[name="title"]').attr('placeholder'), 'New Outcome Group')
   view.remove()
@@ -65,7 +66,7 @@ test('placeholder text is rendered properly for new outcome groups', function ()
 test('validates title is present', function () {
   const view = createView({
     state: 'add',
-    model: this.outcomeGroup
+    model: this.outcomeGroup,
   })
   view.$('#outcome_group_title').val('')
   ok(!view.isValid())
@@ -76,7 +77,7 @@ test('validates title is present', function () {
 test('move, edit, and delete buttons appear', function () {
   const view = createView({
     state: 'show',
-    model: this.outcomeGroup
+    model: this.outcomeGroup,
   })
   ok(view.$('.move_group_button').is(':visible'))
   view.remove()
@@ -86,7 +87,7 @@ test('move, edit, and delete buttons do not appear when read only', function () 
   const view = createView({
     state: 'show',
     model: this.outcomeGroup,
-    readOnly: true
+    readOnly: true,
   })
   ok(!view.$('.move_group_button').is(':visible'))
   view.remove()
@@ -103,19 +104,19 @@ QUnit.module('OutcomeGroupView as a student', {
       context_id: 1,
       parent_outcome_group: {subgroups_url: 'www.example.com'},
       description: 'blah',
-      can_edit: false
+      can_edit: false,
     })
   },
   teardown() {
     fixtures.teardown()
     fakeENV.teardown()
-  }
+  },
 })
 
 test('move, edit, and delete buttons do not appear', function () {
   const view = createView({
     state: 'show',
-    model: this.outcomeGroup
+    model: this.outcomeGroup,
   })
   ok(!view.$('.move_group_button').is(':visible'))
   view.remove()

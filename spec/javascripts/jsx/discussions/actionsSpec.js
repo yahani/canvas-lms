@@ -16,9 +16,10 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import actions from 'ui/features/discussion_topics_index/react/actions.js'
-import * as apiClient from 'ui/features/discussion_topics_index/react/apiClient.js'
+import actions from 'ui/features/discussion_topics_index/react/actions'
+import * as apiClient from 'ui/features/discussion_topics_index/react/apiClient'
 import $ from 'jquery'
+import 'jquery-migrate'
 import '@canvas/rails-flash-notifications'
 
 function getState() {
@@ -40,7 +41,7 @@ QUnit.module('Discussions redux actions', {
   teardown() {
     sandbox.forEach(mock => mock.restore())
     sandbox = []
-  }
+  },
 })
 
 test('updateDiscussion dispatches UPDATE_DISCUSSION_SUCCESS', assert => {
@@ -58,11 +59,11 @@ test('updateDiscussion dispatches UPDATE_DISCUSSION_SUCCESS', assert => {
         payload: {
           discussion: {
             locked: false,
-            pinned: true
-          }
+            pinned: true,
+          },
         },
-        type: 'UPDATE_DISCUSSION_SUCCESS'
-      }
+        type: 'UPDATE_DISCUSSION_SUCCESS',
+      },
     ]
     deepEqual(dispatchSpy.secondCall.args, expected)
     done()
@@ -96,10 +97,10 @@ test('updateDiscussion dispatches UPDATE_DISCUSSION_FAIL if promise fails', asse
       {
         payload: {
           err: 'something bad happened',
-          message: 'Updating discussion failed'
+          message: 'Updating discussion failed',
         },
-        type: 'UPDATE_DISCUSSION_FAIL'
-      }
+        type: 'UPDATE_DISCUSSION_FAIL',
+      },
     ]
     deepEqual(dispatchSpy.secondCall.args, expected)
     done()
@@ -166,11 +167,11 @@ test('handleDrop throws exception if updating a field that does not exist on the
   const state = {
     allDiscussions: {
       1: {id: 1, pinned: false},
-      2: {id: 2, pinned: true}
+      2: {id: 2, pinned: true},
     },
     pinnedDiscussionIds: [2],
     unpinnedDiscussionIds: [1],
-    closedForCommentsDiscussions: []
+    closedForCommentsDiscussions: [],
   }
   const discussion = {pinned: true, locked: false}
   const updateFields = {foobar: true}
@@ -189,11 +190,11 @@ test('handleDrop dispatches DRAG_AND_DROP_START', assert => {
   const state = {
     allDiscussions: {
       1: {id: 1, pinned: false},
-      2: {id: 2, pinned: true}
+      2: {id: 2, pinned: true},
     },
     pinnedDiscussionIds: [2],
     unpinnedDiscussionIds: [1],
-    closedForCommentsDiscussions: []
+    closedForCommentsDiscussions: [],
   }
   actions.handleDrop({id: 1, pinned: false}, {pinned: true}, [1, 2])(dispatchSpy, () => state)
 
@@ -202,10 +203,10 @@ test('handleDrop dispatches DRAG_AND_DROP_START', assert => {
       {
         payload: {
           discussion: {id: 1, pinned: true},
-          order: [1, 2]
+          order: [1, 2],
         },
-        type: 'DRAG_AND_DROP_START'
-      }
+        type: 'DRAG_AND_DROP_START',
+      },
     ]
     deepEqual(dispatchSpy.firstCall.args, expected)
     done()
@@ -218,11 +219,11 @@ test('handleDrop dispatches DRAG_AND_DROP_SUCCESS if no api calls fail', assert 
   const state = {
     allDiscussions: {
       1: {id: 1, pinned: false},
-      2: {id: 2, pinned: true}
+      2: {id: 2, pinned: true},
     },
     pinnedDiscussionIds: [2],
     unpinnedDiscussionIds: [1],
-    closedForCommentsDiscussions: []
+    closedForCommentsDiscussions: [],
   }
   mockSuccess('updateDiscussion', {})
   mockSuccess('reorderPinnedDiscussions', {})
@@ -240,11 +241,11 @@ test('handleDrop dispatches DRAG_AND_DROP_FAIL if updateDiscussion api call fail
   const state = {
     allDiscussions: {
       1: {id: 1, pinned: false},
-      2: {id: 2, pinned: true}
+      2: {id: 2, pinned: true},
     },
     pinnedDiscussionIds: [2],
     unpinnedDiscussionIds: [1],
-    closedForCommentsDiscussions: []
+    closedForCommentsDiscussions: [],
   }
   mockFail('updateDiscussion', {})
   actions.handleDrop({id: 1, pinned: false}, {pinned: true}, [1, 2])(dispatchSpy, () => state)
@@ -256,13 +257,13 @@ test('handleDrop dispatches DRAG_AND_DROP_FAIL if updateDiscussion api call fail
           order: [2],
           discussion: {
             id: 1,
-            pinned: false
+            pinned: false,
           },
           err: {},
-          message: 'Failed to update discussion'
+          message: 'Failed to update discussion',
         },
-        type: 'DRAG_AND_DROP_FAIL'
-      }
+        type: 'DRAG_AND_DROP_FAIL',
+      },
     ]
     deepEqual(dispatchSpy.secondCall.args, expected)
     done()
@@ -275,11 +276,11 @@ test('handleDrop dispatches DRAG_AND_DROP_FAIL if reorderPinnedDiscussions api c
   const state = {
     allDiscussions: {
       1: {id: 1, pinned: false},
-      2: {id: 2, pinned: true}
+      2: {id: 2, pinned: true},
     },
     pinnedDiscussionIds: [2],
     unpinnedDiscussionIds: [1],
-    closedForCommentsDiscussions: []
+    closedForCommentsDiscussions: [],
   }
   mockSuccess('updateDiscussion', {})
   mockFail('reorderPinnedDiscussions', {})
@@ -292,13 +293,13 @@ test('handleDrop dispatches DRAG_AND_DROP_FAIL if reorderPinnedDiscussions api c
           order: [2, 1],
           discussion: {
             id: 1,
-            pinned: true
+            pinned: true,
           },
           err: {},
-          message: 'Failed to update discussion'
+          message: 'Failed to update discussion',
         },
-        type: 'DRAG_AND_DROP_FAIL'
-      }
+        type: 'DRAG_AND_DROP_FAIL',
+      },
     ]
     deepEqual(dispatchSpy.secondCall.args, expected)
     done()
@@ -311,11 +312,11 @@ test('handleDrop calls reorderPinnedDiscussions if pinned and order present', as
   const state = {
     allDiscussions: {
       1: {id: 1, pinned: false},
-      2: {id: 2, pinned: true}
+      2: {id: 2, pinned: true},
     },
     pinnedDiscussionIds: [2],
     unpinnedDiscussionIds: [1],
-    closedForCommentsDiscussions: []
+    closedForCommentsDiscussions: [],
   }
   mockSuccess('updateDiscussion', {})
   mockSuccess('reorderPinnedDiscussions', {})
@@ -333,11 +334,11 @@ test('handleDrop does not call reorderPinnedDiscussions if discussion is not pin
   const state = {
     allDiscussions: {
       1: {id: 1, pinned: false},
-      2: {id: 2, pinned: true}
+      2: {id: 2, pinned: true},
     },
     pinnedDiscussionIds: [2],
     unpinnedDiscussionIds: [1],
-    closedForCommentsDiscussions: []
+    closedForCommentsDiscussions: [],
   }
   mockSuccess('updateDiscussion', {})
   mockSuccess('reorderPinnedDiscussions', {})
@@ -355,11 +356,11 @@ test('handleDrop does not call reorderPinnedDiscussions if ordering not present'
   const state = {
     allDiscussions: {
       1: {id: 1, pinned: false},
-      2: {id: 2, pinned: true}
+      2: {id: 2, pinned: true},
     },
     pinnedDiscussionIds: [2],
     unpinnedDiscussionIds: [1],
-    closedForCommentsDiscussions: []
+    closedForCommentsDiscussions: [],
   }
   mockSuccess('updateDiscussion', {})
   mockSuccess('reorderPinnedDiscussions', {})
@@ -407,8 +408,8 @@ test('dispatches toggleSubscribeSuccess with unsubscription status if currently 
     const expectedArgs = [
       {
         payload: {id: 1, subscribed: false},
-        type: 'TOGGLE_SUBSCRIBE_SUCCESS'
-      }
+        type: 'TOGGLE_SUBSCRIBE_SUCCESS',
+      },
     ]
     deepEqual(dispatchSpy.secondCall.args, expectedArgs)
     done()
@@ -426,8 +427,8 @@ test('dispatches toggleSubscribeSuccess with subscription status if currently un
     const expectedArgs = [
       {
         payload: {id: 1, subscribed: true},
-        type: 'TOGGLE_SUBSCRIBE_SUCCESS'
-      }
+        type: 'TOGGLE_SUBSCRIBE_SUCCESS',
+      },
     ]
     deepEqual(dispatchSpy.secondCall.args, expectedArgs)
     done()
@@ -447,8 +448,8 @@ test('dispatches toggleSubscribeFail in an error occures on the API call', asser
     const expectedArgs = [
       {
         payload: {message: 'Subscribe failed', err: 'test error message'},
-        type: 'TOGGLE_SUBSCRIBE_FAIL'
-      }
+        type: 'TOGGLE_SUBSCRIBE_FAIL',
+      },
     ]
     deepEqual(dispatchSpy.secondCall.args, expectedArgs)
     deepEqual(flashStub.firstCall.args, ['Subscribe failed'])
@@ -478,11 +479,11 @@ test('saveSettings dispatches SAVING_SETTINGS_START', assert => {
     home_page_announcement_limit: 3,
     image_url: null,
     image_id: null,
-    image: null
+    image: null,
   }
   const userSettings = {
     manual_mark_as_read: false,
-    collapse_global_nav: false
+    collapse_global_nav: false,
   }
   const state = {contextId: '1', currentUserId: '1', userSettings}
   const dispatchSpy = sinon.spy()
@@ -490,8 +491,8 @@ test('saveSettings dispatches SAVING_SETTINGS_START', assert => {
   setTimeout(() => {
     const expected = [
       {
-        type: 'SAVING_SETTINGS_START'
-      }
+        type: 'SAVING_SETTINGS_START',
+      },
     ]
     deepEqual(dispatchSpy.firstCall.args, expected)
     done()
@@ -502,7 +503,7 @@ test('saveSettings calls screenReaderFlash if successful with only user settings
   const done = assert.async()
   const userSettings = {
     markAsRead: false,
-    collapse_global_nav: false
+    collapse_global_nav: false,
   }
   const state = {contextId: '1', currentUserId: '1', userSettings}
   const dispatchSpy = sinon.spy()
@@ -522,7 +523,7 @@ test('saveSettings calls screenReaderFlash if successful with course settings', 
   const done = assert.async()
   const userSettings = {
     markAsRead: false,
-    collapse_global_nav: false
+    collapse_global_nav: false,
   }
   const courseSettings = {
     allow_student_discussion_topics: true,
@@ -531,7 +532,7 @@ test('saveSettings calls screenReaderFlash if successful with course settings', 
     grading_standard_enabled: false,
     grading_standard_id: null,
     allow_student_organized_groups: true,
-    hide_final_grades: false
+    hide_final_grades: false,
   }
   const state = {contextId: '1', currentUserId: '1', userSettings}
   const dispatchSpy = sinon.spy()
@@ -552,7 +553,7 @@ test('saveSettings calls screenReaderFlash if failed with course settings', asse
   const done = assert.async()
   const userSettings = {
     markAsRead: false,
-    collapse_global_nav: false
+    collapse_global_nav: false,
   }
   const courseSettings = {
     allow_student_discussion_topics: true,
@@ -561,7 +562,7 @@ test('saveSettings calls screenReaderFlash if failed with course settings', asse
     grading_standard_enabled: false,
     grading_standard_id: null,
     allow_student_organized_groups: true,
-    hide_final_grades: false
+    hide_final_grades: false,
   }
   const state = {contextId: '1', currentUserId: '1', userSettings}
   const dispatchSpy = sinon.spy()
@@ -595,8 +596,8 @@ test('dispatches duplicateDiscussionSuccess if api call succeeds', assert => {
     const expectedArgs = [
       {
         payload: {originalId: 1, newDiscussion: {id: 3, focusOn: 'title'}},
-        type: 'DUPLICATE_DISCUSSION_SUCCESS'
-      }
+        type: 'DUPLICATE_DISCUSSION_SUCCESS',
+      },
     ]
     deepEqual(dispatchSpy.secondCall.args, expectedArgs)
     done()
@@ -613,8 +614,8 @@ test('dispatches duplicateDiscussionFail if api call fails', assert => {
     const expectedArgs = [
       {
         payload: {message: 'Duplication failed', err: 'YOU FAILED, YOU IDIOT'},
-        type: 'DUPLICATE_DISCUSSION_FAIL'
-      }
+        type: 'DUPLICATE_DISCUSSION_FAIL',
+      },
     ]
     deepEqual(dispatchSpy.secondCall.args, expectedArgs)
     done()
@@ -627,17 +628,17 @@ test('searchDiscussions dispatches UPDATE_DISCUSSIONS_SEARCH', () => {
     allDiscussions: {},
     pinnedDiscussionIds: [],
     unpinnedDiscussionIds: [],
-    closedForCommentsDiscussionIds: []
+    closedForCommentsDiscussionIds: [],
   }
   actions.searchDiscussions({searchTerm: 'foobar', filter: 'unread'})(dispatchSpy, () => state)
   const expected = [
     {
       payload: {
         searchTerm: 'foobar',
-        filter: 'unread'
+        filter: 'unread',
       },
-      type: 'UPDATE_DISCUSSIONS_SEARCH'
-    }
+      type: 'UPDATE_DISCUSSIONS_SEARCH',
+    },
   ]
   deepEqual(dispatchSpy.firstCall.args, expected)
 })
@@ -653,11 +654,11 @@ test('searchDiscussions announces number of results found to screenreader', asse
       3: {id: 3, filtered: true},
       4: {id: 4, filtered: false},
       5: {id: 5, filtered: true},
-      6: {id: 6, filtered: false}
+      6: {id: 6, filtered: false},
     },
     pinnedDiscussions: [1, 2],
     unpinnedDiscussions: [3, 4],
-    closedForCommentsDiscussions: [5, 6]
+    closedForCommentsDiscussions: [5, 6],
   }
   actions.searchDiscussions({searchTerm: 'foobar', filter: 'unread'})(dispatchSpy, () => state)
 
@@ -675,7 +676,7 @@ test('deleteDiscussion dispatches DELETE_DISCUSSION_SUCCESS on success', assert 
     allDiscussions: {1: {id: 1}},
     pinnedDiscussionIds: [1],
     unpinnedDiscussionIds: [],
-    closedForCommentsDiscussionIds: []
+    closedForCommentsDiscussionIds: [],
   }
   const discussion = {id: 1}
   const dispatchSpy = sinon.spy()
@@ -688,11 +689,11 @@ test('deleteDiscussion dispatches DELETE_DISCUSSION_SUCCESS on success', assert 
           discussion: {id: 1},
           nextFocusDiscussion: {
             focusId: undefined,
-            focusOn: undefined
-          }
+            focusOn: undefined,
+          },
         },
-        type: 'DELETE_DISCUSSION_SUCCESS'
-      }
+        type: 'DELETE_DISCUSSION_SUCCESS',
+      },
     ]
     deepEqual(dispatchSpy.thirdCall.args, expected)
     done()
@@ -706,7 +707,7 @@ test('deleteDiscussion dispatches DELETE_FOCUS_PENDING on success', assert => {
     allDiscussions: {1: {id: 1}},
     pinnedDiscussionIds: [1],
     unpinnedDiscussionIds: [],
-    closedForCommentsDiscussionIds: []
+    closedForCommentsDiscussionIds: [],
   }
   const discussion = {id: 1}
   const dispatchSpy = sinon.spy()
@@ -715,8 +716,8 @@ test('deleteDiscussion dispatches DELETE_FOCUS_PENDING on success', assert => {
   setTimeout(() => {
     const expected = [
       {
-        type: 'DELETE_FOCUS_PENDING'
-      }
+        type: 'DELETE_FOCUS_PENDING',
+      },
     ]
     deepEqual(dispatchSpy.secondCall.args, expected)
     done()
@@ -730,7 +731,7 @@ test('deleteDiscussion dispatches DELETE_DISCUSSION_FAIL on failure', assert => 
     allDiscussions: {1: {id: 1}},
     pinnedDiscussionIds: [1],
     unpinnedDiscussionIds: [],
-    closedForCommentsDiscussionIds: []
+    closedForCommentsDiscussionIds: [],
   }
   const discussion = {id: 1, title: 'foo'}
   const dispatchSpy = sinon.spy()
@@ -742,10 +743,10 @@ test('deleteDiscussion dispatches DELETE_DISCUSSION_FAIL on failure', assert => 
         payload: {
           message: 'Failed to delete discussion foo',
           discussion: {id: 1, title: 'foo'},
-          err: 'test_error'
+          err: 'test_error',
         },
-        type: 'DELETE_DISCUSSION_FAIL'
-      }
+        type: 'DELETE_DISCUSSION_FAIL',
+      },
     ]
     deepEqual(dispatchSpy.secondCall.args, expected)
     done()
@@ -760,7 +761,7 @@ test('deleteDiscussion calls screenReaderFlash on success', assert => {
     allDiscussions: {1: {id: 1}},
     pinnedDiscussionIds: [1],
     unpinnedDiscussionIds: [],
-    closedForCommentsDiscussionIds: []
+    closedForCommentsDiscussionIds: [],
   }
   const discussion = {id: 1, title: 'foo'}
   const dispatchSpy = sinon.spy()
@@ -781,7 +782,7 @@ test('deleteDiscussion calls screenReaderFlash on failure', assert => {
     allDiscussions: {1: {id: 1}},
     pinnedDiscussionIds: [1],
     unpinnedDiscussionIds: [],
-    closedForCommentsDiscussionIds: []
+    closedForCommentsDiscussionIds: [],
   }
   const discussion = {id: 1, title: 'foo'}
   const dispatchSpy = sinon.spy()
@@ -801,7 +802,7 @@ test('deleteDiscussion does not set focusOn if collection is empty after delete'
     allDiscussions: {1: {id: 1}},
     pinnedDiscussionIds: [1],
     unpinnedDiscussionIds: [],
-    closedForCommentsDiscussionIds: []
+    closedForCommentsDiscussionIds: [],
   }
   const discussion = {id: 1}
   const dispatchSpy = sinon.spy()
@@ -814,11 +815,11 @@ test('deleteDiscussion does not set focusOn if collection is empty after delete'
           discussion: {id: 1},
           nextFocusDiscussion: {
             focusId: undefined,
-            focusOn: undefined
-          }
+            focusOn: undefined,
+          },
         },
-        type: 'DELETE_DISCUSSION_SUCCESS'
-      }
+        type: 'DELETE_DISCUSSION_SUCCESS',
+      },
     ]
     deepEqual(dispatchSpy.thirdCall.args, expected)
     done()
@@ -831,11 +832,11 @@ test('deleteDiscussion sets focusOn to toggleButton if deleting first item in co
   const state = {
     allDiscussions: {
       1: {id: 1},
-      2: {id: 2}
+      2: {id: 2},
     },
     pinnedDiscussionIds: [1, 2],
     unpinnedDiscussionIds: [],
-    closedForCommentsDiscussionIds: []
+    closedForCommentsDiscussionIds: [],
   }
   const discussion = {id: 1}
   const dispatchSpy = sinon.spy()
@@ -848,11 +849,11 @@ test('deleteDiscussion sets focusOn to toggleButton if deleting first item in co
           discussion: {id: 1},
           nextFocusDiscussion: {
             focusId: 2,
-            focusOn: 'toggleButton'
-          }
+            focusOn: 'toggleButton',
+          },
         },
-        type: 'DELETE_DISCUSSION_SUCCESS'
-      }
+        type: 'DELETE_DISCUSSION_SUCCESS',
+      },
     ]
     deepEqual(dispatchSpy.thirdCall.args, expected)
     done()
@@ -865,11 +866,11 @@ test('deleteDiscussion sets focusOn to manageMenu if user has delete perms', ass
   const state = {
     allDiscussions: {
       1: {id: 1, permissions: {delete: true}},
-      2: {id: 2, permissions: {delete: true}}
+      2: {id: 2, permissions: {delete: true}},
     },
     pinnedDiscussionIds: [1, 2],
     unpinnedDiscussionIds: [],
-    closedForCommentsDiscussionIds: []
+    closedForCommentsDiscussionIds: [],
   }
   const discussion = {id: 2}
   const dispatchSpy = sinon.spy()
@@ -882,11 +883,11 @@ test('deleteDiscussion sets focusOn to manageMenu if user has delete perms', ass
           discussion: {id: 2},
           nextFocusDiscussion: {
             focusId: 1,
-            focusOn: 'manageMenu'
-          }
+            focusOn: 'manageMenu',
+          },
         },
-        type: 'DELETE_DISCUSSION_SUCCESS'
-      }
+        type: 'DELETE_DISCUSSION_SUCCESS',
+      },
     ]
     deepEqual(dispatchSpy.thirdCall.args, expected)
     done()
@@ -899,11 +900,11 @@ test('deleteDiscussion sets focusOn to title if user does not have delete perms'
   const state = {
     allDiscussions: {
       1: {id: 1, permissions: {delete: false}},
-      2: {id: 2, permissions: {delete: false}}
+      2: {id: 2, permissions: {delete: false}},
     },
     pinnedDiscussionIds: [1, 2],
     unpinnedDiscussionIds: [],
-    closedForCommentsDiscussionIds: []
+    closedForCommentsDiscussionIds: [],
   }
   const discussion = {id: 2}
   const dispatchSpy = sinon.spy()
@@ -916,11 +917,11 @@ test('deleteDiscussion sets focusOn to title if user does not have delete perms'
           discussion: {id: 2},
           nextFocusDiscussion: {
             focusId: 1,
-            focusOn: 'title'
-          }
+            focusOn: 'title',
+          },
         },
-        type: 'DELETE_DISCUSSION_SUCCESS'
-      }
+        type: 'DELETE_DISCUSSION_SUCCESS',
+      },
     ]
     deepEqual(dispatchSpy.thirdCall.args, expected)
     done()

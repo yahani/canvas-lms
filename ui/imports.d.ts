@@ -16,88 +16,26 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {HTMLElement, KeyboardEventHandler, MouseEventHandler} from 'react'
+type HTMLElement = import('react').HTMLElement
+type FC = import('react').FC
+type KeyboardEventHandler = import('react').KeyboardEventHandler
+type MouseEventHandler = import('react').MouseEventHandler
+type ReactNode = import('react').ReactNode
+type ChangeEvent = import('react').ChangeEvent
 
 // These are special webpack-processed imports that Typescript doesn't understand
 // by default. Declaring them as wildcard modules allows TS to recognize them as
 // bare-bones interfaces with the `any` type.
 // See https://www.typescriptlang.org/docs/handbook/modules.html#wildcard-module-declarations
-declare module '*.coffee'
 declare module '*.graphql'
 declare module '*.handlebars'
 declare module '*.svg'
 
-// InstUI v7 is missing type information for a lot of its props, so these suppress
-// TS errors on valid props until we upgrade to v8.
-interface MissingInputProps {
-  onClick?: MouseEventHandler<HTMLElement>
-  onKeyDown?: KeyboardEventHandler<HTMLElement>
-  role?: string
-  disabled?: boolean
+declare module 'convert-case' {
+  export function camelize<T>(props: {[key: string]: unknown}): T
+  export function underscore<T>(props: {[key: string]: unknown}): T
 }
 
-interface MissingElementProps {
-  onMouseEnter?: MouseEventHandler<HTMLElement>
-  onMouseLeave?: MouseEventHandler<HTMLElement>
-}
-
-interface MissingThemeableProps {
-  theme?: object
-}
-
-declare module '@instructure/ui-buttons' {
-  export interface BaseButtonProps extends MissingInputProps, MissingThemeableProps {}
-  export interface ButtonProps extends MissingInputProps, MissingThemeableProps {}
-  export interface CloseButtonProps extends MissingInputProps, MissingThemeableProps {}
-  export interface CondensedButtonProps extends MissingInputProps, MissingThemeableProps {}
-  export interface IconButtonProps extends MissingInputProps, MissingThemeableProps {}
-  export interface ToggleButtonProps extends MissingInputProps, MissingThemeableProps {}
-}
-
-declare module '@instructure/ui-motion' {
-  export interface TransitionProps extends MissingThemeableProps {}
-}
-
-declare module '@instructure/ui-text-input' {
-  export interface TextInputProps extends MissingInputProps {}
-}
-
-declare module '@instructure/ui-toggle-details' {
-  export interface ToggleDetailsProps extends MissingThemeableProps {}
-}
-
-declare module '@instructure/ui-view' {
-  export interface ViewProps extends MissingElementProps, MissingThemeableProps {
-    className?: string
-  }
-}
-
-declare module '@instructure/ui-buttons' {
-  export interface ButtonProps {
-    id?: string
-  }
-}
-
-declare module '@instructure/ui-menu' {
-  export interface Menu {
-    contentRef?: any
-  }
-}
-
-declare module '@instructure/ui-link' {
-  export interface Link {
-    size?: string
-  }
-}
-
-declare module '@instructure/ui-text' {
-  export interface Text {
-    tag?: string
-  }
-}
-
-declare module '@instructure/ui-select' {
-  export interface SelectProps {
-    renderLabel?: string
-  }
-}
+// Global scope declarations are only allowed in module contexts, so we
+// need this to make Typescript think this is a module. 🙄
+export {}

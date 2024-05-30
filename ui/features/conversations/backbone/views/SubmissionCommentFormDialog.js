@@ -22,7 +22,7 @@ import '@canvas/backbone'
 import DialogBaseView from '@canvas/dialog-base-view'
 import template from '../../jst/SubmissionCommentFormDialog.handlebars'
 import composeTitleBarTemplate from '../../jst/composeTitleBar.handlebars'
-import Message from '../models/Message.coffee'
+import Message from '../models/Message'
 import 'jquery.elastic'
 
 const I18n = useI18nScope('conversation_dialog')
@@ -37,7 +37,7 @@ export default class SubmissionCommentFormDialog extends DialogBaseView {
     this.prototype.els = {
       '.message-body': '$messageBody',
       '.reply_body': '$replyBody',
-      '.reply_form': '$form'
+      '.reply_form': '$form',
     }
 
     this.prototype.messages = {flashSuccess: I18n.t('message_sent', 'Message sent!')}
@@ -64,7 +64,7 @@ export default class SubmissionCommentFormDialog extends DialogBaseView {
       buttons: [
         {
           text: I18n.t('#buttons.cancel', 'Cancel'),
-          click: this.cancel
+          click: this.cancel,
         },
         {
           text: I18n.t('#buttons.send', 'Send'),
@@ -72,9 +72,11 @@ export default class SubmissionCommentFormDialog extends DialogBaseView {
           'data-track-category': 'Compose Message',
           'data-track-action': 'Edit',
           'data-track-label': 'Send',
-          click: e => this.sendMessage(e)
-        }
-      ]
+          click: e => this.sendMessage(e),
+        },
+      ],
+      modal: true,
+      zIndex: 1000,
     }
   }
 
@@ -139,7 +141,7 @@ export default class SubmissionCommentFormDialog extends DialogBaseView {
       formDataTarget: 'url',
       disableWhileLoading: true,
       required: ['comment[text_comment]'],
-      onSubmit: (request, submitData) => {
+      onSubmit: (request, _submitData) => {
         // close dialog after submitting the message
         this.request = request
         const dfd = $.Deferred()
@@ -155,7 +157,7 @@ export default class SubmissionCommentFormDialog extends DialogBaseView {
           return this.trigger('addMessage', message.get('messages')[0], response)
         })
         return $.when(this.request).fail(() => dfd.reject())
-      }
+      },
     })
   }
 

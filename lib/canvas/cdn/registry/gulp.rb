@@ -17,8 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require "set"
-
 module Canvas
   module Cdn
     class Registry
@@ -50,7 +48,7 @@ module Canvas
         private
 
         def load_manifest_from_disk
-          file = Rails.root.join("public/dist/rev-manifest.json")
+          file = Rails.public_path.join("dist/rev-manifest.json")
 
           if file.exist?
             JSON.parse(file.read).freeze

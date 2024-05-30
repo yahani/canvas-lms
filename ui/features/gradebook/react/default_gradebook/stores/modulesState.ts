@@ -16,22 +16,24 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {GetState, SetState} from 'zustand'
-// @ts-ignore
+import type {GetState, SetState} from 'zustand'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import type {Module} from '../gradebook.d'
+import type {Module} from '../../../../../api.d'
 import type {GradebookStore} from './index'
 
 const I18n = useI18nScope('gradebook')
 
 export type ModulesState = {
   modules: Module[]
+  hasModules: boolean
   isModulesLoading: boolean
   fetchModules: () => Promise<any>
 }
 
 export default (set: SetState<GradebookStore>, get: GetState<GradebookStore>): ModulesState => ({
   modules: [],
+
+  hasModules: false,
 
   isModulesLoading: false,
 
@@ -44,22 +46,22 @@ export default (set: SetState<GradebookStore>, get: GetState<GradebookStore>): M
     const url = `/api/v1/courses/${courseId}/modules`
     const params = {per_page: contextModulesPerPage}
     return dispatch
-      .getDepaginated(url, params)
+      .getDepaginated<Module[]>(url, params)
       .then(modules => {
         set({modules, isModulesLoading: false})
       })
       .catch(() => {
         set({
-          filters: [],
+          filterPresets: [],
           isFiltersLoading: false,
           flashMessages: get().flashMessages.concat([
             {
               key: 'modules-loading-error',
               message: I18n.t('There was an error fetching modules.'),
-              variant: 'error'
-            }
-          ])
+              variant: 'error',
+            },
+          ]),
         })
       })
-  }
+  },
 })

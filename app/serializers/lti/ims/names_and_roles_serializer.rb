@@ -53,6 +53,11 @@ module Lti::IMS
     end
 
     def variable_expander(enrollment)
+      # the variables substitution in the whitelist have the following guards:
+      # - @current_user
+      # - @context.is_a?(Course)
+      # - @tool
+
       Lti::VariableExpander.new(
         page[:context].root_account,
         Lti::IMS::Providers::MembershipsProvider.unwrap(page[:context]),
@@ -60,31 +65,44 @@ module Lti::IMS
         {
           current_user: Lti::IMS::Providers::MembershipsProvider.unwrap(enrollment.user),
           tool: page[:tool],
-          enrollment: enrollment,
+          enrollment:,
           variable_whitelist: %w[
-            Person.name.full
-            Person.name.display
-            Person.name.family
-            Person.name.given
-            User.image
-            User.id
-            Canvas.user.id
-            vnd.instructure.User.uuid
-            com.instructure.User.sectionNames
+            Caliper.url
+            Canvas.course.endAt
+            Canvas.course.gradePassbackSetting
+            Canvas.course.hideDistributionGraphs
+            Canvas.course.id
+            Canvas.course.name
+            Canvas.course.previousContextIds
+            Canvas.course.previousContextIds.recursive
+            Canvas.course.previousCourseIds
+            Canvas.course.sectionIds
+            Canvas.course.sectionRestricted
+            Canvas.course.sectionSisSourceIds
+            Canvas.course.sisSourceId
+            Canvas.course.startAt
+            Canvas.course.workflowState
+            Canvas.group.contextIds
             Canvas.user.globalId
-            Canvas.user.sisSourceId
-            Person.sourcedId
-            Message.locale
-            vnd.Canvas.Person.email.sis
-            Person.email.primary
-            Person.address.timezone
-            User.username
+            Canvas.user.id
             Canvas.user.loginId
             Canvas.user.sisIntegrationId
-            Canvas.course.sectionIds
-            Canvas.group.contextIds
+            Canvas.user.sisSourceId
             Canvas.xapi.url
-            Caliper.url
+            Message.locale
+            Person.address.timezone
+            Person.email.primary
+            Person.name.display
+            Person.name.family
+            Person.name.full
+            Person.name.given
+            Person.sourcedId
+            User.id
+            User.image
+            User.username
+            com.instructure.User.sectionNames
+            vnd.Canvas.Person.email.sis
+            vnd.instructure.User.uuid
           ]
         }
       )
@@ -108,31 +126,31 @@ module Lti::IMS
 
     def member_sourced_id(expander)
       expanded = expander.expand_variables!({ value: "$Person.sourcedId" })[:value]
-      expanded == "$Person.sourcedId" ? nil : expanded
+      (expanded == "$Person.sourcedId") ? nil : expanded
     end
 
     def message(enrollment, expander)
       return {} if page[:opts].blank? || page[:opts][:rlid].blank?
 
-      orig_locale = I18n.locale
       orig_time_zone = Time.zone
       begin
-        I18n.locale = enrollment.user.locale || orig_locale
-        Time.zone = enrollment.user.time_zone || orig_time_zone
-        launch = Lti::Messages::ResourceLinkRequest.new(
-          tool: page[:tool],
-          context: unwrap(page[:context]),
-          user: enrollment.user,
-          expander: expander,
-          return_url: nil,
-          opts: {
-            # See #variable_expander for additional constraints on custom param expansion
-            claim_group_whitelist: %i[public i18n custom_params],
-            extension_whitelist: [:canvas_user_id, :canvas_user_login_id]
-          }
-        ).generate_post_payload_message(validate_launch: false)
+        launch = I18n.with_locale(enrollment.user.locale) do
+          Time.zone = enrollment.user.time_zone || orig_time_zone
+          Lti::Messages::ResourceLinkRequest.new(
+            tool: page[:tool],
+            context: unwrap(page[:context]),
+            user: enrollment.user,
+            expander:,
+            return_url: nil,
+            opts: {
+              # See #variable_expander for additional constraints on custom param expansion
+              claim_group_whitelist: %i[public i18n custom_params],
+              extension_whitelist: [:canvas_user_id, :canvas_user_login_id],
+              resource_link: page[:opts][:rlid].present? ? Lti::ResourceLink.find_by(resource_link_uuid: page[:opts][:rlid]) : nil
+            }
+          ).generate_post_payload_message(validate_launch: false)
+        end
       ensure
-        I18n.locale = orig_locale
         Time.zone = orig_time_zone
       end
 

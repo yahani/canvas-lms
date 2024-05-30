@@ -34,12 +34,14 @@ class ContentExport < ActiveRecord::Base
   serialize :settings
 
   attr_writer :master_migration
+  attr_accessor :new_quizzes_export_url, :new_quizzes_export_state
 
   validates :context_id, :workflow_state, presence: true
 
   has_one :job_progress, class_name: "Progress", as: :context, inverse_of: :context
 
   before_save :assign_quiz_migration_limitation_alert
+  before_save :set_new_quizzes_export_settings
   before_create :set_global_identifiers
 
   # export types
@@ -54,6 +56,7 @@ class ContentExport < ActiveRecord::Base
 
   workflow do
     state :created
+    state :waiting_for_external_tool
     state :exporting
     state :exported
     state :exported_for_course_copy
@@ -144,7 +147,7 @@ class ContentExport < ActiveRecord::Base
       when ZIP
         export_zip(opts)
       when USER_DATA
-        export_user_data(opts)
+        export_user_data(**opts)
       when QUIZZES2
         return unless context.feature_enabled?(:quizzes_next)
 
@@ -167,6 +170,10 @@ class ContentExport < ActiveRecord::Base
   def reset_and_start_job_progress
     job_progress.try :reset!
     job_progress.try :start!
+  end
+
+  def mark_waiting_for_external_tool
+    self.workflow_state = "waiting_for_external_tool"
   end
 
   def mark_exporting
@@ -199,6 +206,8 @@ class ContentExport < ActiveRecord::Base
       if @cc_exporter.export
         self.progress = 100
         job_progress.try :complete!
+        duration = Time.now - created_at
+        InstStatsd::Statsd.timing("content_migrations.export_duration", duration, tags: { export_type:, selective_export: selective_export? })
         self.workflow_state = if for_course_copy?
                                 "exported_for_course_copy"
                               else
@@ -238,7 +247,7 @@ class ContentExport < ActiveRecord::Base
     mark_exporting
     begin
       job_progress.try :start!
-      if (attachment = Exporters::ZipExporter.create_zip_export(self, opts))
+      if (attachment = Exporters::ZipExporter.create_zip_export(self, **opts))
         self.attachment = attachment
         self.progress = 100
         mark_exported
@@ -292,7 +301,7 @@ class ContentExport < ActiveRecord::Base
 
         update(
           export_type: QTI,
-          selected_content: selected_content
+          selected_content:
         )
       else
         update(export_type: QTI)
@@ -318,6 +327,10 @@ class ContentExport < ActiveRecord::Base
     ensure
       save
     end
+  end
+
+  def disable_content_rewriting?
+    quizzes_next? && NewQuizzesFeaturesHelper.disable_content_rewriting?(context)
   end
 
   def export_quizzes2
@@ -408,7 +421,7 @@ class ContentExport < ActiveRecord::Base
   end
 
   def error_message
-    settings[:errors] ? settings[:errors].last : nil
+    settings[:errors]&.last
   end
 
   def error_messages
@@ -450,11 +463,11 @@ class ContentExport < ActiveRecord::Base
   #   checked should be exported or not.
   #
   #   Returns: bool
-  def export_object?(obj, asset_type = nil)
+  def export_object?(obj, asset_type: nil, ignore_updated_at: false)
     return false unless obj
     return true unless selective_export?
 
-    return true if for_master_migration? && master_migration.export_object?(obj) # fallback to selected_content otherwise
+    return true if for_master_migration? && master_migration.export_object?(obj, ignore_updated_at:) # fallback to selected_content otherwise
 
     # because Announcement.table_name == 'discussion_topics'
     if obj.is_a?(Announcement)
@@ -589,6 +602,24 @@ class ContentExport < ActiveRecord::Base
     end
   end
 
+  def set_contains_new_quizzes_settings
+    settings[:contains_new_quizzes] = contains_new_quizzes?
+  end
+
+  def contains_new_quizzes?
+    return false unless new_quizzes_common_cartridge_enabled?
+
+    context.assignments.active.type_quiz_lti.count.positive?
+  end
+
+  def include_new_quizzes_in_export?
+    return false unless new_quizzes_common_cartridge_enabled?
+    return false unless settings[:new_quizzes_export_state] == "completed"
+    return false unless settings[:new_quizzes_export_url].present?
+
+    true
+  end
+
   scope :active, -> { where("content_exports.workflow_state<>'deleted'") }
   scope :not_for_copy, -> { where.not(content_exports: { export_type: [COURSE_COPY, MASTER_COURSE_COPY] }) }
   scope :common_cartridge, -> { where(export_type: COMMON_CARTRIDGE) }
@@ -597,14 +628,18 @@ class ContentExport < ActiveRecord::Base
   scope :course_copy, -> { where(export_type: COURSE_COPY) }
   scope :running, -> { where(workflow_state: ["created", "exporting"]) }
   scope :admin, lambda { |user|
-    where("content_exports.export_type NOT IN (?) OR content_exports.user_id=?", [
+    where("content_exports.export_type NOT IN (?) OR content_exports.user_id=?",
+          [
             ZIP, USER_DATA
-          ], user)
+          ],
+          user)
   }
   scope :non_admin, lambda { |user|
-    where("content_exports.export_type IN (?) AND content_exports.user_id=?", [
+    where("content_exports.export_type IN (?) AND content_exports.user_id=?",
+          [
             ZIP, USER_DATA
-          ], user)
+          ],
+          user)
   }
   scope :without_epub, -> { eager_load(:epub_export).where(epub_exports: { id: nil }) }
   scope :expired, lambda {
@@ -615,6 +650,21 @@ class ContentExport < ActiveRecord::Base
     end
   }
 
+  def set_new_quizzes_export_settings
+    return unless common_cartridge? && new_quizzes_export_state.present?
+
+    settings[:new_quizzes_export_url] = new_quizzes_export_url
+    settings[:new_quizzes_export_state] = new_quizzes_export_state
+  end
+
+  def new_quizzes_export_state_failed?
+    settings[:new_quizzes_export_state] == "failed"
+  end
+
+  def new_quizzes_export_state_completed?
+    settings[:new_quizzes_export_state] == "completed"
+  end
+
   private
 
   def is_set?(option)
@@ -623,5 +673,9 @@ class ContentExport < ActiveRecord::Base
 
   def new_quizzes_bank_migration_enabled?
     context_type == "Course" && NewQuizzesFeaturesHelper.new_quizzes_bank_migrations_enabled?(context)
+  end
+
+  def new_quizzes_common_cartridge_enabled?
+    context_type == "Course" && NewQuizzesFeaturesHelper.new_quizzes_common_cartridge_enabled?(context)
   end
 end

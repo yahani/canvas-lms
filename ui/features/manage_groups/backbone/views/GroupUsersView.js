@@ -18,9 +18,9 @@
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import {backbone, renderTray} from '@canvas/move-item-tray'
-import PaginatedCollectionView from '@canvas/pagination/backbone/views/PaginatedCollectionView.coffee'
+import PaginatedCollectionView from '@canvas/pagination/backbone/views/PaginatedCollectionView'
 import GroupUserView from './GroupUserView'
-import GroupCategoryCloneView from './GroupCategoryCloneView.coffee'
+import GroupCategoryCloneView from './GroupCategoryCloneView'
 import template from '../../jst/groupUsers.handlebars'
 import groupHasSubmissions from '../../groupHasSubmissions'
 import 'jqueryui/draggable'
@@ -36,8 +36,8 @@ export default class GroupUsersView extends PaginatedCollectionView {
       itemViewOptions: {
         canAssignToGroup: false,
         canEditGroupAssignment: true,
-        markInactiveStudents: false
-      }
+        markInactiveStudents: false,
+      },
     }
 
     this.prototype.dragOptions = {
@@ -47,20 +47,13 @@ export default class GroupUsersView extends PaginatedCollectionView {
       refreshPositions: true,
       revert: 'invalid',
       revertDuration: 150,
-      start(event, ui) {
+      start(_event, _ui) {
         // hide AssignToGroupMenu (original and helper)
         $('.assign-to-group-menu').hide()
-      }
+      },
     }
 
     this.prototype.template = template
-
-    this.prototype.events = {
-      'click .remove-from-group': 'removeUserFromGroup',
-      'click .remove-as-leader': 'removeLeader',
-      'click .set-as-leader': 'setLeader',
-      'click .edit-group-assignment': 'editGroupAssignment'
-    }
   }
 
   initialize() {
@@ -82,83 +75,35 @@ export default class GroupUsersView extends PaginatedCollectionView {
     return this.collection.models.map(model => model.itemView.closeMenu())
   }
 
-  removeUserFromGroup(e) {
-    e.preventDefault()
-    e.stopPropagation()
-    const $target = $(e.currentTarget)
-    const user = this.collection.getUser($target.data('user-id'))
+  removeUserFromGroup(userId) {
+    const user = this.collection.getUser(userId)
 
     if (groupHasSubmissions(this.model)) {
       this.cloneCategoryView = new GroupCategoryCloneView({
         model: this.model.collection.category,
-        openedFromCaution: true
+        openedFromCaution: true,
       })
       this.cloneCategoryView.open()
       return this.cloneCategoryView.on('close', () => {
         if (this.cloneCategoryView.cloneSuccess) {
           return window.location.reload()
         } else if (this.cloneCategoryView.changeGroups) {
-          return this.removeUser(e, $target)
+          return this.removeUser(userId)
         } else {
           $(`#group-${this.model.id}-user-${user.id}-actions`).focus()
         }
       })
     } else {
-      return this.removeUser(e, $target)
+      return this.removeUser(userId)
     }
   }
 
-  removeUser(e, $target) {
-    return this.collection.getUser($target.data('user-id')).save('group', null)
+  removeUser(userId) {
+    return this.collection.getUser(userId).save('group', null)
   }
 
-  removeLeader(e) {
-    e.preventDefault()
-    e.stopPropagation()
-    const $target = $(e.currentTarget)
-    const user_id = $target
-      .data('user-id')
-      .toString()
-      .replace('user_', '')
-    const user_name = this.model.get('leader').display_name
-    return this.model.save(
-      {leader: null},
-      {
-        success: () => {
-          $.screenReaderFlashMessage(I18n.t('Removed %{user} as group leader', {user: user_name}))
-          $(`.group-user-actions[data-user-id='user_${user_id}']`, this.el).focus()
-        }
-      }
-    )
-  }
-
-  setLeader(e) {
-    e.preventDefault()
-    e.stopPropagation()
-    const $target = $(e.currentTarget)
-    const user_id = $target
-      .data('user-id')
-      .toString()
-      .replace('user_', '')
-    return this.model.save(
-      {leader: {id: user_id}},
-      {
-        success: () => {
-          $.screenReaderFlashMessage(
-            I18n.t('%{user} is now group leader', {user: this.model.get('leader').display_name})
-          )
-          $(`.group-user-actions[data-user-id='user_${user_id}']`, this.el).focus()
-        }
-      }
-    )
-  }
-
-  editGroupAssignment(e) {
-    e.preventDefault()
-    e.stopPropagation()
-
-    const $target = $(e.currentTarget)
-    const user = this.collection.getUser($target.data('user-id'))
+  editGroupAssignment(userId) {
+    const user = this.collection.getUser(userId)
 
     this.moveTrayProps = {
       title: I18n.t('Move Student'),
@@ -166,13 +111,13 @@ export default class GroupUsersView extends PaginatedCollectionView {
         {
           id: user.get('id'),
           title: user.get('name'),
-          groupId: this.model.get('id')
-        }
+          groupId: this.model.get('id'),
+        },
       ],
       moveOptions: {
         groupsLabel: I18n.t('Groups'),
-        groups: backbone.collectionToGroups(this.model.collection, col => ({models: []})),
-        excludeCurrent: true
+        groups: backbone.collectionToGroups(this.model.collection, _col => ({models: []})),
+        excludeCurrent: true,
       },
       onMoveSuccess: res => {
         const groupsHaveSubs =
@@ -183,7 +128,7 @@ export default class GroupUsersView extends PaginatedCollectionView {
         if (groupsHaveSubs || (userHasSubs && newGroupNotEmpty)) {
           this.cloneCategoryView = new GroupCategoryCloneView({
             model: user.collection.category,
-            openedFromCaution: true
+            openedFromCaution: true,
           })
           this.cloneCategoryView.open()
           return this.cloneCategoryView.on('close', () => {
@@ -199,7 +144,7 @@ export default class GroupUsersView extends PaginatedCollectionView {
       },
 
       focusOnExit: item =>
-        document.querySelector(`.group[data-id=\"${item.groupId}\"] .group-heading`)
+        document.querySelector(`.group[data-id=\"${item.groupId}\"] .group-heading`),
     }
 
     return renderTray(this.moveTrayProps, document.getElementById('not_right_side'))
@@ -213,7 +158,7 @@ export default class GroupUsersView extends PaginatedCollectionView {
     return {
       count: this.model.usersCount(),
       locked: this.model.isLocked(),
-      ENV
+      ENV,
     }
   }
 
@@ -228,9 +173,7 @@ export default class GroupUsersView extends PaginatedCollectionView {
     return view.$el.on('dragstart', (event, ui) => {
       ui.helper.css('width', view.$el.width())
       $(event.target).draggable('option', 'containment', 'document')
-      $(event.target)
-        .data('draggable')
-        ._setContainment()
+      $(event.target).data('draggable')._setContainment()
     })
   }
 

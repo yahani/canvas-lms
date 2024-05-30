@@ -18,8 +18,8 @@
 
 import moment from 'moment-timezone'
 
-import {StoreState, OriginalState, CoursePace} from '../types'
-import {BlackoutDate} from '../shared/types'
+import type {CoursePace, OriginalState, StoreState} from '../types'
+import type {BlackoutDate} from '../shared/types'
 import {Constants as CoursePaceConstants} from '../actions/course_paces'
 import {Constants as BlackoutDateConstants} from '../shared/actions/blackout_dates'
 import {Constants as UIConstants} from '../actions/ui'
@@ -35,11 +35,33 @@ initialBlackoutDates.sort((a, b) => {
   return 0
 })
 
+export const initialCalendarEventBlackoutDates: BlackoutDate[] = (window.ENV
+  .CALENDAR_EVENT_BLACKOUT_DATES || []) as BlackoutDate[]
+initialCalendarEventBlackoutDates.forEach(blackoutDate => {
+  blackoutDate.is_calendar_event = true
+  blackoutDate.event_title = blackoutDate.title || 'Untitled'
+  blackoutDate.start_date = moment(blackoutDate.start_at)
+  blackoutDate.end_date = moment(blackoutDate.end_at)
+})
+initialCalendarEventBlackoutDates.sort((a, b) => {
+  if (a.start_date.isBefore(b.start_date)) return -1
+  if (a.start_date.isAfter(b.start_date)) return 1
+  return 0
+})
+
 /* Selectors */
 
 // the initial values on load
-export const getInitialBlackoutDates = (): BlackoutDate[] => initialBlackoutDates
-export const getInitialCoursePace = (): CoursePace => window.ENV.COURSE_PACE
+export const getInitialBlackoutDates = (): BlackoutDate[] => {
+  const dates: BlackoutDate[] = initialBlackoutDates.concat(initialCalendarEventBlackoutDates)
+  dates.sort((a, b) => {
+    if (a.start_date.isBefore(b.start_date)) return -1
+    if (a.start_date.isAfter(b.start_date)) return 1
+    return 0
+  })
+  return dates
+}
+export const getInitialCoursePace = (): CoursePace => window.ENV.COURSE_PACE as CoursePace
 
 // the current reference values
 export const getOriginalPace = (state: StoreState): CoursePace => state.original.coursePace
@@ -48,7 +70,7 @@ export const getOriginalBlackoutDates = (state: StoreState): BlackoutDate[] =>
 
 const initialState: OriginalState = {
   coursePace: getInitialCoursePace(),
-  blackoutDates: getInitialBlackoutDates()
+  blackoutDates: getInitialBlackoutDates(),
 }
 
 /* Reducers */

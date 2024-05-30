@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -16,33 +17,50 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import $ from 'jquery'
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
 import {useScope as useI18nScope} from '@canvas/i18n'
+import listFormatterPolyfill from '@canvas/util/listFormatter'
+import type Gradebook from '../../Gradebook'
 
 const I18n = useI18nScope('gradebook')
 
-export function getSecondaryDisplayInfo(student, secondaryInfo, options) {
+const listFormatter = Intl.ListFormat
+  ? new Intl.ListFormat(ENV.LOCALE || navigator.language)
+  : listFormatterPolyfill
+
+export function getSecondaryDisplayInfo(
+  student: {
+    sections: string[]
+    group_ids: string[]
+    login_id: string
+    sis_user_id?: string
+    integration_id?: string
+  },
+  secondaryInfo: string,
+  options
+) {
   if (options.shouldShowSections() && secondaryInfo === 'section') {
-    const sectionNames = student.sections
+    const sectionNames: string[] = (student?.sections || [])
       .filter(options.isVisibleSection)
-      .map(sectionId => options.getSection(sectionId).name)
-    return $.toSentence(sectionNames.sort())
+      .map((sectionId: string) => options.getSection(sectionId).name)
+    return listFormatter.format(sectionNames.sort())
   }
 
   if (options.shouldShowGroups() && secondaryInfo === 'group') {
-    const groupNames = student.group_ids.map(groupId => options.getGroup(groupId).name)
-    return $.toSentence(groupNames.sort())
+    const groupNames: string[] = student.group_ids.map(
+      (groupId: string) => options.getGroup(groupId).name
+    )
+    return listFormatter.format(groupNames.sort())
   }
 
   return {
     login_id: student.login_id,
     sis_id: student.sis_user_id,
-    integration_id: student.integration_id
+    integration_id: student.integration_id,
   }[secondaryInfo]
 }
 
-export function getEnrollmentLabel(student) {
+export function getEnrollmentLabel(student: {isConcluded: boolean; isInactive: boolean}) {
   if (student.isConcluded) {
     return I18n.t('concluded')
   }
@@ -53,13 +71,13 @@ export function getEnrollmentLabel(student) {
   return null
 }
 
-export function getOptions(gradebook) {
+export function getOptions(gradebook: Gradebook) {
   return {
     courseId: gradebook.options.context_id,
-    getSection(sectionId) {
+    getSection(sectionId: string) {
       return gradebook.sections[sectionId]
     },
-    getGroup(groupId) {
+    getGroup(groupId: string) {
       return gradebook.studentGroups[groupId]
     },
     getSelectedPrimaryInfo() {
@@ -68,7 +86,7 @@ export function getOptions(gradebook) {
     getSelectedSecondaryInfo() {
       return gradebook.getSelectedSecondaryInfo()
     },
-    isVisibleSection(sectionId) {
+    isVisibleSection(sectionId: string) {
       return gradebook.sections[sectionId] != null
     },
     shouldShowSections() {
@@ -76,7 +94,7 @@ export function getOptions(gradebook) {
     },
     shouldShowGroups() {
       return gradebook.studentGroupsEnabled
-    }
+    },
   }
 }
 

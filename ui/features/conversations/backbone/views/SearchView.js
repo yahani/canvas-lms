@@ -15,8 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
-import _ from 'underscore'
-
+import {map} from 'lodash'
 import {View} from '@canvas/backbone'
 import AutocompleteView from './AutocompleteView'
 
@@ -31,13 +30,16 @@ export default class SearchView extends View {
     this.autocompleteView = new AutocompleteView({
       el: this.$autocomplete,
       single: true,
-      excludeAll: true
+      excludeAll: true,
     }).render()
     return this.autocompleteView.on('changeToken', this.onSearch, this)
   }
 
   onSearch(tokens) {
-    return this.trigger('search', _.map(tokens, x => `user_${x}`))
+    return this.trigger(
+      'search',
+      map(tokens, x => `user_${x}`)
+    )
   }
 }
 SearchView.initClass()

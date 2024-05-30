@@ -46,40 +46,46 @@ module ConversationsHelper
     end
 
     recipients = normalize_recipients(
-      recipients: recipients,
-      context_code: context_code,
+      recipients:,
+      context_code:,
       conversation_id: conversation.conversation_id,
-      current_user: current_user
+      current_user:
     )
 
     if recipients && !conversation.conversation.can_add_participants?(recipients)
       raise ConversationsHelper::Error.new(message: I18n.t("Too many participants for group conversation"), status: :bad_request, attribute: "recipients")
     end
 
+    invalid_recipients = get_invalid_recipients(context, recipients, current_user)
+    unless invalid_recipients.to_a.empty?
+      invalid_recipients = invalid_recipients.pluck(1)
+      raise ConversationsHelper::Error.new(message: I18n.t("The following recipients have no active enrollment in the course, %{invalid_recipients}, unable to send messages", invalid_recipients:), status: :unauthorized, attribute: "recipients")
+    end
+
     tags = infer_tags(
       recipients: conversation.conversation.participants.pluck(:id),
-      context_code: context_code
+      context_code:
     )
 
-    validate_message_ids(message_ids, conversation, current_user: current_user)
+    validate_message_ids(message_ids, conversation, current_user:)
     message_args = build_message_args(
-      body: body,
-      attachment_ids: attachment_ids,
-      domain_root_account_id: domain_root_account_id,
-      media_comment_id: media_comment_id,
-      media_comment_type: media_comment_type,
-      user_note: user_note,
-      current_user: current_user
+      body:,
+      attachment_ids:,
+      domain_root_account_id:,
+      media_comment_id:,
+      media_comment_type:,
+      user_note:,
+      current_user:
     )
 
     if conversation.should_process_immediately?
       message = conversation.process_new_message(message_args, recipients, message_ids, tags)
-      { message: message, status: :ok }
+      { message:, recipients_count: recipients ? recipients.count : 0, status: :ok }
     else
       conversation.delay(strand: "add_message_#{conversation.global_conversation_id}").process_new_message(message_args, recipients, message_ids, tags)
       # The message is delayed and will be processed later so there is nothing to return
       # right now. If there is no error, success can be assumed.
-      { message: nil, status: :accepted }
+      { message: nil, recipients_count: recipients ? recipients.count : 0, status: :accepted }
     end
   rescue ConversationsHelper::InvalidMessageForConversationError
     raise ConversationsHelper::Error.new(message: I18n.t("not for this conversation"), status: :bad_request, attribute: "included_messages")
@@ -94,7 +100,7 @@ module ConversationsHelper
     context_tags.each do |tag|
       next unless tag =~ /\A(course|group)_(\d+)\z/
 
-      result["#{$1}s".to_sym][$2.to_i] = []
+      result[:"#{$1}s"][$2.to_i] = []
     end
 
     if audience.size == 1 && include_private_conversation_enrollments
@@ -142,8 +148,8 @@ module ConversationsHelper
     users, contexts = AddressBook.partition_recipients(recipients)
     known = current_user.address_book.known_users(
       users,
-      context: context,
-      conversation_id: conversation_id,
+      context:,
+      conversation_id:,
       strict_checks: !Account.site_admin.grants_right?(current_user, session, :send_messages)
     )
 
@@ -161,6 +167,13 @@ module ConversationsHelper
     @recipients = known.uniq(&:id)
     @recipients.reject! { |u| u.id == current_user.id } unless @recipients == [current_user] && recipients.count == 1
     @recipients
+  end
+
+  def get_invalid_recipients(context, recipients, current_user)
+    if context.is_a?(Course) && context.available? && !recipients.nil? && (context.user_is_student?(current_user) && !context.user_is_instructor?(current_user) && !context.user_is_admin?(current_user))
+      valid_student_recipients = context.current_users.pluck(:id, :name)
+      recipients.map { |recipient| [recipient.id, recipient.name] } - valid_student_recipients
+    end
   end
 
   def all_recipients_are_instructors?(context, recipients)
@@ -226,8 +239,8 @@ module ConversationsHelper
       current_user,
       body,
       {
-        attachment_ids: attachment_ids,
-        forwarded_message_ids: forwarded_message_ids,
+        attachment_ids:,
+        forwarded_message_ids:,
         root_account_id: domain_root_account_id,
         media_comment: infer_media_comment(media_comment_id, media_comment_type, domain_root_account_id, current_user),
         generate_user_note: user_note
@@ -267,6 +280,26 @@ module ConversationsHelper
     Array(params[key].presence || []).compact
   end
 
+  def soft_concluded_course_for_user?(course, user)
+    # Fetch active enrollments for the user in the course and map to their types
+    user_enrollment_types = course.enrollments.active.where(user_id: user.id).map(&:type)
+    return course.soft_concluded? if user_enrollment_types.empty?
+
+    # If the user has an active enrollment type or active section, the course is not soft concluded for that user
+    !(has_active_enrollment_type?(course, user_enrollment_types) || user_has_active_section?(course, user))
+  end
+
+  def user_has_active_section?(course, user)
+    visible_sections = course.sections_visible_to(user)
+    visible_sections.any? { |section| !section.concluded? }
+  end
+
+  def has_active_enrollment_type?(course, enrollment_types)
+    return false if enrollment_types.empty?
+
+    !enrollment_types.all? { |enrollment_name| course.soft_concluded?(enrollment_name) }
+  end
+
   def validate_context(context, recipients)
     recipients_are_instructors = all_recipients_are_instructors?(context, recipients)
 
@@ -280,7 +313,7 @@ module ConversationsHelper
       raise InvalidContextError
     end
 
-    if context.is_a?(Course) && context.workflow_state == "completed" && !context.grants_right?(@current_user, session, :read_as_admin)
+    if context.is_a?(Course) && (context.workflow_state == "completed" || soft_concluded_course_for_user?(context, @current_user))
       raise CourseConcludedError
     end
   end

@@ -24,13 +24,18 @@ class Score < ActiveRecord::Base
   belongs_to :enrollment, inverse_of: :scores
   belongs_to :grading_period, optional: true
   belongs_to :assignment_group, optional: true
+  belongs_to :custom_grade_status, inverse_of: :scores
   has_one :course, through: :enrollment
   has_one :score_metadata
 
   validates :enrollment, presence: true
-  validates :current_score, :unposted_current_score,
-            :final_score, :unposted_final_score, :override_score,
-            numericality: true, allow_nil: true
+  validates :current_score,
+            :unposted_current_score,
+            :final_score,
+            :unposted_final_score,
+            :override_score,
+            numericality: true,
+            allow_nil: true
 
   validate :scorable_association_check
 
@@ -39,6 +44,11 @@ class Score < ActiveRecord::Base
 
   set_policy do
     given do |user, _session|
+      course.grants_any_right?(user, :manage_grades)
+    end
+    can :read and can :update_custom_status
+
+    given do |user, _session|
       (user&.id == enrollment.user_id && !course.hide_final_grades?) ||
         course.grants_any_right?(user, :manage_grades, :view_all_grades) ||
         enrollment.user.grants_right?(user, :read_as_parent)
@@ -46,25 +56,19 @@ class Score < ActiveRecord::Base
     can :read
   end
 
-  alias_method :original_destroy, :destroy
-  private :original_destroy
   def destroy
     score_metadata.destroy if score_metadata.present?
-    original_destroy
+    super
   end
 
-  alias_method :original_destroy_permanently!, :destroy_permanently!
-  private :original_destroy_permanently!
   def destroy_permanently!
     ScoreMetadata.where(score: self).delete_all
-    original_destroy_permanently!
+    super
   end
 
-  alias_method :original_undestroy, :undestroy
-  private :original_undestroy
   def undestroy
     score_metadata.undestroy if score_metadata.present?
-    original_undestroy
+    super
   end
 
   def current_grade

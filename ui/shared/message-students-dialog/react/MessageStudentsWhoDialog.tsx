@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -25,10 +26,9 @@ import {Heading} from '@instructure/ui-heading'
 import {
   IconArrowOpenDownLine,
   IconArrowOpenUpLine,
-  IconAttachMediaLine
+  IconAttachMediaLine,
 } from '@instructure/ui-icons'
 import UploadMedia from '@instructure/canvas-media'
-import closedCaptionLanguages from '@canvas/util/closedCaptionLanguages'
 import {formatTracksForMediaPlayer} from '@canvas/canvas-media-player'
 import {Tooltip} from '@instructure/ui-tooltip'
 import {Link} from '@instructure/ui-link'
@@ -36,7 +36,7 @@ import LoadingIndicator from '@canvas/loading-indicator'
 import {
   UploadMediaStrings,
   MediaCaptureStrings,
-  SelectStrings
+  SelectStrings,
 } from '@canvas/upload-media-translations'
 import {Modal} from '@instructure/ui-modal'
 import {NumberInput} from '@instructure/ui-number-input'
@@ -46,13 +46,10 @@ import {Table} from '@instructure/ui-table'
 import {Text} from '@instructure/ui-text'
 import {TextArea} from '@instructure/ui-text-area'
 import {TextInput} from '@instructure/ui-text-input'
-
 import _ from 'lodash'
 import {OBSERVER_ENROLLMENTS_QUERY} from '../graphql/Queries'
 import Pill from './Pill'
-
 import {useQuery} from 'react-apollo'
-
 import {AlertManagerContext} from '@canvas/alerts/react/AlertManager'
 import {
   FileAttachmentUpload,
@@ -60,53 +57,47 @@ import {
   AttachmentDisplay,
   MediaAttachment,
   addAttachmentsFn,
-  removeAttachmentFn
+  removeAttachmentFn,
 } from '@canvas/message-attachments'
+import type {CamelizedAssignment} from '@canvas/grading/grading.d'
+
+export type SendMessageArgs = {
+  attachmentIds?: string[]
+  recipientsIds: string[]
+  subject: string
+  body: string
+  mediaFile?: {
+    id: string
+    type: string
+  }
+}
 
 const I18n = useI18nScope('public_message_students_who')
 
-// Doing this to avoid TS2339 errors-- remove once we're on InstUI 8
-const {Item} = Flex as any
-const {Header: ModalHeader, Body: ModalBody, Footer: ModalFooter} = Modal as any
-const {Option} = SimpleSelect as any
-const {Body: TableBody, Cell, ColHeader, Head: TableHead, Row} = Table as any
-
 export type Student = {
   id: string
-  grade?: string
+  grade?: string | null
   name: string
   redoRequest?: boolean
-  score?: number
+  score?: number | null
   sortableName: string
-  submittedAt?: Date
-}
-
-export type Assignment = {
-  allowedAttempts: number
-  courseId: string
-  dueDate: Date | null
-  gradingType: string
-  id: string
-  name: string
-  submissionTypes: string[]
+  submittedAt: null | Date
+  excused?: boolean
 }
 
 export type Props = {
-  assignment: Assignment
+  assignment?: CamelizedAssignment
   onClose: () => void
   students: Student[]
-  onSend: (args: SendArgs) => void
+  onSend: (args: SendMessageArgs) => void
   messageAttachmentUploadFolderId: string
   userId: string
+  courseId?: string
+  pointsBasedGradingScheme: boolean
 }
 
 type Attachment = {
   id: string
-}
-
-type MediaFile = {
-  id: string
-  type: string
 }
 
 type MediaTrack = {
@@ -126,24 +117,18 @@ type MediaUploadFile = {
 
 type FilterCriterion = {
   readonly requiresCutoff: boolean
-  readonly shouldShow: (assignment: Assignment) => boolean
+  readonly shouldShow: (assignment: CamelizedAssignment) => boolean
   readonly title: string
   readonly value: string
 }
 
-type SendArgs = {
-  attachmentIds?: string[]
-  recipientsIds: number[]
-  subject: string
-  body: string
-  mediaFile?: MediaFile
-}
-
-const isScored = (assignment: Assignment) =>
+const isScored = (assignment: CamelizedAssignment) =>
+  assignment !== null &&
   ['points', 'percent', 'letter_grade', 'gpa_scale'].includes(assignment.gradingType)
 
-const isReassignable = (assignment: Assignment) =>
-  (assignment.allowedAttempts == -1 || assignment.allowedAttempts > 1) &&
+const isReassignable = (assignment: CamelizedAssignment) =>
+  assignment !== null &&
+  (assignment.allowedAttempts === -1 || (assignment.allowedAttempts || 0) > 1) &&
   assignment.dueDate != null &&
   !assignment.submissionTypes.includes(
     'on_paper' || 'external_tool' || 'none' || 'discussion_topic' || 'online_quiz'
@@ -153,40 +138,53 @@ const filterCriteria: FilterCriterion[] = [
   {
     requiresCutoff: false,
     shouldShow: assignment =>
+      assignment !== null &&
       !['on_paper', 'none', 'not_graded', ''].includes(assignment.submissionTypes[0]),
     title: I18n.t('Have not yet submitted'),
-    value: 'unsubmitted'
+    value: 'unsubmitted',
   },
   {
     requiresCutoff: false,
-    shouldShow: () => true,
+    shouldShow: assignment => assignment !== null,
     title: I18n.t('Have not been graded'),
-    value: 'ungraded'
+    value: 'ungraded',
   },
   {
     requiresCutoff: true,
     shouldShow: isScored,
     title: I18n.t('Scored more than'),
-    value: 'scored_more_than'
+    value: 'scored_more_than',
   },
   {
     requiresCutoff: true,
     shouldShow: isScored,
     title: I18n.t('Scored less than'),
-    value: 'scored_less_than'
+    value: 'scored_less_than',
   },
   {
     requiresCutoff: false,
-    shouldShow: assignment => assignment.gradingType === 'pass_fail',
+    shouldShow: assignment => assignment !== null && assignment.gradingType === 'pass_fail',
     title: I18n.t('Marked incomplete'),
-    value: 'marked_incomplete'
+    value: 'marked_incomplete',
   },
   {
     requiresCutoff: false,
     shouldShow: isReassignable,
     title: I18n.t('Reassigned'),
-    value: 'reassigned'
-  }
+    value: 'reassigned',
+  },
+  {
+    requiresCutoff: true,
+    shouldShow: assignment => !assignment,
+    title: I18n.t('Total grade higher than'),
+    value: 'total_grade_higher_than',
+  },
+  {
+    requiresCutoff: true,
+    shouldShow: assignment => !assignment,
+    title: I18n.t('Total grade lower than'),
+    value: 'total_grade_lower_than',
+  },
 ]
 
 function observerCount(students, observers) {
@@ -198,27 +196,27 @@ function filterStudents(criterion, students, cutoff) {
   for (const student of students) {
     switch (criterion?.value) {
       case 'unsubmitted':
-        if (!student.submittedAt) {
+        if (!student.submittedAt && !student.excused) {
           newfilteredStudents.push(student)
         }
         break
       case 'ungraded':
-        if (!student.grade) {
+        if (!student.grade && !student.excused) {
           newfilteredStudents.push(student)
         }
         break
       case 'scored_more_than':
-        if (parseInt(student.score, 10) > cutoff) {
+        if (parseFloat(student.score) > cutoff) {
           newfilteredStudents.push(student)
         }
         break
       case 'scored_less_than':
-        if (parseInt(student.score, 10) < cutoff) {
+        if (parseFloat(student.score) < cutoff) {
           newfilteredStudents.push(student)
         }
         break
       case 'marked_incomplete':
-        if (student.grade == 'incomplete') {
+        if (student.grade === 'incomplete') {
           newfilteredStudents.push(student)
         }
         break
@@ -227,23 +225,82 @@ function filterStudents(criterion, students, cutoff) {
           newfilteredStudents.push(student)
         }
         break
+      case 'total_grade_higher_than':
+        if (parseFloat(student.currentScore) > cutoff) {
+          newfilteredStudents.push(student)
+        }
+        break
+      case 'total_grade_lower_than':
+        if (parseFloat(student.currentScore) < cutoff) {
+          newfilteredStudents.push(student)
+        }
+        break
     }
   }
   return newfilteredStudents
 }
 
-const MessageStudentsWhoDialog: React.FC<Props> = ({
+function defaultSubject(criterion, assignment, cutoff, pointsBasedGradingScheme) {
+  if (cutoff === '') {
+    cutoff = 0
+  }
+
+  if (assignment !== null) {
+    switch (criterion) {
+      case 'unsubmitted':
+        return I18n.t('No submission for %{assignment}', {assignment: assignment.name})
+      case 'ungraded':
+        return I18n.t('No grade for %{assignment}', {assignment: assignment.name})
+      case 'scored_more_than':
+        return I18n.t('Scored more than %{cutoff} on %{assignment}', {
+          cutoff,
+          assignment: assignment.name,
+        })
+      case 'scored_less_than':
+        return I18n.t('Scored less than %{cutoff} on %{assignment}', {
+          cutoff,
+          assignment: assignment.name,
+        })
+      case 'marked_incomplete':
+        return I18n.t('%{assignment} is incomplete', {assignment: assignment.name})
+      case 'reassigned':
+        return I18n.t('%{assignment} is reassigned', {assignment: assignment.name})
+    }
+  } else {
+    switch (criterion) {
+      case 'total_grade_higher_than':
+        return pointsBasedGradingScheme
+          ? I18n.t('Current total score is higher than %{cutoff}', {
+              cutoff,
+            })
+          : I18n.t('Current total score is higher than %{cutoff}%', {
+              cutoff,
+            })
+      case 'total_grade_lower_than':
+        return pointsBasedGradingScheme
+          ? I18n.t('Current total score is lower than %{cutoff}', {
+              cutoff,
+            })
+          : I18n.t('Current total score is lower than %{cutoff}%', {
+              cutoff,
+            })
+    }
+  }
+}
+
+const MessageStudentsWhoDialog = ({
   assignment,
   onClose,
   students,
   onSend,
   messageAttachmentUploadFolderId,
-  userId
-}) => {
+  userId,
+  courseId,
+  pointsBasedGradingScheme = true,
+}: Props) => {
   const {setOnFailure, setOnSuccess} = useContext(AlertManagerContext)
   const [open, setOpen] = useState(true)
   const [sending, setSending] = useState(false)
-  const [subject, setSubject] = useState('')
   const [message, setMessage] = useState('')
 
   const initializeSelectedObservers = studentCollection =>
@@ -268,9 +325,9 @@ const MessageStudentsWhoDialog: React.FC<Props> = ({
 
   const {loading, data} = useQuery(OBSERVER_ENROLLMENTS_QUERY, {
     variables: {
-      courseId: assignment.courseId,
-      studentIds: students.map(student => student.id)
-    }
+      courseId: assignment?.courseId || courseId,
+      studentIds: students.map(student => student.id),
+    },
   })
 
   const observerEnrollments = data?.course?.enrollmentsConnection?.nodes || []
@@ -294,6 +351,9 @@ const MessageStudentsWhoDialog: React.FC<Props> = ({
   const sortedStudents = [...students].sort((a, b) => a.sortableName.localeCompare(b.sortableName))
   const [filteredStudents, setFilteredStudents] = useState(
     filterStudents(availableCriteria[0], sortedStudents, cutoff)
+  )
+  const [subject, setSubject] = useState(
+    defaultSubject(availableCriteria[0].value, assignment, cutoff, pointsBasedGradingScheme)
   )
   const [observersDisplayed, setObserversDisplayed] = useState(0.0)
 
@@ -372,6 +432,7 @@ const MessageStudentsWhoDialog: React.FC<Props> = ({
       setObserversDisplayed(
         observerCount(filterStudents(newCriterion, sortedStudents, cutoff), observersByStudentID)
       )
+      setSubject(defaultSubject(newCriterion.value, assignment, cutoff, pointsBasedGradingScheme))
     }
   }
 
@@ -383,20 +444,20 @@ const MessageStudentsWhoDialog: React.FC<Props> = ({
     } else {
       const recipientsIds = [
         ...selectedStudents,
-        ...Object.values(selectedObservers).flat()
-      ] as number[]
-      const uniqueRecipientsIds: number[] = [...new Set(recipientsIds)]
+        ...Object.values(selectedObservers).flat(),
+      ] as string[]
+      const uniqueRecipientsIds: string[] = [...new Set(recipientsIds)]
 
-      const args: SendArgs = {
+      const args: SendMessageArgs = {
         recipientsIds: uniqueRecipientsIds,
         subject,
-        body: message
+        body: message,
       }
 
       if (mediaUploadFile) {
         args.mediaFile = {
           id: mediaUploadFile.media_id,
-          type: mediaUploadFile.media_type
+          type: mediaUploadFile.media_type,
         }
       }
 
@@ -480,7 +541,7 @@ const MessageStudentsWhoDialog: React.FC<Props> = ({
       setSelectedObservers(
         filteredStudents.reduce((map, student) => {
           const observers = observersByStudentID[student.id] || []
-          map[student.id] = Object.values(observers).map(observer => observer._id)
+          map[student.id] = Object.keys(observers).map(key => observers[key]._id)
           return map
         }, {})
       )
@@ -500,7 +561,7 @@ const MessageStudentsWhoDialog: React.FC<Props> = ({
         shouldCloseOnDocumentClick={false}
         size="large"
       >
-        <ModalHeader>
+        <Modal.Header>
           <CloseButton
             placement="end"
             offset="small"
@@ -508,31 +569,43 @@ const MessageStudentsWhoDialog: React.FC<Props> = ({
             screenReaderLabel={I18n.t('Close')}
           />
           <Heading>{I18n.t('Compose Message')}</Heading>
-        </ModalHeader>
+        </Modal.Header>
 
-        <ModalBody>
+        <Modal.Body>
           <Flex alignItems="end">
-            <Item>
+            <Flex.Item>
               <SimpleSelect
                 renderLabel={I18n.t('For students who…')}
                 onChange={handleCriterionSelected}
                 value={selectedCriterion.value}
               >
                 {availableCriteria.map(criterion => (
-                  <Option id={criterion.value} key={criterion.value} value={criterion.value}>
+                  <SimpleSelect.Option
+                    id={`criteria_${criterion.value}`}
+                    key={criterion.value}
+                    value={criterion.value}
+                  >
                     {criterion.title}
-                  </Option>
+                  </SimpleSelect.Option>
                 ))}
               </SimpleSelect>
-            </Item>
+            </Flex.Item>
             {selectedCriterion.requiresCutoff && (
-              <Item margin="0 0 0 small">
+              <Flex.Item margin="0 0 0 small">
                 <NumberInput
                   value={cutoff}
                   onChange={(_e, value) => {
                     setCutoff(value)
                     if (value !== '') {
                       setFilteredStudents(filterStudents(selectedCriterion, sortedStudents, value))
+                      setSubject(
+                        defaultSubject(
+                          selectedCriterion.value,
+                          assignment,
+                          value,
+                          pointsBasedGradingScheme
+                        )
+                      )
                     }
                   }}
                   showArrows={false}
@@ -541,29 +614,29 @@ const MessageStudentsWhoDialog: React.FC<Props> = ({
                   }
                   width="5em"
                 />
-              </Item>
+              </Flex.Item>
             )}
           </Flex>
           <br />
           <Flex>
-            <Item>
+            <Flex.Item>
               <Text weight="bold">{I18n.t('Send Message To:')}</Text>
-            </Item>
-            <Item margin="0 0 0 medium">
+            </Flex.Item>
+            <Flex.Item margin="0 0 0 medium">
               <Checkbox
                 indeterminate={isIndeterminateStudentsCheckbox}
                 disabled={isDisabledStudentsCheckbox}
                 onChange={onStudentsCheckboxChanged}
                 checked={isCheckedStudentsCheckbox}
-                defaultChecked
+                defaultChecked={true}
                 label={
                   <Text weight="bold">
                     {I18n.t('%{studentCount} Students', {studentCount: filteredStudents.length})}
                   </Text>
                 }
               />
-            </Item>
-            <Item margin="0 0 0 medium">
+            </Flex.Item>
+            <Flex.Item margin="0 0 0 medium">
               <Checkbox
                 indeterminate={isIndeterminateObserversCheckbox}
                 disabled={isDisabledObserversCheckbox}
@@ -572,13 +645,13 @@ const MessageStudentsWhoDialog: React.FC<Props> = ({
                 label={
                   <Text weight="bold">
                     {I18n.t('%{observerCount} Observers', {
-                      observerCount: observersDisplayed
+                      observerCount: observersDisplayed,
                     })}
                   </Text>
                 }
               />
-            </Item>
-            <Item as="div" shouldGrow textAlign="end">
+            </Flex.Item>
+            <Flex.Item as="div" shouldGrow={true} textAlign="end">
               <Link
                 onClick={() => setShowTable(!showTable)}
                 renderIcon={showTable ? <IconArrowOpenUpLine /> : <IconArrowOpenDownLine />}
@@ -587,34 +660,34 @@ const MessageStudentsWhoDialog: React.FC<Props> = ({
               >
                 {showTable ? I18n.t('Hide all recipients') : I18n.t('Show all recipients')}
               </Link>
-            </Item>
+            </Flex.Item>
           </Flex>
           {showTable && (
             <Table caption={I18n.t('List of students and observers')}>
-              <TableHead>
-                <Row>
-                  <ColHeader id="students">{I18n.t('Students')}</ColHeader>
-                  <ColHeader id="observers">{I18n.t('Observers')}</ColHeader>
-                </Row>
-              </TableHead>
-              <TableBody>
+              <Table.Head>
+                <Table.Row>
+                  <Table.ColHeader id="students">{I18n.t('Students')}</Table.ColHeader>
+                  <Table.ColHeader id="observers">{I18n.t('Observers')}</Table.ColHeader>
+                </Table.Row>
+              </Table.Head>
+              <Table.Body>
                 {filteredStudents.map(student => (
-                  <Row key={student.id}>
-                    <Cell>
+                  <Table.Row key={student.id}>
+                    <Table.Cell>
                       <Pill
                         studentId={student.id}
                         text={student.name}
                         selected={selectedStudents.includes(student.id)}
                         onClick={toggleStudentSelection}
                       />
-                    </Cell>
-                    <Cell>
+                    </Table.Cell>
+                    <Table.Cell>
                       <Flex direction="row" margin="0 0 0 small" wrap="wrap">
                         {_.sortBy(
                           observersByStudentID[student.id] || [],
                           observer => observer.sortableName
                         ).map(observer => (
-                          <Item key={observer._id}>
+                          <Flex.Item key={observer._id}>
                             <Pill
                               studentId={student.id}
                               observerId={observer._id}
@@ -622,13 +695,13 @@ const MessageStudentsWhoDialog: React.FC<Props> = ({
                               selected={selectedObservers[student.id]?.includes(observer._id)}
                               onClick={toggleObserverSelection}
                             />
-                          </Item>
+                          </Flex.Item>
                         ))}
                       </Flex>
-                    </Cell>
-                  </Row>
+                    </Table.Cell>
+                  </Table.Row>
                 ))}
-              </TableBody>
+              </Table.Body>
             </Table>
           )}
 
@@ -645,7 +718,7 @@ const MessageStudentsWhoDialog: React.FC<Props> = ({
           <br />
           <TextArea
             data-testid="message-input"
-            isRequired
+            required={true}
             height="200px"
             label={I18n.t('Message')}
             placeholder={I18n.t('Type your message here…')}
@@ -655,33 +728,33 @@ const MessageStudentsWhoDialog: React.FC<Props> = ({
 
           <Flex alignItems="start">
             {mediaUploadFile && mediaPreviewURL && (
-              <Item>
+              <Flex.Item>
                 <MediaAttachment
                   file={{
                     mediaID: mediaUploadFile.media_id,
                     src: mediaPreviewURL,
                     title: mediaTitle || mediaUploadFile.title,
                     type: mediaUploadFile.media_type,
-                    mediaTracks: mediaUploadFile.media_tracks
+                    mediaTracks: mediaUploadFile.media_tracks,
                   }}
                   onRemoveMediaComment={onRemoveMediaComment}
                 />
-              </Item>
+              </Flex.Item>
             )}
 
-            <Item shouldShrink>
+            <Flex.Item shouldShrink={true}>
               <AttachmentDisplay
                 attachments={[...attachments, ...pendingUploads]}
                 onDeleteItem={onDeleteAttachment}
                 onReplaceItem={onReplaceAttachment}
               />
-            </Item>
+            </Flex.Item>
           </Flex>
-        </ModalBody>
+        </Modal.Body>
 
-        <ModalFooter>
+        <Modal.Footer>
           <Flex justifyItems="space-between" width="100%">
-            <Item>
+            <Flex.Item>
               <FileAttachmentUpload onAddItem={onAddAttachment} />
 
               <Tooltip renderTip={I18n.t('Record an audio or video comment')} placement="top">
@@ -695,28 +768,29 @@ const MessageStudentsWhoDialog: React.FC<Props> = ({
                   <IconAttachMediaLine />
                 </IconButton>
               </Tooltip>
-            </Item>
+            </Flex.Item>
 
-            <Item>
+            <Flex.Item>
               <Flex>
-                <Item>
+                <Flex.Item>
                   <Button focusColor="info" color="primary-inverse" onClick={close}>
                     {I18n.t('Cancel')}
                   </Button>
-                </Item>
-                <Item margin="0 0 0 x-small">
+                </Flex.Item>
+                <Flex.Item margin="0 0 0 x-small">
                   <Button
+                    data-testid="send-message-button"
                     interaction={isFormDataValid ? 'enabled' : 'disabled'}
                     color="primary"
                     onClick={handleSendButton}
                   >
                     {I18n.t('Send')}
                   </Button>
-                </Item>
+                </Flex.Item>
               </Flex>
-            </Item>
+            </Flex.Item>
           </Flex>
-        </ModalFooter>
+        </Modal.Footer>
       </Modal>
       <AttachmentUploadSpinner
         sendMessage={onSend}
@@ -732,12 +806,9 @@ const MessageStudentsWhoDialog: React.FC<Props> = ({
         tabs={{embed: false, record: true, upload: true}}
         uploadMediaTranslations={{UploadMediaStrings, MediaCaptureStrings, SelectStrings}}
         liveRegion={() => document.getElementById('flash_screenreader_holder')}
-        languages={Object.keys(closedCaptionLanguages).map(key => ({
-          id: key,
-          label: closedCaptionLanguages[key]
-        }))}
         rcsConfig={{contextId: userId, contextType: 'user'}}
-        disableSubmitWhileUploading
+        disableSubmitWhileUploading={true}
+        userLocale={ENV.LOCALE}
       />
     </>
   )

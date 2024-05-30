@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2015 - present Instructure, Inc.
  *
@@ -42,7 +43,7 @@ export const DashboardCardHeaderHero = ({
   image,
   backgroundColor,
   hideColorOverlays,
-  onClick
+  onClick,
 }: DashboardCardHeaderHeroProps) => {
   if (image) {
     return (
@@ -98,6 +99,7 @@ export type DashboardCardProps = {
   defaultView?: string
   pagesUrl?: string
   frontPageTitle?: string
+  onPublishedCourse?: (id: string) => void
 }
 
 export const DashboardCard = ({
@@ -127,7 +129,8 @@ export const DashboardCard = ({
   canChangeCoursePublishState,
   defaultView,
   pagesUrl,
-  frontPageTitle
+  frontPageTitle,
+  onPublishedCourse = () => {},
 }: DashboardCardProps) => {
   const handleNicknameChange = nickname => setNicknameInfo(getNicknameInfo(nickname))
 
@@ -135,7 +138,7 @@ export const DashboardCard = ({
     nickname,
     originalName,
     courseId: id,
-    onNicknameChange: handleNicknameChange
+    onNicknameChange: handleNicknameChange,
   })
 
   const [nicknameInfo, setNicknameInfo] = useState(getNicknameInfo(shortName))
@@ -173,7 +176,7 @@ export const DashboardCard = ({
     const modalProps = {
       courseId: id,
       courseName: originalName,
-      onConfirm: removeCourseFromFavorites
+      onConfirm: removeCourseFromFavorites,
     }
     showConfirmUnfavorite(modalProps)
   }
@@ -186,7 +189,7 @@ export const DashboardCard = ({
     const activityType = {
       'icon-announcement': 'Announcement',
       'icon-assignment': 'Message',
-      'icon-discussion': 'DiscussionTopic'
+      'icon-discussion': 'DiscussionTopic',
     }[icon]
 
     const itemStream = stream || []
@@ -209,7 +212,7 @@ export const DashboardCard = ({
       canMoveLeft: !isFirstCard,
       canMoveRight: !isLastCard,
       canMoveToBeginning: !isFirstCard,
-      canMoveToEnd: !isLastCard
+      canMoveToEnd: !isLastCard,
     }
   }
 
@@ -227,6 +230,10 @@ export const DashboardCard = ({
       )
   }
 
+  const updatePublishedCourse = () => {
+    if (onPublishedCourse) onPublishedCourse(id)
+  }
+
   // ===============
   //    RENDERING
   // ===============
@@ -238,7 +245,7 @@ export const DashboardCard = ({
       const screenReaderLabel = `${link.label} - ${nicknameInfo.nickname}`
       return (
         <DashboardCardAction
-          unreadCount={unreadCount(link.icon, course.stream)}
+          unreadCount={unreadCount(link.icon, course?.stream)}
           iconClass={link.icon}
           linkClass={link.css_class}
           path={link.path}
@@ -253,7 +260,7 @@ export const DashboardCard = ({
       handleMove,
       currentPosition: getCardPosition(),
       lastPosition: totalCards - 1,
-      menuOptions: calculateMenuOptions()
+      menuOptions: calculateMenuOptions(),
     }
 
     return (
@@ -281,7 +288,7 @@ export const DashboardCard = ({
               <i className="icon-more" aria-hidden="true" />
               <span className="screenreader-only">
                 {I18n.t('Choose a color or course nickname or move course card for %{course}', {
-                  course: nicknameInfo.nickname
+                  course: nicknameInfo.nickname,
                 })}
               </span>
             </button>
@@ -302,7 +309,7 @@ export const DashboardCard = ({
           {image
             ? I18n.t('Course image for %{course}', {course: nicknameInfo.nickname})
             : I18n.t('Course card color region for %{course}', {
-                course: nicknameInfo.nickname
+                course: nicknameInfo.nickname,
               })}
         </span>
         <DashboardCardHeaderHero
@@ -336,6 +343,7 @@ export const DashboardCard = ({
             pagesUrl={pagesUrl}
             frontPageTitle={frontPageTitle}
             courseId={id}
+            onSuccess={updatePublishedCourse}
           />
         )}
         {renderHeaderButton()}

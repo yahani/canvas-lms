@@ -22,14 +22,14 @@ require_relative "../graphql_spec_helper"
 
 describe Types::RubricAssessmentRatingType do
   let_once(:course) { course_factory(active_all: true) }
-  let_once(:teacher) { teacher_in_course(active_all: true, course: course).user }
-  let_once(:student) { student_in_course(course: course, active_all: true).user }
-  let_once(:assignment) { assignment_model(course: course) }
+  let_once(:teacher) { teacher_in_course(active_all: true, course:).user }
+  let_once(:student) { student_in_course(course:, active_all: true).user }
+  let_once(:assignment) { assignment_model(course:) }
   let_once(:rubric) { rubric_for_course }
   let_once(:rubric_association) do
     rubric_association_model(
       context: course,
-      rubric: rubric,
+      rubric:,
       association_object: assignment,
       purpose: "grading"
     )
@@ -38,7 +38,7 @@ describe Types::RubricAssessmentRatingType do
     rubric_assessment_model(
       user: student,
       assessor: teacher,
-      rubric_association: rubric_association,
+      rubric_association:,
       assessment_type: "grading"
     )
   end
@@ -87,6 +87,30 @@ describe Types::RubricAssessmentRatingType do
       expect(
         submission_type.resolve("rubricAssessmentsConnection { nodes { assessmentRatings { points } } }")
       ).to eq [rubric_assessment.data.pluck(:points)]
+    end
+
+    it "rubricAssessmentId" do
+      expect(
+        submission_type.resolve("rubricAssessmentsConnection { nodes { assessmentRatings { rubricAssessmentId } } }")
+      ).to eq [[rubric_assessment.id.to_s]]
+    end
+  end
+
+  describe "artifact_attempt" do
+    it "returns the value when artifact_attempt is non-nil" do
+      submission.update!(attempt: 2)
+      rubric_assessment.reload
+      rubric_assessment.update!(artifact_attempt: 2)
+      expect(
+        submission_type.resolve("rubricAssessmentsConnection { nodes { assessmentRatings { artifactAttempt } } }")
+      ).to eq [[2]]
+    end
+
+    it "returns zero when artifact_attempt is nil" do
+      rubric_assessment.update!(artifact_attempt: nil)
+      expect(
+        submission_type.resolve("rubricAssessmentsConnection { nodes { assessmentRatings { artifactAttempt } } }")
+      ).to eq [[0]]
     end
   end
 end

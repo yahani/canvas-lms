@@ -67,36 +67,15 @@ describe SearchController do
       end
 
       get "recipients", params: {
-        search: "b", type: "user", skip_visibility_checks: true,
-        synthetic_contexts: true, context: "course_#{@course.id}_students"
+        search: "b",
+        type: "user",
+        skip_visibility_checks: true,
+        synthetic_contexts: true,
+        context: "course_#{@course.id}_students"
       }
       expect(response).to be_successful
       expect(response.body).to include("bob")
       expect(response.body).to include("billy")
-    end
-
-    context "date restricted course" do
-      before do
-        course_with_student_logged_in(active_all: true)
-        @user.update_attribute(:name, "billy")
-        @other = User.create(name: "bob")
-        @course.enroll_student(@other).accept
-        @course.restrict_enrollments_to_course_dates = true
-        @course.restrict_student_past_view = true
-        @course.conclude_at = 1.day.ago
-        @course.start_at = 2.days.ago
-        @course.save!
-      end
-
-      it "shows students other students in a soft-concluded course" do
-        get "recipients", params: {
-          search: "b", type: "user",
-          synthetic_contexts: true, context: "course_#{@course.id}_students"
-        }
-        expect(response).to be_successful
-        expect(response.body).to include("bob")
-        expect(response.body).to include("billy")
-      end
     end
 
     it "allows filtering out non-messageable courses" do
@@ -107,7 +86,6 @@ describe SearchController do
       @course2.update_attribute(:name, "course2")
       term = @course2.root_account.enrollment_terms.create! name: "Fall", end_at: 1.day.ago
       @course2.update! enrollment_term: term
-      @course2.complete!
       get "recipients", params: { search: "course", messageable_only: true }
       expect(response.body).to include("course1")
       expect(response.body).not_to include("course2")
@@ -137,8 +115,10 @@ describe SearchController do
         expect(response).to be_successful
 
         get "recipients", params: {
-          type: "section", skip_visibility_checks: true,
-          synthetic_contexts: true, context: "course_#{@course.id}_sections"
+          type: "section",
+          skip_visibility_checks: true,
+          synthetic_contexts: true,
+          context: "course_#{@course.id}_sections"
         }
         expect(response.body).to match(/\[\]\z/)
       end
@@ -149,8 +129,10 @@ describe SearchController do
         course_factory(active_all: true).course_sections.create(name: "other section")
 
         get "recipients", params: {
-          type: "section", skip_visibility_checks: true,
-          synthetic_contexts: true, context: "course_#{@course.id}_sections"
+          type: "section",
+          skip_visibility_checks: true,
+          synthetic_contexts: true,
+          context: "course_#{@course.id}_sections"
         }
         expect(response).to be_successful
         expect(response.body).to include("other section")
@@ -168,8 +150,10 @@ describe SearchController do
         @section2.enroll_user(@student2, "StudentEnrollment", "active")
 
         get "recipients", params: {
-          type: "section", exclude: ["section_#{@section2.id}"],
-          synthetic_contexts: true, context: "course_#{@course.id}_sections",
+          type: "section",
+          exclude: ["section_#{@section2.id}"],
+          synthetic_contexts: true,
+          context: "course_#{@course.id}_sections",
           search_all_contexts: true
         }
         expect(response.body).to include("Section1")
@@ -184,8 +168,10 @@ describe SearchController do
         course_with_student(active_all: true)
 
         get "recipients", params: {
-          type: "user", skip_visibility_checks: true,
-          synthetic_contexts: true, context: "course_#{@course.id}_all"
+          type: "user",
+          skip_visibility_checks: true,
+          synthetic_contexts: true,
+          context: "course_#{@course.id}_all"
         }
         expect(response.body).to include(@teacher.name)
         expect(response.body).to include(@student.name)
@@ -227,6 +213,84 @@ describe SearchController do
         expect(response.body).not_to include("Student2")
       end
     end
+
+    context "concluded user enrollment" do
+      before do
+        course_factory(active_all: true)
+        @student1 = User.create(name: "bob")
+        @concluded_student = User.create(name: "billy")
+        @teacher1 = User.create(name: "Mr. Teacher")
+        @concluded_teacher = User.create(name: "Mr. Professor")
+        @course.enroll_student(@student1).accept
+        @course.enroll_student(@concluded_student).accept
+        @course.enroll_teacher(@teacher1).accept
+        @course.enroll_teacher(@concluded_teacher).accept
+        @course.save!
+
+        @concluded_teacher.enrollments.each(&:conclude)
+        @concluded_student.enrollments.each(&:conclude)
+      end
+
+      context "current user is active teacher" do
+        before do
+          user_session(@teacher1)
+        end
+
+        it "returns concluded teachers" do
+          get "recipients", params: {
+            search: "m",
+            type: "user",
+            synthetic_contexts: true,
+            context: "course_#{@course.id}_teachers"
+          }
+          expect(response).to be_successful
+          expect(response.body).to include("Mr. Teacher")
+          expect(response.body).to include("Mr. Professor")
+        end
+
+        it "does not return concluded students" do
+          get "recipients", params: {
+            search: "b",
+            type: "user",
+            synthetic_contexts: true,
+            context: "course_#{@course.id}_students"
+          }
+          expect(response).to be_successful
+          expect(response.body).to include("bob")
+          expect(response.body).not_to include("billy")
+        end
+      end
+
+      context "current user is active student" do
+        before do
+          user_session(@student1)
+        end
+
+        it "does not return concluded teachers" do
+          get "recipients", params: {
+            search: "m",
+            type: "user",
+            synthetic_contexts: true,
+            context: "course_#{@course.id}_teachers"
+          }
+          expect(response).to be_successful
+          expect(response.body).to include("Mr. Teacher")
+          expect(response.body).not_to include("Mr. Professor")
+        end
+
+        it "does not return concluded students" do
+          get "recipients", params: {
+            search: "b",
+            type: "user",
+            synthetic_contexts: true,
+            context: "course_#{@course.id}_students"
+          }
+          expect(response).to be_successful
+          expect(response.body).to include("bob")
+          expect(response.body).not_to include("billy")
+        end
+      end
+    end
   end
 
   describe "GET 'all_courses'" do
@@ -265,7 +329,7 @@ describe SearchController do
       ra.settings[:enable_course_catalog] = false
       ra.save!
       get "all_courses", format: :json
-      expect(response.status).to eq 401
+      expect(response).to have_http_status :unauthorized
     end
   end
 end

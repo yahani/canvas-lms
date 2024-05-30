@@ -16,17 +16,22 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import Backbone from '@canvas/backbone'
-import _ from 'underscore'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import Entry from './models/Entry.coffee'
-import htmlEscape from 'html-escape'
+import {extend} from 'lodash'
+import Entry from './models/Entry'
+import htmlEscape from '@instructure/html-escape'
 import replyAttachmentTemplate from '../jst/_reply_attachment.handlebars'
-import preventDefault from 'prevent-default'
-import stripTags from 'strip-tags'
+import preventDefault from '@canvas/util/preventDefault'
 import RichContentEditor from '@canvas/rce/RichContentEditor'
-import {send} from '@canvas/rce/RceCommandShim'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import {send} from '@canvas/rce-command-shim'
+import '@canvas/jquery/jquery.instructure_forms'
+
+const stripTags = str => {
+  const div = document.createElement('div')
+  div.innerHTML = str
+  return div.textContent || div.innerText || ''
+}
 
 const I18n = useI18nScope('discussions.reply')
 
@@ -54,7 +59,7 @@ class Reply {
       .find('form.discussion-reply-form:first')
       .submit(preventDefault(this.submit))
     this.textArea = this.getEditingElement()
-    this.form.find('.cancel_button').click(e => {
+    this.form.find('.cancel_button').click(_e => {
       RichContentEditor.closeRCE(this.textArea)
       this.hide()
     })
@@ -65,7 +70,7 @@ class Reply {
       // todo: replace .andSelf with .addBack when JQuery is upgraded.
       return $(e.currentTarget).siblings('a').andSelf().toggle()
     })
-    this.form.delegate('.alert .close', 'click', preventDefault(this.hideNotification))
+    this.form.on('click', '.alert .close', preventDefault(this.hideNotification))
     this.form.on('change', 'ul.discussion-reply-attachments input[type=file]', e => {
       this.form.find('ul.discussion-reply-attachments input[type=file]').focus()
       if (e.target.files.length > 0) {
@@ -94,16 +99,18 @@ class Reply {
   //
   // @api public
   edit() {
-    this.form.addClass('replying')
-    this.discussionEntry.addClass('replying')
-    RichContentEditor.loadNewEditor(this.textArea, {
-      focus: true,
-      manageParent: true,
-      tinyOptions: {
-        width: '100%'
-      }
-    })
-    this.editing = true
+    if (!this.editing) {
+      this.form.addClass('replying')
+      this.discussionEntry.addClass('replying')
+      RichContentEditor.loadNewEditor(this.textArea, {
+        focus: true,
+        manageParent: true,
+        tinyOptions: {
+          width: '100%',
+        },
+      })
+      this.editing = true
+    }
     return this.trigger('edit', this)
   }
 
@@ -164,7 +171,7 @@ class Reply {
       success: this.onPostReplySuccess,
       error: this.onPostReplyError,
       multipart: entry.get('attachment'),
-      proxyAttachment: true
+      proxyAttachment: true,
     })
     return this.removeAttachments()
   }
@@ -193,7 +200,7 @@ class Reply {
       created_at: now,
       updated_at: now,
       attachment: this.form.find('input[type=file]')[0],
-      new: true
+      new: true,
     }
   }
 
@@ -224,7 +231,7 @@ class Reply {
       `<div class='alert alert-info'>${I18n.t(
         '*An error occurred*, please post your reply again later',
         {
-          wrapper: '<strong>$1</strong>'
+          wrapper: '<strong>$1</strong>',
         }
       )}</div>`
     )
@@ -234,7 +241,7 @@ class Reply {
 
   // #
   // Adds an attachment
-  addAttachment($el) {
+  addAttachment(_$el) {
     this.form.find('ul.discussion-reply-attachments').append(replyAttachmentTemplate())
     this.form.find('ul.discussion-reply-attachments input').focus()
     return this.form.find('a.discussion-reply-add-attachment').hide() // TODO: when the data model allows it, tweak this to support multiple in the UI
@@ -255,6 +262,6 @@ class Reply {
   }
 }
 
-_.extend(Reply.prototype, Backbone.Events)
+extend(Reply.prototype, Backbone.Events)
 
 export default Reply

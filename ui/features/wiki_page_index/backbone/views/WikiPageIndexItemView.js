@@ -24,6 +24,7 @@ import PublishIconView from '@canvas/publish-icon-view'
 import LockIconView from '@canvas/lock-icon'
 import template from '../../jst/WikiPageIndexItem.handlebars'
 import '../../jquery/redirectClickTo'
+import {renderFrontPagePill} from '@canvas/wiki/react/renderFrontPagePill'
 
 const I18n = useI18nScope('pages')
 
@@ -37,7 +38,7 @@ export default class WikiPageIndexItemView extends Backbone.View {
       '.wiki-page-link': '$wikiPageLink',
       '.publish-cell': '$publishCell',
       '.master-content-lock-cell': '$lockCell',
-      'a.al-trigger': '$settingsMenu'
+      'a.al-trigger': '$settingsMenu',
     }
     this.prototype.events = {
       'click a.al-trigger': 'settingsMenu',
@@ -48,7 +49,7 @@ export default class WikiPageIndexItemView extends Backbone.View {
       'click .duplicate-wiki-page': 'duplicateWikiPage',
       'click .send-wiki-page-to': 'sendWikiPageTo',
       'click .copy-wiki-page-to': 'copyWikiPageTo',
-      'change .select-page-checkbox': 'changeSelectPageCheckbox'
+      'change .select-page-checkbox': 'changeSelectPageCheckbox',
     }
 
     this.optionProperty('indexView')
@@ -77,7 +78,7 @@ export default class WikiPageIndexItemView extends Backbone.View {
       PUBLISH: !!this.WIKI_RIGHTS.publish_page,
       DUPLICATE: !!this.WIKI_RIGHTS.create_page && this.contextName === 'courses',
       UPDATE: !!this.WIKI_RIGHTS.update,
-      DELETE: !!this.WIKI_RIGHTS.delete_page
+      DELETE: !!this.WIKI_RIGHTS.delete_page,
     }
 
     json.DIRECT_SHARE_ENABLED = ENV.DIRECT_SHARE_ENABLED
@@ -95,7 +96,7 @@ export default class WikiPageIndexItemView extends Backbone.View {
     })
     json.isChecked = this.selectedPages.hasOwnProperty(this.model.get('page_id'))
     json.collectionHasTodoDate = this.collectionHasTodoDate()
-    json.frontPageText = ENV.K5_SUBJECT_COURSE ? 'Subject Home' : 'Front Page'
+    json.frontPageText = ENV.K5_SUBJECT_COURSE ? I18n.t('Subject Home') : I18n.t('Front Page')
     return json
   }
 
@@ -109,13 +110,14 @@ export default class WikiPageIndexItemView extends Backbone.View {
     }
 
     super.render(...arguments)
+    renderFrontPagePill(this.$el[0], {children: this.toJSON().frontPageText})
     this.changeSelectPageCheckbox()
 
     // attach/re-attach the icons
     if (!this.publishIconView) {
       this.publishIconView = new PublishIconView({
         model: this.model,
-        title: this.model.get('title')
+        title: this.model.get('title'),
       })
       this.model.view = this
     }
@@ -126,12 +128,12 @@ export default class WikiPageIndexItemView extends Backbone.View {
       this.lockIconView = new LockIconView({
         model: this.model,
         unlockedText: I18n.t('%{name} is unlocked. Click to lock.', {
-          name: this.model.get('title')
+          name: this.model.get('title'),
         }),
         lockedText: I18n.t('%{name} is locked. Click to unlock.', {name: this.model.get('title')}),
         course_id: ENV.COURSE_ID,
         content_id: this.model.get('page_id'),
-        content_type: 'wiki_page'
+        content_type: 'wiki_page',
       })
       this.model.view = this
     }
@@ -154,7 +156,7 @@ export default class WikiPageIndexItemView extends Backbone.View {
 
     const editDialog = new WikiPageIndexEditDialog({
       model: this.model,
-      returnFocusTo: $curCog
+      returnFocusTo: $curCog,
     })
     editDialog.open()
 
@@ -194,7 +196,7 @@ export default class WikiPageIndexItemView extends Backbone.View {
         $focusOnDelete.focus()
         delete this.selectedPages[this.model.id]
         this.changeSelectPageCheckbox()
-      }
+      },
     })
     return deleteDialog.open()
   }
@@ -283,7 +285,7 @@ export default class WikiPageIndexItemView extends Backbone.View {
         delete this.selectedPages[pageId]
       }
     }
-    $('.delete_pages').attr('disabled', Object.keys(this.selectedPages).length === 0)
+    $('.delete_pages').prop('disabled', Object.keys(this.selectedPages).length === 0)
   }
 }
 WikiPageIndexItemView.initClass()

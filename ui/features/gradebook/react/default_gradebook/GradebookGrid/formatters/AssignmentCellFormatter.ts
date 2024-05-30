@@ -19,15 +19,46 @@
 // xsslint safeString.method I18n.t
 
 import {useScope as useI18nScope} from '@canvas/i18n'
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
 import {extractDataTurnitin} from '@canvas/grading/Turnitin'
 import GradeFormatHelper from '@canvas/grading/GradeFormatHelper'
 import {extractSimilarityInfo, isPostable, similarityIcon} from '@canvas/grading/SubmissionHelper'
 import {classNamesForAssignmentCell} from './CellStyles'
+import type Gradebook from '../../Gradebook'
+import type {PendingGradeInfo} from '../../gradebook.d'
+import type {SubmissionData, SubmissionWithOriginalityReport} from '@canvas/grading/grading.d'
+import type {GradingStandard} from '@instructure/grading-utils'
+import type {Assignment, Student, Submission} from '../../../../../../api.d'
 
 const I18n = useI18nScope('gradebook')
 
-function getTurnitinState(submission) {
+type Options = {
+  classNames?: string[]
+  dimmed?: boolean
+  disabled?: boolean
+  hidden?: boolean
+  invalid?: boolean
+  showUnpostedIndicator?: boolean
+  turnitinState?: ReturnType<typeof getTurnitinState>
+  similarityData?: ReturnType<typeof extractSimilarityInfo>
+}
+
+type Getters = {
+  getAssignment(assignmentId: string): ReturnType<Gradebook['getAssignment']>
+  getEnterGradesAsSetting(assignmentId: string): ReturnType<Gradebook['getEnterGradesAsSetting']>
+  getGradingSchemeData(assignmentId: string): undefined | GradingStandard[]
+  getPendingGradeInfo(submission: {
+    assignmentId: string
+    userId: string
+  }): ReturnType<Gradebook['getPendingGradeInfo']>
+  getStudent(studentId: string): ReturnType<Gradebook['student']>
+  getSubmissionState(
+    submission: Submission
+  ): ReturnType<Gradebook['submissionStateMap']['getSubmissionState']>
+  showUpdatedSimilarityScore(): boolean
+}
+
+function getTurnitinState(submission: SubmissionWithOriginalityReport) {
   const turnitin = extractDataTurnitin(submission)
   if (turnitin) {
     return htmlEscape(turnitin.state)
@@ -35,7 +66,7 @@ function getTurnitinState(submission) {
   return null
 }
 
-function needsGrading(submission, pendingGradeInfo) {
+function needsGrading(submission: Submission, pendingGradeInfo: PendingGradeInfo | null) {
   if (pendingGradeInfo && pendingGradeInfo.grade != null) {
     return false
   }
@@ -53,18 +84,22 @@ function needsGrading(submission, pendingGradeInfo) {
   )
 }
 
-function formatGrade(submissionData, assignment, options) {
+function formatGrade(submissionData: SubmissionData, assignment: Assignment, options: Getters) {
   const formatOptions = {
     formatType: options.getEnterGradesAsSetting(assignment.id),
     gradingScheme: options.getGradingSchemeData(assignment.id),
     pointsPossible: assignment.points_possible,
-    version: 'final'
+    version: 'final',
   }
 
   return GradeFormatHelper.formatSubmissionGrade(submissionData, formatOptions)
 }
 
-function renderStartContainer(options) {
+function renderStartContainer(options: {
+  showUnpostedIndicator?: boolean
+  invalid?: boolean
+  similarityData?: ReturnType<typeof extractSimilarityInfo>
+}) {
   let content = ''
 
   if (options.showUnpostedIndicator) {
@@ -83,9 +118,9 @@ function renderStartContainer(options) {
   return `<div class="Grid__GradeCell__StartContainer">${content}</div>`
 }
 
-function renderTemplate(grade, options = {}) {
+function renderTemplate(grade: string, options: Options = {}) {
   let classNames = ['Grid__GradeCell', 'gradebook-cell']
-  let content = grade
+  let content: string = grade
 
   if (options.classNames) {
     classNames = [...classNames, ...options.classNames]
@@ -120,33 +155,46 @@ function renderTemplate(grade, options = {}) {
 }
 
 export default class AssignmentCellFormatter {
-  constructor(gradebook) {
+  options: Getters
+
+  customGradeStatusesEnabled: boolean
+
+  constructor(gradebook: Gradebook) {
     this.options = {
-      getAssignment(assignmentId) {
+      getAssignment(assignmentId: string) {
         return gradebook.getAssignment(assignmentId)
       },
-      getEnterGradesAsSetting(assignmentId) {
+      getEnterGradesAsSetting(assignmentId: string) {
         return gradebook.getEnterGradesAsSetting(assignmentId)
       },
-      getGradingSchemeData(assignmentId) {
-        return gradebook.getAssignmentGradingScheme(assignmentId).data
+      getGradingSchemeData(assignmentId: string): undefined | GradingStandard[] {
+        return gradebook.getAssignmentGradingScheme(assignmentId)?.data
       },
-      getPendingGradeInfo(submission) {
+      getPendingGradeInfo(submission: {assignmentId: string; userId: string}) {
         return gradebook.getPendingGradeInfo(submission)
       },
-      getStudent(studentId) {
+      getStudent(studentId: string) {
         return gradebook.student(studentId)
       },
-      getSubmissionState(submission) {
+      getSubmissionState(submission: Submission) {
         return gradebook.submissionStateMap.getSubmissionState(submission)
       },
       showUpdatedSimilarityScore() {
         return gradebook.options.show_similarity_score
-      }
+      },
     }
+    this.customGradeStatusesEnabled = gradebook.options.custom_grade_statuses_enabled
   }
 
-  render = (_row, _cell, submission /* value */, columnDef, student /* dataContext */) => {
+  render = (
+    _row: number,
+    _cell: number,
+    submission: SubmissionWithOriginalityReport,
+    columnDef: {
+      postAssignmentGradesTrayOpenForAssignmentId?: string
+    },
+    student: Student
+  ) => {
     let submissionState
     if (submission) {
       submissionState = this.options.getSubmissionState(submission)
@@ -165,23 +213,26 @@ export default class AssignmentCellFormatter {
     const assignmentData = {
       id: assignment.id,
       pointsPossible: assignment.points_possible,
-      submissionTypes: assignment.submission_types
+      submissionTypes: assignment.submission_types,
     }
 
-    const submissionData = {
+    const submissionData: SubmissionData = {
       dropped: submission.drop,
       excused: submission.excused,
-      extended: submission.late_policy_status == 'extended',
+      extended: submission.late_policy_status === 'extended',
       grade: assignment.grading_type === 'pass_fail' ? submission.rawGrade : submission.grade,
       late: submission.late,
       missing: submission.missing,
       resubmitted: submission.grade_matches_current_submission === false,
-      score: submission.score
+      score: submission.score,
+      customGradeStatusId: this.customGradeStatusesEnabled
+        ? submission.custom_grade_status_id
+        : null,
     }
 
     const pendingGradeInfo = this.options.getPendingGradeInfo({
       assignmentId: assignment.id,
-      userId: student.id
+      userId: student.id,
     })
     if (pendingGradeInfo) {
       submissionData.grade = pendingGradeInfo.grade
@@ -191,13 +242,13 @@ export default class AssignmentCellFormatter {
     const showUnpostedIndicator =
       columnDef.postAssignmentGradesTrayOpenForAssignmentId && isPostable(submission)
 
-    const options = {
+    const options: Options = {
       classNames: classNamesForAssignmentCell(assignmentData, submissionData),
       dimmed: student.isInactive || student.isConcluded || submissionState.locked,
       disabled: student.isConcluded || submissionState.locked,
       hidden: submissionState.hideGrade,
       invalid: !!pendingGradeInfo && !pendingGradeInfo.valid,
-      showUnpostedIndicator
+      showUnpostedIndicator,
     }
 
     if (this.options.showUpdatedSimilarityScore()) {

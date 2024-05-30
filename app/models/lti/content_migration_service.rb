@@ -19,7 +19,7 @@
 
 module Lti
   module ContentMigrationService
-    KEY_REGEX = /\Alti_(?<id>\d+)\z/.freeze
+    KEY_REGEX = /\Alti_(?<id>\d+)\z/
 
     def self.enabled?
       Setting.get("enable_lti_content_migration", "false") == "true"
@@ -29,7 +29,7 @@ module Lti
       # Select tools with proper configs
       configured_tools = []
       GuardRail.activate(:secondary) do
-        ContextExternalTool.all_tools_for(course).find_each do |tool|
+        Lti::ContextToolFinder.all_tools_for(course).find_each do |tool|
           configured_tools << tool if tool.content_migration_configured?
         end
       end

@@ -11,12 +11,22 @@
     </h2>
   </div>
   <div class="event-details-content">
-    <div class="event-details-timestring">{{{displayTimeString}}}</div>
+    <div class="event-details-timestring">
+      {{{displayTimeString}}}
+      {{#if series_natural_language}}
+        <div class="series-natural-language">{{series_natural_language}}</div>
+      {{/if}}
+    </div>
     <table cellspacing="0" role="presentation">
       {{#if contextInfo}}
         <tr>
           <th scope="row">{{#t "calendar"}}Calendar{{/t}}</th>
-          <td><a href="{{contextInfo.url}}">{{contextInfo.name}}</a>
+          <td>
+            {{#if contextInfo.can_view_context}}
+              <a href="{{contextInfo.url}}">{{contextInfo.name}}</a>
+            {{else}}
+              {{contextInfo.name}}
+            {{/if}}
             {{#if actualContextInfo}}
               <br><span class="event-details-actual-context">{{actualContextInfo.name}}</span>
             {{/if}}
@@ -142,7 +152,7 @@
         {{#if can_reserve }}
           <p>
             <label for="appointment-comment"><b>{{#t}}Comments{{/t}}</b></label><br />
-            <textarea id="appointment-comment" maxlength="255" name="appointment-comment"/>
+            <textarea id="appointment-comment" maxlength="255" name="appointment-comment"></textarea>
           </p>
           <button class="reserve_event_link Button Button--small Button--link"><strong>{{#t "links.reserve"}}Reserve{{/t}}</strong></button>
         {{/if}}

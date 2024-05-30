@@ -70,7 +70,7 @@ QUnit.module('Gradebook#getSubmission', hooks => {
     gradebook = createGradebook()
     gradebook.students = {
       1101: {id: '1101', assignment_201: {score: 10, possible: 20}, assignment_202: {}},
-      1102: {id: '1102', assignment_201: {}}
+      1102: {id: '1102', assignment_201: {}},
     }
   })
 
@@ -110,7 +110,7 @@ QUnit.module('Gradebook#gotAllAssignmentGroups', hooks => {
     sinon.stub(gradebook, 'setAssignmentGroupsLoaded')
     const assignmentGroup = {
       id: '12',
-      assignments: [{id: '35', name: 'An Assignment', due_at: null}]
+      assignments: [{id: '35', name: 'An Assignment', due_at: null}],
     }
     gradebook.gotAllAssignmentGroups([assignmentGroup])
     deepEqual(gradebook.assignmentGroups['12'], assignmentGroup)
@@ -120,11 +120,11 @@ QUnit.module('Gradebook#gotAllAssignmentGroups', hooks => {
     sinon.stub(gradebook, 'setAssignmentGroupsLoaded')
     gradebook.assignmentGroups['12'] = {
       id: '12',
-      assignments: [{id: '22', name: 'Some Other Assignment', due_at: null}]
+      assignments: [{id: '22', name: 'Some Other Assignment', due_at: null}],
     }
     const assignmentGroup = {
       id: '12',
-      assignments: [{id: '35', name: 'An Assignment', due_at: null}]
+      assignments: [{id: '35', name: 'An Assignment', due_at: null}],
     }
     gradebook.gotAllAssignmentGroups([assignmentGroup])
     const assignmentIds = gradebook.assignmentGroups['12'].assignments.map(a => a.id)
@@ -135,11 +135,11 @@ QUnit.module('Gradebook#gotAllAssignmentGroups', hooks => {
     sinon.stub(gradebook, 'setAssignmentGroupsLoaded')
     gradebook.assignmentGroups['12'] = {
       id: '12',
-      assignments: [{id: '35', name: 'An Assignment', due_at: null}]
+      assignments: [{id: '35', name: 'An Assignment', due_at: null}],
     }
     const assignmentGroup = {
       id: '12',
-      assignments: [{id: '35', name: 'An Assignment', due_at: null}]
+      assignments: [{id: '35', name: 'An Assignment', due_at: null}],
     }
     gradebook.gotAllAssignmentGroups([assignmentGroup])
     const assignmentIds = gradebook.assignmentGroups['12'].assignments.map(a => a.id)
@@ -162,7 +162,6 @@ QUnit.module('Gradebook#updateStudentHeadersAndReloadData', hooks => {
 
   hooks.beforeEach(() => {
     gradebook = createGradebook()
-    sinon.stub(gradebook.dataLoader, 'reloadStudentDataForEnrollmentFilterChange')
   })
 
   test('makes a call to update column headers', () => {
@@ -183,23 +182,6 @@ QUnit.module('Gradebook#updateStudentHeadersAndReloadData', hooks => {
     const [columnHeadersToUpdate] = updateColumnHeaders.lastCall.args
     deepEqual(columnHeadersToUpdate, ['student'])
   })
-
-  test('reloads student data', () => {
-    gradebook.updateStudentHeadersAndReloadData()
-    strictEqual(gradebook.dataLoader.reloadStudentDataForEnrollmentFilterChange.callCount, 1)
-  })
-
-  test('reloads the student data after the column headers have been updated', () => {
-    const updateColumnHeaders = sinon.stub(
-      gradebook.gradebookGrid.gridSupport.columns,
-      'updateColumnHeaders'
-    )
-    gradebook.updateStudentHeadersAndReloadData()
-    sinon.assert.callOrder(
-      updateColumnHeaders,
-      gradebook.dataLoader.reloadStudentDataForEnrollmentFilterChange
-    )
-  })
 })
 
 QUnit.module('Gradebook#gotCustomColumnDataChunk', {
@@ -207,16 +189,16 @@ QUnit.module('Gradebook#gotCustomColumnDataChunk', {
     this.gradebook = createGradebook()
     this.gradebook.students = {
       1101: {id: '1101', assignment_201: {}, assignment_202: {}},
-      1102: {id: '1102', assignment_201: {}}
+      1102: {id: '1102', assignment_201: {}},
     }
     sandbox.stub(this.gradebook, 'invalidateRowsForStudentIds')
-  }
+  },
 })
 
 test('updates students with custom column data', function () {
   const data = [
     {user_id: '1101', content: 'example'},
-    {user_id: '1102', content: 'sample'}
+    {user_id: '1102', content: 'sample'},
   ]
   this.gradebook.gotCustomColumnDataChunk('2401', data)
   equal(this.gradebook.students[1101].custom_col_2401, 'example')
@@ -226,7 +208,7 @@ test('updates students with custom column data', function () {
 test('invalidates rows for related students', function () {
   const data = [
     {user_id: '1101', content: 'example'},
-    {user_id: '1102', content: 'sample'}
+    {user_id: '1102', content: 'sample'},
   ]
   this.gradebook.gotCustomColumnDataChunk('2401', data)
   strictEqual(this.gradebook.invalidateRowsForStudentIds.callCount, 1)
@@ -244,7 +226,7 @@ test('ignores students without custom column data', function () {
 test('invalidates rows after updating students', function () {
   const data = [
     {user_id: '1101', content: 'example'},
-    {user_id: '1102', content: 'sample'}
+    {user_id: '1102', content: 'sample'},
   ]
   this.gradebook.invalidateRowsForStudentIds.callsFake(() => {
     equal(this.gradebook.students[1101].custom_col_2401, 'example')
@@ -259,7 +241,7 @@ QUnit.module('Gradebook#getStudentOrder', () => {
     gradebook.gridData.rows = [
       {id: '3', sortable_name: 'Z'},
       {id: '4', sortable_name: 'A'},
-      {id: '1', sortable_name: 'C'}
+      {id: '1', sortable_name: 'C'},
     ]
     propEqual(gradebook.getStudentOrder(), ['3', '4', '1'])
   })
@@ -277,31 +259,31 @@ QUnit.module('Gradebook#getAssignmentOrder', hooks => {
       'assignment_2304',
       'Assignments',
       'Homework',
-      'total_grade'
+      'total_grade',
     ]
 
     const assignments = [
       {
         id: '2301',
-        assignment_group_id: '2201'
+        assignment_group_id: '2201',
       },
       {
         id: '2302',
-        assignment_group_id: '2201'
+        assignment_group_id: '2201',
       },
       {
         id: '2303',
-        assignment_group_id: '2202'
+        assignment_group_id: '2202',
       },
       {
         id: '2304',
-        assignment_group_id: '2202'
-      }
+        assignment_group_id: '2202',
+      },
     ]
 
     gradebook.gotAllAssignmentGroups([
       {id: '2201', position: 1, name: 'Assignments', assignments: assignments.slice(0, 2)},
-      {id: '2202', position: 2, name: 'Homework', assignments: assignments.slice(2, 4)}
+      {id: '2202', position: 2, name: 'Homework', assignments: assignments.slice(2, 4)},
     ])
   })
 
@@ -346,31 +328,31 @@ QUnit.module('Gradebook Assignment Student Visibility', moduleHooks => {
         first_name: 'A`dam',
         last_name: 'Jone`s',
         enrollments: [{type: 'StudentEnrollment', grades: {html_url: 'http://example.url/'}}],
-        sortable_name: 'Jone`s, A`dam'
+        sortable_name: 'Jone`s, A`dam',
       },
       {
         id: '1102',
         name: 'Betty Ford',
-        enrollments: [{type: 'StudentEnrollment', grades: {html_url: 'http://example.url/'}}]
-      }
+        enrollments: [{type: 'StudentEnrollment', grades: {html_url: 'http://example.url/'}}],
+      },
     ]
 
     assignments = [
       {
         id: '2301',
         assignment_visibility: null,
-        only_visible_to_overrides: false
+        only_visible_to_overrides: false,
       },
       {
         id: '2302',
         assignment_visibility: ['1102'],
-        only_visible_to_overrides: true
-      }
+        only_visible_to_overrides: true,
+      },
     ]
 
     gradebook.gotAllAssignmentGroups([
       {id: '2201', position: 1, name: 'Assignments', assignments: assignments.slice(0, 1)},
-      {id: '2202', position: 2, name: 'Homework', assignments: assignments.slice(1, 2)}
+      {id: '2202', position: 2, name: 'Homework', assignments: assignments.slice(1, 2)},
     ])
   })
 
@@ -450,7 +432,7 @@ QUnit.module('Gradebook Assignment Student Visibility', moduleHooks => {
       const testStudent = {
         id: '9901',
         name: 'Test Student',
-        enrollments: [{type: 'StudentViewEnrollment', grades: {html_url: 'http://example.ur/'}}]
+        enrollments: [{type: 'StudentViewEnrollment', grades: {html_url: 'http://example.ur/'}}],
       }
       gradebook.gotChunkOfStudents([testStudent])
       const students = gradebook.studentsThatCanSeeAssignment('2301')
@@ -458,10 +440,11 @@ QUnit.module('Gradebook Assignment Student Visibility', moduleHooks => {
     })
   })
 
-  QUnit.module('#visibleStudentsThatCanSeeAssinment', hooks => {
+  QUnit.module('#visibleStudentsThatCanSeeAssignment', hooks => {
     hooks.beforeEach(() => {
       gradebook.gotChunkOfStudents(allStudents)
       gradebook.courseContent.students.setStudentIds(['1101', '1102'])
+      gradebook.updateFilteredStudentIds()
     })
 
     test('includes students who can see the assignment when no filters are active', () => {
@@ -519,7 +502,7 @@ QUnit.module('Gradebook#assignmentsLoadedForCurrentView', hooks => {
     contextHooks.beforeEach(() => {
       gradebook.contentLoadStates.assignmentsLoaded = {
         all: false,
-        gradingPeriod: {2: false, 14: false}
+        gradingPeriod: {2: false, 14: false},
       }
       gradebook.gradingPeriodId = '14'
     })

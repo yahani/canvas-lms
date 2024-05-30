@@ -17,34 +17,9 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require "active_support"
-
-# this is a weird thing we have to do to avoid a weird circular
-# require problem
-_x = ActiveSupport::Deprecation
-ActiveSupport::Dependencies.autoload_paths << File.expand_path("autoload", __dir__)
-ActiveSupport::Dependencies.hook!
-
 require "autoextend"
 
-# CANVAS_RAILS="6.1" this pattern will need reworking in a rails >= 7.0 world
-if ENV["WITH_ZEITWERK"]
-  require "zeitwerk"
-  require "rails"
-  Rails.application = Class.new do
-    def self.config
-      Class.new do
-        def self.autoloader
-          :zeitwerk
-        end
-      end
-    end
-  end
-  require "active_support/dependencies/zeitwerk_integration"
-  ActiveSupport::Dependencies::ZeitwerkIntegration.take_over(enable_reloading: true)
-  # In an actual rails app this is handled by an initializer through railties
-  Autoextend.inject_into_zetwerk
-end
+$LOAD_PATH.unshift File.dirname(__FILE__)
 
 # rubocop:disable Lint/ConstantDefinitionInBlock, RSpec/LeakyConstantDeclaration, Lint/EmptyClass
 # these specs needs to work with real constants, because we're testing the hooking
@@ -52,6 +27,10 @@ end
 describe Autoextend do
   before do
     module AutoextendSpec
+      autoload :TestModule, "autoload/autoextend_spec/test_module"
+      autoload :TestModule2, "autoload/autoextend_spec/test_module2"
+      autoload :TestLaterMethod, "autoload/autoextend_spec/test_later_method"
+
       module PrependHelper
         def self.register_prepend(klass, id)
           prepend_order = klass.class_variable_defined?(:@@prepend_order) ? klass.class_variable_get(:@@prepend_order) : []
@@ -91,15 +70,14 @@ describe Autoextend do
   end
 
   after do
-    Object.send(:remove_const, :AutoextendSpec)
+    Object.send(:remove_const, :AutoextendSpec) # rubocop:disable RSpec/RemoveConst
     Autoextend.send(:extensions_hash).reject! { |k, _| k =~ /^AutoextendSpec::/ }
-    ActiveSupport::Dependencies.clear
   end
 
   it "autoextends a class afterwards" do
     module AutoextendSpec::MyExtension; end
     Autoextend.hook(:"AutoextendSpec::Class", :"AutoextendSpec::MyExtension")
-    expect(defined?(AutoextendSpec::Class)).to eq nil
+    expect(defined?(AutoextendSpec::Class)).to be_nil
     class AutoextendSpec::Class; end
     expect(AutoextendSpec::Class.ancestors).to include AutoextendSpec::MyExtension
   end
@@ -141,7 +119,7 @@ describe Autoextend do
 
   describe "ordering" do
     describe "manually-loaded classes" do
-      it "raises an error for unfufilliable after constraints" do
+      it "raises an error for unfulfillable after constraints" do
         module AutoextendSpec::Ordering; end
         expect do
           Autoextend.hook(:"AutoextendSpec::Ordering", :"AutoextendSpec::Prepend3", method: :prepend, after: "AutoextendSpec::Prepend2")
@@ -149,7 +127,7 @@ describe Autoextend do
         end.to raise_error(/Could not find/)
       end
 
-      it "raises an error for unfufilliable before constraints" do
+      it "raises an error for unfulfillable before constraints" do
         module AutoextendSpec::Ordering; end
         expect do
           Autoextend.hook(:"AutoextendSpec::Ordering", :"AutoextendSpec::Prepend2", method: :prepend)
@@ -169,24 +147,24 @@ describe Autoextend do
     end
 
     describe "auto-loaded classes" do
-      it "raises an error for unfufilliable after constraints" do
+      it "raises an error for unfulfillable after constraints" do
         Autoextend.hook(:"AutoextendSpec::TestModule", :"AutoextendSpec::Prepend3", method: :prepend, after: "AutoextendSpec::Prepend2")
 
         expect { _x = AutoextendSpec::TestModule }.to raise_error(/Could not find/)
       end
 
-      it "raises an error for unfufilliable before constraints" do
+      it "raises an error for unfulfillable before constraints" do
         Autoextend.hook(:"AutoextendSpec::TestModule", :"AutoextendSpec::Prepend1", method: :prepend, before: "AutoextendSpec::Prepend2")
 
         expect { _x = AutoextendSpec::TestModule }.to raise_error(/Could not find/)
       end
 
       it "includes in the correct order" do
-        Autoextend.hook(:"AutoextendSpec::TestModule", :"AutoextendSpec::Prepend1", method: :prepend, before: "AutoextendSpec::Prepend2")
-        Autoextend.hook(:"AutoextendSpec::TestModule", :"AutoextendSpec::Prepend2", method: :prepend)
-        Autoextend.hook(:"AutoextendSpec::TestModule", :"AutoextendSpec::Prepend3", method: :prepend, after: "AutoextendSpec::Prepend2")
+        Autoextend.hook(:"AutoextendSpec::TestModule2", :"AutoextendSpec::Prepend1", method: :prepend, before: "AutoextendSpec::Prepend2")
+        Autoextend.hook(:"AutoextendSpec::TestModule2", :"AutoextendSpec::Prepend2", method: :prepend)
+        Autoextend.hook(:"AutoextendSpec::TestModule2", :"AutoextendSpec::Prepend3", method: :prepend, after: "AutoextendSpec::Prepend2")
 
-        expect(AutoextendSpec::TestModule.class_variable_get(:@@prepend_order)).to eq([1, 2, 3])
+        expect(AutoextendSpec::TestModule2.class_variable_get(:@@prepend_order)).to eq([1, 2, 3])
       end
     end
   end
@@ -199,35 +177,27 @@ describe Autoextend do
     expect(AutoextendSpec::Class.ancestors).to include AutoextendSpec::MyExtension
   end
 
-  describe "ActiveSupport" do
+  context "with autoloading" do
     it "hooks an autoloaded module" do
       hooked = 0
+
       Autoextend.hook(:"AutoextendSpec::TestModule") do
         hooked += 1
       end
       Autoextend.hook(:"AutoextendSpec::TestModule::Nested") do
         hooked += 1
       end
-      if ENV["WITH_ZEITWERK"]
-        expect(AutoextendSpec.autoload?(:TestModule)).not_to be_nil
-      else
-        expect(defined?(AutoextendSpec::TestModule)).to be_nil
-      end
+      expect(AutoextendSpec.autoload?(:TestModule)).not_to be_nil
       expect(hooked).to equal(0)
       _x = AutoextendSpec::TestModule
-      # this could have only been detected by Rails' autoloading
-      if ENV["WITH_ZEITWERK"]
-        expect(AutoextendSpec.autoload?(:TestModule)).to be_nil
-      else
-        expect(defined?(AutoextendSpec::TestModule)).to eq("constant")
-      end
+      expect(AutoextendSpec.autoload?(:TestModule)).to be_nil
       expect(hooked).to equal(2)
     end
 
     it "hooks an autoloaded module after_load" do
       # This method will call an existing method on load
       Autoextend.hook(:"AutoextendSpec::TestLaterMethod", :"AutoextendSpec::PrependExistingMethod", method: :prepend, after_load: true)
-      expect(AutoextendSpec::TestLaterMethod.new.b_method).to eq(true)
+      expect(AutoextendSpec::TestLaterMethod.new.b_method).to be(true)
     end
   end
 end

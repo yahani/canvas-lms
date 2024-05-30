@@ -18,10 +18,10 @@
 import {useScope as useI18nScope} from '@canvas/i18n'
 import Backbone from '@canvas/backbone'
 import $ from 'jquery'
-import _ from 'underscore'
-import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection.coffee'
-import ConversationSearchResult from '../models/ConversationSearchResult.coffee'
-import PaginatedCollectionView from '@canvas/pagination/backbone/views/PaginatedCollectionView.coffee'
+import {map, extend, each, reduce, indexOf, debounce, isEmpty, last, head} from 'lodash'
+import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection'
+import ConversationSearchResult from '../models/ConversationSearchResult'
+import PaginatedCollectionView from '@canvas/pagination/backbone/views/PaginatedCollectionView'
 import tokenTemplate from '../../jst/autocompleteToken.handlebars'
 import resultTemplate from '../../jst/autocompleteResult.handlebars'
 import 'jquery-scroll-into-view'
@@ -76,7 +76,7 @@ export default class AutocompleteView extends Backbone.View {
       private: I18n.t(
         'cannot_add_to_private',
         'You cannot add participants to a private conversation.'
-      )
+      ),
     }
 
     // Internal: Map of key names to codes.
@@ -85,7 +85,7 @@ export default class AutocompleteView extends Backbone.View {
       13: 'enter',
       27: 'escape',
       38: 'up',
-      40: 'down'
+      40: 'down',
     }
 
     // Internal: Cached DOM element references.
@@ -101,7 +101,7 @@ export default class AutocompleteView extends Backbone.View {
       '.ac-clear': '$clearBtn',
       '.ac-search-btn': '$searchBtn',
       '.ac-results-status': '$resultsStatus',
-      '.ac-selected-name': '$selectedName'
+      '.ac-selected-name': '$selectedName',
     }
 
     // Internal: Event map.
@@ -116,7 +116,7 @@ export default class AutocompleteView extends Backbone.View {
       'input     .ac-input': '_onSearchTermChange',
       'keydown   .ac-input': '_onInputAction',
       'mousedown .ac-result': '_onResultClick',
-      'mouseenter .ac-result-list': '_clearSelectedStyles'
+      'mouseenter .ac-result-list': '_clearSelectedStyles',
     }
 
     this.prototype.modelCache = new Backbone.Collection()
@@ -130,13 +130,13 @@ export default class AutocompleteView extends Backbone.View {
       per_page: 20,
       'permissions[]': 'send_messages_all',
       messageable_only: true,
-      synthetic_contexts: true
+      synthetic_contexts: true,
     }
     if (this.currentContext) params.context = this.currentContext.id
 
     return (
       baseURL +
-      _.reduce(
+      reduce(
         params,
         (queryString, v, k) => {
           queryString.push(`${k}=${v}`)
@@ -164,7 +164,7 @@ export default class AutocompleteView extends Backbone.View {
     setTimeout(() => {
       if (this.options.disabled) this._disable()
     }, 0)
-    this._fetchResults = _.debounce(this.__fetchResults, 250)
+    this._fetchResults = debounce(this.__fetchResults, 250)
     return (this.resultView = new PaginatedCollectionView({
       el: this.$resultContents,
       scrollContainer: this.$resultContainer,
@@ -172,7 +172,7 @@ export default class AutocompleteView extends Backbone.View {
       collection: new Backbone.Collection(),
       template: null,
       itemView: Backbone.View.extend({
-        template: resultTemplate
+        template: resultTemplate,
       }),
       itemViewOptions: {
         tagName: 'li',
@@ -186,12 +186,12 @@ export default class AutocompleteView extends Backbone.View {
             'data-id': this.model.id,
             'data-people-count': this.model.get('user_count'),
             'aria-label': this.model.get('name'),
-            id: `result-${$.guid++}` // for aria-activedescendant
+            id: `result-${$.guid++}`, // for aria-activedescendant
           }
           attributes['aria-haspopup'] = this.model.get('isContext')
           return attributes
-        }
-      }
+        },
+      },
     }))
   }
 
@@ -235,9 +235,9 @@ export default class AutocompleteView extends Backbone.View {
   // Returns nothing.
   _resetContext() {
     if (this.hasExternalContext) {
-      this.currentContext = _.isEmpty(this.parentContexts)
+      this.currentContext = isEmpty(this.parentContexts)
         ? this.currentContext
-        : _.head(this.parentContexts)
+        : head(this.parentContexts)
     } else {
       this.currentContext = null
     }
@@ -252,7 +252,7 @@ export default class AutocompleteView extends Backbone.View {
       .css({
         fontSize: '14px',
         position: 'absolute',
-        top: '-9999px'
+        top: '-9999px',
       })
       .appendTo('body')
   }
@@ -271,9 +271,8 @@ export default class AutocompleteView extends Backbone.View {
   //
   // Returns a model object.
   _getModel(id) {
-    let result
     id = id && String(id)
-    return (result = this.modelCache.get(id))
+    return this.modelCache.get(id)
   }
 
   // Internal: Remove the "selected" class from result list items.
@@ -281,7 +280,7 @@ export default class AutocompleteView extends Backbone.View {
   // e - Event object.
   //
   // Returns nothing.
-  _clearSelectedStyles(e) {
+  _clearSelectedStyles(_e) {
     this.$resultList.find('.selected').removeClass('selected')
     return (this.selectedModel = null)
   }
@@ -291,7 +290,7 @@ export default class AutocompleteView extends Backbone.View {
   // e - Event object.
   //
   // Returns nothing.
-  _onWidgetClick(e) {
+  _onWidgetClick(_e) {
     return this.$input.focus()
   }
 
@@ -332,7 +331,7 @@ export default class AutocompleteView extends Backbone.View {
   // e - Event object.
   //
   // Returns nothing.
-  _onInputBlur(e) {
+  _onInputBlur(_e) {
     if (this._shouldPreventBlur) {
       this._shouldPreventBlur = false
       this.$input.focus()
@@ -365,7 +364,7 @@ export default class AutocompleteView extends Backbone.View {
   // e - Event object.
   //
   // Returns nothing.
-  _onSearchTermChange(e) {
+  _onSearchTermChange(_e) {
     if (!this.$input.val()) {
       this.toggleResultList(false)
     } else {
@@ -381,7 +380,7 @@ export default class AutocompleteView extends Backbone.View {
   //
   // Returns nothing.
   _onSearchResultLoad() {
-    _.extend(this.permissions, this._getPermissions())
+    extend(this.permissions, this._getPermissions())
     if (!this.excludeAll && !!this._canSendToAll()) this._addEveryoneResult(this.resultCollection)
     this.resultCollection.each(this._addToModelCache.bind(this))
     const hasResults = this.resultCollection.length
@@ -416,7 +415,7 @@ export default class AutocompleteView extends Backbone.View {
     const permissions = this.resultCollection.filter(r =>
       r.attributes.hasOwnProperty('permissions')
     )
-    return _.reduce(
+    return reduce(
       permissions,
       (map, result) => {
         const key = result.id.replace(/_(students|teachers)$/, '')
@@ -424,7 +423,7 @@ export default class AutocompleteView extends Backbone.View {
         return map
       },
       {}
-    );
+    )
   }
 
   // Internal: Add, if appropriate, an "All in %{context}" result to the
@@ -447,7 +446,7 @@ export default class AutocompleteView extends Backbone.View {
     if (this.currentContext.id.match(/course_\d+_(group|section)/)) return
 
     if (!this.currentContext.peopleCount) {
-      this.currentContext.peopleCount = _.reduce(
+      this.currentContext.peopleCount = reduce(
         actual_results,
         (count, result) => count + (result.attributes.user_count || 0),
         0
@@ -458,7 +457,7 @@ export default class AutocompleteView extends Backbone.View {
       id: this.currentContext.id,
       name,
       everyone: true,
-      people: this.currentContext.peopleCount
+      people: this.currentContext.peopleCount,
     }
     return results.unshift(new ConversationSearchResult(tag))
   }
@@ -535,9 +534,9 @@ export default class AutocompleteView extends Backbone.View {
   // e - Event object.
   //
   // Returns nothing.
-  _onBackspaceKey(e) {
+  _onBackspaceKey(_e) {
     if (!this.$input.val()) {
-      return this._removeToken(_.last(this.tokens))
+      return this._removeToken(last(this.tokens))
     }
   }
 
@@ -574,7 +573,7 @@ export default class AutocompleteView extends Backbone.View {
       this.currentContext = {
         id: this.selectedModel.id,
         name: this.selectedModel.get('name'),
-        peopleCount: this.selectedModel.get('user_count')
+        peopleCount: this.selectedModel.get('user_count'),
       }
       return this._fetchResults(true)
     } else {
@@ -664,11 +663,7 @@ export default class AutocompleteView extends Backbone.View {
   // Returns nothing.
   _onRemoveToken(e) {
     e.preventDefault()
-    return this._removeToken(
-      $(e.currentTarget)
-        .siblings('input')
-        .val()
-    )
+    return this._removeToken($(e.currentTarget).siblings('input').val())
   }
 
   // Internal: Handle clicks to the search button.
@@ -676,14 +671,14 @@ export default class AutocompleteView extends Backbone.View {
   // e - Event object.
   //
   // Returns nothing.
-  _onSearch(e) {
-    if (this.$searchBtn.attr('disabled')) return
+  _onSearch(_e) {
+    if (this.$searchBtn.prop('disabled')) return
     this._fetchResults(true)
     return this.$input.focus()
   }
 
   checkRecipientTotal() {
-    const total = _.reduce(this.recipientCounts, (sum, c) => sum + c, 0)
+    const total = reduce(this.recipientCounts, (sum, c) => sum + c, 0)
     if (total > ENV.CONVERSATIONS.MAX_GROUP_CONVERSATION_SIZE) {
       return this.trigger('recipientTotalChange', true)
     } else {
@@ -730,7 +725,7 @@ export default class AutocompleteView extends Backbone.View {
   _formatTokenName(model) {
     let parent
     if (!model.everyone) return model.name
-    if ((parent = _.head(this.parentContexts))) {
+    if ((parent = head(this.parentContexts))) {
       return `${parent.name}: ${this.currentContext.name}`
     } else {
       return this.currentContext.name
@@ -745,11 +740,8 @@ export default class AutocompleteView extends Backbone.View {
   // Returns nothing.
   _removeToken(id, silent = false) {
     if (this.disabled) return
-    this.$tokenList
-      .find(`input[value=${id}]`)
-      .parent()
-      .remove()
-    this.tokens.splice(_.indexOf(this.tokens, id), 1)
+    this.$tokenList.find(`input[value=${id}]`).parent().remove()
+    this.tokens.splice(indexOf(this.tokens, id), 1)
     if (!this.tokens.length) this.$clearBtn.hide()
     if (this.options.single && !this.tokens.length) {
       this.$input.prop('disabled', false)
@@ -766,7 +758,7 @@ export default class AutocompleteView extends Backbone.View {
 
   _refreshRecipientList() {
     const recipientNames = []
-    _.each(this.tokenModels(), model => {
+    each(this.tokenModels(), model => {
       recipientNames.push(model.get('name'))
     })
     $('#recipient-label').text(recipientNames.join(', '))
@@ -776,7 +768,7 @@ export default class AutocompleteView extends Backbone.View {
   //
   // Returns an array of context_id strings.
   tokenParams() {
-    return _.map(this.tokens, t => {
+    return map(this.tokens, t => {
       if (t.match) {
         return t
       } else {
@@ -789,7 +781,7 @@ export default class AutocompleteView extends Backbone.View {
   //
   // Returns an array of models.
   tokenModels() {
-    return _.map(this.tokens, this._getModel.bind(this))
+    return map(this.tokens, this._getModel.bind(this))
   }
 
   // Public: Set the current course context.
@@ -826,7 +818,7 @@ export default class AutocompleteView extends Backbone.View {
   //
   // Returns nothing.
   setTokens(tokens) {
-    return _.each(tokens, token => {
+    each(tokens, token => {
       this._addToModelCache(token)
       this._addToken(token)
     })

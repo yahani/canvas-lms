@@ -12,15 +12,20 @@ they will be the most up to date.
 
 To configure canvas to find the canvas-rce-api, include in `canvas-lms/config/dynamic_settings.yml`:
 
-```
+```yaml
 development:
   config:
     canvas:
       rich-content-service:
         app-host: "localhost:3001"
-      canvas:
-        encryption-secret: "astringthatisactually32byteslong"
-        signing-secret: "astringthatisactually32byteslong"
+```
+
+And in `canvas-lms/config/vault_contents.yml`:
+
+```yaml
+      canvas_security:
+        encryption_secret: "astringthatisactually32byteslong"
+        signing_secret: "astringthatisactually32byteslong"
 ```
 
 ## Developing
@@ -67,6 +72,15 @@ If you are creating a plugin that works with Canvas RCE , you should also put in
 fake data which can be done in the [fake data store](./src/rcs/fake.js).
 
 Custom plugins live under the plugins [directory](./src/rce/plugins/).
+
+## Adding new Modals and Trays
+
+or anything else that gets mounted in a react portal comes with 2 requirements
+
+1. Include the attribute `data-mce-component={true}` on the `<Modal>` or ` <Tray>`. This tells the RCE
+   that the modal is part of the RCE and not to fire a `blur` event when it closes and loses focus.
+1. Include `mountNode={instuPopupMountNode}` on thew `<Modal>` or `<Tray>`. The `instuiPopupMountNode`
+   function is imported from `src/util/fullscreenHelpers` within the `canvas-rce` package or `@instructure/canvs-rce` from outside. This function will mount modals in the `<div class="rce-wrapper">` when the RCE is fullscreen, where it will not be hidden behind the RCE.
 
 ## Upgrading TinyMCE
 
@@ -145,9 +159,9 @@ The <CanvasRce> toolbar prop looks like
 
 The RCE will add the `this`, `that`, and `another` toolbar items to the `format` toolbar.
 The items are the names registered with tinymce with `editor.ui.registry.addButton` by some plugin.
-See `demo/test-plugin/plugin.js` or anything under `src/rce/plugins` for
-examples. If the named toolbar exists, the items are merged in, removing any duplicates and appending the rest. If the named toolbar does not exist, it
-is created.
+See any of the `plugin.ts` files under `src/rce/plugins` for examples. If the named toolbar exists,
+the items are merged in, removing any duplicates and appending the rest. If the
+named toolbar does not exist, it is created.
 
 #### Adding to the menubar:
 

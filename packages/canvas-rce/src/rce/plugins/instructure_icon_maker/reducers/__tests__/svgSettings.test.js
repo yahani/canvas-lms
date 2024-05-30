@@ -22,39 +22,26 @@ describe('svgSettings()', () => {
   let initialState = {}
   const subject = action => svgSettings(initialState, action)
 
-  it('handles "SetEncodedImage" actions', () => {
-    const dataUrl = 'data:text/plain;base64,SGVsbG8sIFdvcmxkIQ=='
+  it('handles "SetImageSettings"', () => {
+    const imageSettings = {image: 'data:image/svg+xml;base64,PHN2Zaaaaaaaaa'}
 
     const nextState = subject({
-      type: 'SetEncodedImage',
-      payload: dataUrl
+      type: 'SetImageSettings',
+      payload: imageSettings,
     })
 
-    expect(nextState).toMatchObject({
-      encodedImage: dataUrl
-    })
+    expect(nextState.imageSettings).toEqual(imageSettings)
   })
 
-  it('handles "SetEncodedImageType" actions', () => {
-    const type = 'course'
+  it('handles "SetEmbedImage"', () => {
+    const embedImage = 'data:image/svg+xml;base64,PHN2Zaaaaaaaaa'
 
     const nextState = subject({
-      type: 'SetEncodedImageType',
-      payload: type
+      type: 'SetEmbedImage',
+      payload: embedImage,
     })
 
-    expect(nextState.encodedImageType).toEqual(type)
-  })
-
-  it('handles "SetEncodedImageName" actions', () => {
-    const name = 'banana.jpg'
-
-    const nextState = subject({
-      type: 'SetEncodedImageName',
-      payload: name
-    })
-
-    expect(nextState.encodedImageName).toEqual(name)
+    expect(nextState.embedImage).toEqual(embedImage)
   })
 
   it('handles "SetX"', () => {
@@ -62,7 +49,7 @@ describe('svgSettings()', () => {
 
     const nextState = subject({
       type: 'SetX',
-      payload: x
+      payload: x,
     })
 
     expect(nextState.x).toEqual(x)
@@ -73,7 +60,7 @@ describe('svgSettings()', () => {
 
     const nextState = subject({
       type: 'SetY',
-      payload: y
+      payload: y,
     })
 
     expect(nextState.y).toEqual(y)
@@ -84,7 +71,7 @@ describe('svgSettings()', () => {
 
     const nextState = subject({
       type: 'SetWidth',
-      payload: width
+      payload: width,
     })
 
     expect(nextState.width).toEqual(width)
@@ -95,7 +82,7 @@ describe('svgSettings()', () => {
 
     const nextState = subject({
       type: 'SetHeight',
-      payload: height
+      payload: height,
     })
 
     expect(nextState.height).toEqual(height)
@@ -104,7 +91,7 @@ describe('svgSettings()', () => {
   it('handles "SetTranslateX"', () => {
     const nextState = subject({
       type: 'SetTranslateX',
-      payload: 25
+      payload: 25,
     })
 
     expect(nextState.transform).toMatchInlineSnapshot(`"translate(25,undefined)"`)
@@ -113,7 +100,7 @@ describe('svgSettings()', () => {
   it('handles "SetTranslateY"', () => {
     const nextState = subject({
       type: 'SetTranslateY',
-      payload: 50
+      payload: 50,
     })
 
     expect(nextState.transform).toMatchInlineSnapshot(`"translate(undefined,50)"`)

@@ -17,6 +17,7 @@
  */
 
 import $ from 'jquery'
+import 'jquery-migrate'
 import MediaElementKeyActionHandler from '@canvas/media-comments/jquery/MediaElementKeyActionHandler'
 
 let handler
@@ -35,13 +36,13 @@ function initializeFakes() {
   fakeMejs = {
     MediaFeatures: {
       hasTrueNativeFullScreen: false,
-      isFirefox: false
-    }
+      isFirefox: false,
+    },
   }
   fakeEvent = {
     target: $target[0],
     keyCode: KeyCodes.ENTER,
-    preventDefault: sinon.stub()
+    preventDefault: sinon.stub(),
   }
   fakeMedia = {
     currentTime: 0,
@@ -51,21 +52,21 @@ function initializeFakes() {
     play: sinon.stub(),
     setCurrentTime: sinon.stub(),
     setVolume: sinon.stub(),
-    volume: 0.5
+    volume: 0.5,
   }
   fakePlayer = {
     exitFullScreen: sinon.stub(),
     isFullScreen: false,
     media: {
-      muted: false
+      muted: false,
     },
     options: {
       defaultSeekBackwardInterval: sinon.stub(),
       defaultSeekForwardInterval: sinon.stub(),
       defaultJumpBackwardInterval: sinon.stub(),
-      defaultJumpForwardInterval: sinon.stub()
+      defaultJumpForwardInterval: sinon.stub(),
     },
-    setMuted: sinon.stub()
+    setMuted: sinon.stub(),
   }
   fakePlayer.options.defaultSeekBackwardInterval.returns(seekInterval)
   fakePlayer.options.defaultSeekForwardInterval.returns(seekInterval)
@@ -77,7 +78,7 @@ QUnit.module('MediaElementKeyActionHandler events for specified controls', {
   setup() {
     initializeFakes()
     handler = new MediaElementKeyActionHandler(fakeMejs, fakePlayer, fakeMedia, fakeEvent)
-  }
+  },
 })
 
 test('handles captions', () => {
@@ -106,7 +107,7 @@ QUnit.module('MediaElementKeyActionHandler handlerKey', {
   setup() {
     initializeFakes()
     handler = new MediaElementKeyActionHandler(fakeMejs, fakePlayer, fakeMedia, fakeEvent)
-  }
+  },
 })
 
 test('returns the matching key based on where the event occurred', () => {
@@ -126,7 +127,7 @@ QUnit.module('MediaElementKeyActionHandler dispatch', {
   setup() {
     initializeFakes()
     handler = new MediaElementKeyActionHandler(fakeMejs, fakePlayer, fakeMedia, fakeEvent)
-  }
+  },
 })
 
 test('prevents default event behavior', () => {
@@ -138,7 +139,7 @@ QUnit.module('MediaElementKeyActionHandler captionsHandler', {
   setup() {
     initializeFakes()
     handler = new MediaElementKeyActionHandler(fakeMejs, fakePlayer, fakeMedia, fakeEvent)
-  }
+  },
 })
 
 test('returns undefined', () => {
@@ -149,7 +150,7 @@ QUnit.module('MediaElementKeyActionHandler fullscreenHandler', {
   setup() {
     initializeFakes()
     clickHandler = sinon.stub($target[0], 'click')
-  }
+  },
 })
 
 test('when SPACE is pressed, it simulates a click event', () => {
@@ -191,7 +192,7 @@ test('other key pressed it does nothing', () => {
 QUnit.module('MediaElementKeyActionHandler playpauseHandler', {
   setup() {
     initializeFakes()
-  }
+  },
 })
 
 test('when left key pressed it rewinds', () => {
@@ -308,7 +309,7 @@ test('when other key pressed does nothing', () => {
 QUnit.module('MediaElementKeyActionHandler volumeHandler', {
   setup() {
     initializeFakes()
-  }
+  },
 })
 
 test('when space pressed it mutes', () => {
@@ -366,7 +367,7 @@ test('when other key pressed it does nothing', () => {
 QUnit.module('MediaElementKeyActionHandler playerHandler', {
   setup() {
     initializeFakes()
-  }
+  },
 })
 
 test('when left key pressed it rewinds', () => {

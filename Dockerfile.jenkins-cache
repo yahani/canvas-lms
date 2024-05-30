@@ -1,101 +1,54 @@
-# syntax = starlord.inscloudgate.net/jenkins/dockerfile:1.0-experimental
+# syntax = starlord.inscloudgate.net/jenkins/dockerfile:1.5.2
 
-FROM starlord.inscloudgate.net/jenkins/busybox AS cache-helper-collect-gems
+FROM starlord.inscloudgate.net/jenkins/core:focal
+SHELL ["/usr/bin/bash", "-c"]
 WORKDIR /tmp/src
 RUN --mount=target=/tmp/src \
   mkdir -p /tmp/dst && \
-  cp --parents -rf \
+  set -o errexit -o errtrace -o nounset -o pipefail && \
+  shopt -s globstar && \
+  tar --sort=name --mtime='1970-01-01' --owner=0 --group=0 --numeric-owner --mode='a+rwX' -cf - \
     config/canvas_rails_switcher.rb \
     Gemfile \
+    Gemfile*.lock \
     Gemfile.d \
+    gems/gemfile_prefix.rb \
+    gems/**/Gemfile \
+    gems/**/Gemfile.lock \
+    gems/**/*.gemspec \
+    gems/**/gem_version.rb \
+    gems/**/version.rb \
+    gems/plugins/**/Gemfile.d \
+    vendor/gems/bundler-multilock \
     \
-    /tmp/dst && \
-  find gems \( \
-    -name "Gemfile" -o \
-    -name "*.gemspec" -o \
-    -name "gem_version.rb" -o \
-    -name "version.rb" \
-  \) -exec cp --parents -rf {} /tmp/dst \; && \
-  find gems/plugins \( \
-    -name "Gemfile.d" \
-  \) -exec cp --parents -rf {} /tmp/dst \; && \
-  find engines \( \
-    -name "Gemfile" -o \
-    -name "*.gemspec" -o \
-    -name "gem_version.rb" -o \
-    -name "version.rb" \
-  \) -exec cp --parents -rf {} /tmp/dst \; && \
-  find vendor -type d \( \
-    -not -name "qti_migration_tool" \
-    -maxdepth 1 \
-    -mindepth 1 \
-  \) -exec cp --parents -rf {} /tmp/dst \;
-
-FROM starlord.inscloudgate.net/jenkins/busybox AS cache-helper-collect-yarn
-WORKDIR /tmp/src
-RUN --mount=target=/tmp/src \
-  mkdir -p /tmp/dst && \
-  cp --parents -rf \
-    script/fix_inst_esm.js \
+    | tee /tmp/dst/ruby-runner.tar | md5sum > /tmp/dst/ruby-runner.tar.md5 && \
+  \
+  tar --sort=name --mtime='1970-01-01' --owner=0 --group=0 --numeric-owner --mode='a+rwX' -cf - \
     package.json \
     yarn.lock \
+    gems/plugins/**/package.json \
+    ui/engine/**/package.json \
+    ui/shared/**/package.json \
+    packages/**/package.json \
     \
-    /tmp/dst && \
-  find \
-    gems/canvas_i18nliner \
-    gems/plugins/* \
-    ui/shared/* \
-    packages/* \
-    \
-    -name 'package.json' \
-    -exec cp --parents {} /tmp/dst \;
-
-FROM starlord.inscloudgate.net/jenkins/busybox AS cache-helper-collect-packages
-WORKDIR /tmp/src
-RUN --mount=target=/tmp/src \
-  mkdir -p /tmp/dst && \
-  cp --parents -rf \
+    | tee /tmp/dst/yarn-runner.tar | md5sum > /tmp/dst/yarn-runner.tar.md5 && \
+  \
+  tar --sort=name --mtime='1970-01-01' --owner=0 --group=0 --numeric-owner --mode='a+rwX' -cf - \
+    --exclude='**/__mocks__' \
+    --exclude='**/__tests__' \
+    --exclude='**/*.test.js' \
+    ui/engine \
     packages \
     \
-    /tmp/dst
-
-FROM starlord.inscloudgate.net/jenkins/busybox AS cache-helper-collect-webpack
-WORKDIR /tmp/src
-RUN --mount=target=/tmp/src \
-  mkdir -p /tmp/dst && \
-  find gems -type d \
-    -not -path "gems" \
-    -not -path "gems/plugins" \
-    -maxdepth 2 \
-    -path "gems/*/lib" \
-    -exec cp -rf --parents {} /tmp/dst \; && \
-  find gems/canvas_i18nliner \
-    -not -path "gems/canvas_i18nliner" \
-    -not -path "gems/canvas_i18nliner/spec" \
-    -not -path "gems/canvas_i18nliner/spec/*" \
-    -exec cp -rf --parents {} /tmp/dst \; && \
-  find gems/plugins \( \
-    -path "*/app/coffeescripts" -o \
-    -path "*/app/jsx" -o \
-    -path "*/app/stylesheets" -o \
-    -path "*/app/views/jst" -o \
-    -path "*/public" -o \
-  \) -exec cp -rf --parents {} /tmp/dst \; && \
-  find gems/config_file \
-    -not -path "gems/config_file" \
-    -not -path "gems/config_file/spec" \
-    -not -path "gems/config_file/spec/*" \
-    -exec cp -rf --parents {} /tmp/dst \; && \
-  cp --parents -rf \
-    app/stylesheets \
+    | tee /tmp/dst/webpack-builder.tar | md5sum > /tmp/dst/webpack-builder.tar.md5 && \
+  \
+  tar --sort=name --mtime='1970-01-01' --owner=0 --group=0 --numeric-owner --mode='a+rwX' -cf - \
     bin \
     config/environments \
-    config/locales \
+    gems/{autoextend,canvas_color,canvas_text_helper,config_file,i18n_extraction,i18n_tasks,utf8_cleaner}/lib \
     lib/canvas/cdn \
     lib/rake \
     lib/tasks \
-    public \
-    ui \
     ui-build \
     \
     config/application.rb \
@@ -111,14 +64,70 @@ RUN --mount=target=/tmp/src \
     lib/brandable_css.rb \
     lib/canvas_logger.rb \
     lib/logging_filter.rb \
-    lib/request_cache.rb \
-    lib/temp_cache.rb \
     lib/canvas/cdn.rb \
     lib/base/canvas/reloader.rb \
     .i18nignore \
     .i18nrc \
     Rakefile \
     gulpfile.js \
-    webpack.config.js \
+    rspack.config.js \
     \
-    /tmp/dst
+    | tee /tmp/dst/webpack-runner-dependencies.tar | md5sum > /tmp/dst/webpack-runner-dependencies.tar.md5 && \
+  \
+  tar --sort=name --mtime='1970-01-01' --owner=0 --group=0 --numeric-owner --mode='a+rwX' -cf - \
+    --exclude='**/__mocks__' \
+    --exclude='**/__tests__' \
+    app/stylesheets \
+    config/locales \
+    gems/**/config/locales \
+    gems/plugins/**/app/coffeescripts \
+    gems/plugins/**/app/jsx \
+    gems/plugins/**/app/stylesheets \
+    gems/plugins/**/app/views/jst \
+    gems/plugins/**/public \
+    public \
+    ui \
+    \
+    | tee /tmp/dst/webpack-runner.tar | md5sum > /tmp/dst/webpack-runner.tar.md5 && \
+  \
+  tar --sort=name --mtime='1970-01-01' --owner=0 --group=0 --numeric-owner --mode='a+rwX' -cf - \
+    --exclude='vendor/qti_migration_tool' \
+    vendor \
+    \
+    | tee /tmp/dst/webpack-runner-vendor.tar | md5sum > /tmp/dst/webpack-runner-vendor.tar.md5 && \
+  \
+  { \
+    if [ -d 'spec' ]; then \
+      tar --sort=name --mtime='1970-01-01' --owner=0 --group=0 --numeric-owner --mode='a+rwX' -cf - \
+        app/stylesheets \
+        config/brandable_css.yml \
+        config/browsers.yml \
+        gems/plugins/**/app/coffeescripts \
+        gems/plugins/**/app/jsx \
+        gems/plugins/**/app/stylesheets \
+        gems/plugins/**/public \
+        gems/plugins/**/spec_canvas/coffeescripts \
+        jest \
+        packages \
+        public \
+        spec/coffeescripts \
+        spec/javascripts \
+        tmp \
+        ui \
+        ui-build \
+        jest.config.js \
+        karma.conf.js \
+        package.json \
+        tsconfig.json \
+        yarn.lock \
+        \
+        | tee /tmp/dst/js.tar | md5sum > /tmp/dst/js.tar.md5; \
+    fi \
+  } && \
+  touch /tmp/dst/environment.sh && \
+  echo "RUBY_RUNNER_MD5=$(cat /tmp/dst/ruby-runner.tar.md5 | cut -d' ' -f1)" >> /tmp/dst/environment.sh && \
+  echo "YARN_RUNNER_MD5=$(cat /tmp/dst/yarn-runner.tar.md5 | cut -d' ' -f1)" >> /tmp/dst/environment.sh && \
+  echo "WEBPACK_BUILDER_MD5=$(cat /tmp/dst/webpack-builder.tar.md5 | cut -d' ' -f1)" >> /tmp/dst/environment.sh && \
+  echo "WEBPACK_RUNNER_MD5=$(cat /tmp/dst/webpack-runner.tar.md5 | cut -d' ' -f1)" >> /tmp/dst/environment.sh && \
+  echo "WEBPACK_RUNNER_DEPENDENCIES_MD5=$(cat /tmp/dst/webpack-runner-dependencies.tar.md5 | cut -d' ' -f1)" >> /tmp/dst/environment.sh && \
+  echo "WEBPACK_RUNNER_VENDOR_MD5=$(cat /tmp/dst/webpack-runner-vendor.tar.md5 | cut -d' ' -f1)" >> /tmp/dst/environment.sh

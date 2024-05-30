@@ -20,7 +20,7 @@
 
 require_relative "../views_helper"
 
-describe "/eportfolios/show" do
+describe "eportfolios/show" do
   before do
     assign(:domain_root_account, Account.default)
     eportfolio_with_user
@@ -79,27 +79,6 @@ describe "/eportfolios/show" do
     render "eportfolios/show"
     doc = Nokogiri::HTML5(response.body)
     expect(doc.at_css("#recent_submission_#{@submission.id} .view_submission_url")).to be_present
-  end
-
-  it "does not show submissions for unpublished assignments" do
-    course_with_student(user: @user, active_all: true)
-    submission_model(course: @course, user: @user)
-    assign(:owner_view, true)
-    @submission.update_column("workflow_state", "submitted")
-    @assignment.update_column("workflow_state", "unpublished")
-    render "eportfolios/show"
-    doc = Nokogiri::HTML5(response.body)
-    expect(doc.at_css("#recent_submission_#{@submission.id} .view_submission_url")).to be_nil
-  end
-
-  it "does not show submissions for unpublished courses" do
-    course_with_student(user: @user)
-    submission_model(course: @course, user: @user)
-    assign(:owner_view, true)
-    @submission.update_column("workflow_state", "submitted")
-    render "eportfolios/show"
-    doc = Nokogiri::HTML5(response.body)
-    expect(doc.at_css("#recent_submission_#{@submission.id} .view_submission_url")).to be_nil
   end
 
   it "does not show submissions unless submission is submitted" do

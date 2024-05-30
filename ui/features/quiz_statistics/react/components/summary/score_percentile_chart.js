@@ -17,7 +17,7 @@
  */
 
 import createChartComponent, {addTitle, addDescription} from '../../hocs/createChartComponent'
-import d3 from 'd3/d3'
+import d3 from 'd3'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import PropTypes from 'prop-types'
 
@@ -33,36 +33,28 @@ const MARGIN_L = 34
 
 const ScorePercentileChart = createChartComponent({
   createChart(node, props) {
-    let svg, width, height, x, xAxis
-    let barContainer
-
-    width = props.width - MARGIN_L - MARGIN_R
-    height = props.height - MARGIN_T - MARGIN_B
+    const width = props.width - MARGIN_L - MARGIN_R
+    const height = props.height - MARGIN_T - MARGIN_B
 
     // the x scale is static since it will always represent the 100
     // percentiles, so we can avoid recalculating it on every update:
-    x = d3.scale.ordinal().rangeRoundBands([0, width], props.barPadding, 0)
+    const x = d3.scale.ordinal().rangeRoundBands([0, width], props.barPadding, 0)
     x.domain(d3.range(0, 101, 1))
 
     this.y = d3.scale.linear().range([height, 0])
 
-    xAxis = d3.svg
+    const xAxis = d3.svg
       .axis()
       .scale(x)
       .orient('bottom')
       .tickValues(d3.range(0, 101, 10))
-      .tickFormat(function(d) {
+      .tickFormat(function (d) {
         return d + '%'
       })
 
-    this.yAxis = d3.svg
-      .axis()
-      .scale(this.y)
-      .orient('left')
-      .outerTickSize(0)
-      .ticks(props.numTicks)
+    this.yAxis = d3.svg.axis().scale(this.y).orient('left').outerTickSize(0).ticks(props.numTicks)
 
-    svg = d3
+    const svg = d3
       .select(node)
       .attr('role', 'document')
       .attr('aria-role', 'document')
@@ -77,9 +69,7 @@ const ScorePercentileChart = createChartComponent({
 
     this.title = addTitle(svg, '')
 
-    const descriptionHolder = this.wrapperRef.current
-      ? d3.select(this.wrapperRef.current)
-      : svg
+    const descriptionHolder = this.wrapperRef.current ? d3.select(this.wrapperRef.current) : svg
     this.description = addDescription(descriptionHolder, '')
 
     svg
@@ -95,7 +85,7 @@ const ScorePercentileChart = createChartComponent({
       .attr('aria-hidden', true)
       .call(this.yAxis)
 
-    barContainer = svg.append('g')
+    const barContainer = svg.append('g')
 
     this.x = x
     this.height = height
@@ -107,29 +97,28 @@ const ScorePercentileChart = createChartComponent({
   },
 
   updateChart(svg, props) {
-    let labelOptions
     const data = (this.chartData = this.calculateChartData(props))
     const avgScore = (props.scoreAverage / props.pointsPossible) * 100.0
-    labelOptions = this.calculateStudentStatistics(avgScore, data)
+    const labelOptions = this.calculateStudentStatistics(avgScore, data)
     let textForScreenreaders = I18n.t(
       'audible_chart_description',
       '%{above_average} students scored above or at the average, and %{below_average} below. ',
       {
         above_average: labelOptions.aboveAverage,
-        below_average: labelOptions.belowAverage
+        below_average: labelOptions.belowAverage,
       }
     )
 
-    data.forEach(function(datum, i) {
+    data.forEach(function (datum, i) {
       if (datum !== 0) {
         textForScreenreaders += I18n.t(
           {
             one: '1 student in percentile %{percentile}. ',
-            other: '%{count} students in percentile %{percentile}. '
+            other: '%{count} students in percentile %{percentile}. ',
           },
           {
             count: datum,
-            percentile: i + ''
+            percentile: i + '',
           }
         )
       }
@@ -142,46 +131,34 @@ const ScorePercentileChart = createChartComponent({
   },
 
   renderBars(svg, props) {
-    let height, x, y, bars
-    let highest
-    let step
-    let visibilityThreshold
     const data = this.chartData
 
-    height = this.height
-    highest = max(data)
+    const height = this.height
+    const highest = max(data)
 
-    x = this.x
-    y = this.y
+    const x = this.x
+    const y = this.y
 
-    y.range([0, highest])
-      .rangeRound([height, 0])
-      .domain([0, highest])
+    y.range([0, highest]).rangeRound([height, 0]).domain([0, highest])
 
-    step = -Math.ceil((highest + 1) / props.numTicks)
+    const step = -Math.ceil((highest + 1) / props.numTicks)
 
-    this.yAxis.tickValues(d3.range(highest, 0, step)).tickFormat(function(d) {
+    this.yAxis.tickValues(d3.range(highest, 0, step)).tickFormat(function (d) {
       return Math.floor(d)
     })
 
-    this.yAxisContainer
-      .call(this.yAxis)
-      .selectAll('text')
-      .attr('dy', '.8em')
-    this.yAxisContainer
-      .selectAll('line')
-      .attr('y1', '.5')
-      .attr('y2', '.5')
+    this.yAxisContainer.call(this.yAxis).selectAll('text').attr('dy', '.8em')
+    this.yAxisContainer.selectAll('line').attr('y1', '.5').attr('y2', '.5')
 
-    visibilityThreshold = Math.max(highest / 100, props.minBarHeight)
+    const visibilityThreshold = Math.max(highest / 100, props.minBarHeight)
 
-    bars = svg.selectAll('rect.bar').data(data)
+    const bars = svg.selectAll('rect.bar').data(data)
 
     bars
       .enter()
       .append('rect')
       .attr('class', 'bar')
-      .attr('x', function(d, i) {
+      .attr('x', function (d, i) {
         return x(i)
       })
       .attr('y', height)
@@ -192,10 +169,10 @@ const ScorePercentileChart = createChartComponent({
       .transition()
       .delay(props.animeDelay)
       .duration(props.animeDuration)
-      .attr('y', function(d) {
+      .attr('y', function (d) {
         return y(d) - visibilityThreshold
       })
-      .attr('height', function(d) {
+      .attr('height', function (d) {
         return height - y(d) + visibilityThreshold
       })
 
@@ -221,20 +198,20 @@ const ScorePercentileChart = createChartComponent({
 
     return {
       aboveAverage: scores
-        .filter(function(__y, percentile) {
+        .filter(function (__y, percentile) {
           return percentile >= avgScore
         })
-        .reduce(function(count, y) {
+        .reduce(function (count, y) {
           return count + y
         }, 0),
 
       belowAverage: scores
-        .filter(function(__y, percentile) {
+        .filter(function (__y, percentile) {
           return percentile < avgScore
         })
-        .reduce(function(count, y) {
+        .reduce(function (count, y) {
           return count + y
-        }, 0)
+        }, 0),
     }
   },
 
@@ -242,16 +219,16 @@ const ScorePercentileChart = createChartComponent({
    * @private
    */
   calculateChartData(props) {
-    let percentile, upperBound
+    let percentile
     const set = []
     const scores = props.scores || {}
     const highest = max(
-      Object.keys(scores).map(function(score) {
+      Object.keys(scores).map(function (score) {
         return parseInt(score, 10)
       })
     )
 
-    upperBound = max([101, highest])
+    const upperBound = max([101, highest])
 
     for (percentile = 0; percentile < upperBound; ++percentile) {
       set[percentile] = scores['' + percentile] || 0
@@ -261,7 +238,7 @@ const ScorePercentileChart = createChartComponent({
     set[100] = sum(set.splice(100, set.length))
 
     return set
-  }
+  },
 })
 
 ScorePercentileChart.displayName = 'ScorePercentileChart'
@@ -273,13 +250,13 @@ ScorePercentileChart.defaultProps = {
   height: 220,
   barPadding: 0.25,
   minBarHeight: 1,
-  numTicks: 5
+  numTicks: 5,
 }
 
 ScorePercentileChart.propTypes = {
   scores: PropTypes.object,
   scoreAverage: PropTypes.number,
-  pointsPossible: PropTypes.number
+  pointsPossible: PropTypes.number,
 }
 
 export default ScorePercentileChart

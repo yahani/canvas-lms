@@ -64,11 +64,15 @@ Rails.configuration.to_prepare do
         AuthenticationMethods::AccessTokenScopeError
         AuthenticationMethods::LoggedOutError
         ActionController::InvalidAuthenticityToken
+        Delayed::Backend::JobExpired
         Folio::InvalidPage
         Turnitin::Errors::SubmissionNotScoredError
         Rack::QueryParser::InvalidParameterError
         PG::UnableToSend
       ]
+
+      # Add some dirs to the the default (db, engines, gems, script)-this is combined with the base dir so vendored gems won't be included
+      config.app_dirs_pattern = /(app|bin|config|db|engines|gems|lib|script)/
     end
   end
 
@@ -82,11 +86,12 @@ Rails.configuration.to_prepare do
     SentryProxy.register_ignorable_error(error)
   end
 
-  # This error can be caused by LTI tools.
+  # These errors can be caused by LTI tools.
   SentryProxy.register_ignorable_error("Grade pass back failure")
+  SentryProxy.register_ignorable_error("Grade pass back unsupported")
 
   CanvasErrors.register!(:sentry_notification) do |exception, data, level|
-    setting = SentryExtensions::Settings.get("sentry_error_logging_enabled", "true")
+    setting = SentryExtensions::Settings.get("sentry_error_logging_enabled", "true", skip_cache: data[:skip_setting_cache])
     SentryProxy.capture(exception, data, level) if setting == "true"
   end
 end

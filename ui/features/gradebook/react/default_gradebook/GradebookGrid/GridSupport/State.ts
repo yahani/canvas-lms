@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2017 - present Instructure, Inc.
  *
@@ -34,7 +35,7 @@ function getItemMetadata(data, rowIndex) {
   }
 
   return {
-    cssClasses: classes.join(' ')
+    cssClasses: classes.join(' '),
   }
 }
 
@@ -134,7 +135,7 @@ export default class State {
       this.previousLocation = {
         region,
         columnId: this.activeLocation.columnId,
-        rowId: region === 'body' ? this.grid.getData()[attr.row].id : null
+        rowId: region === 'body' ? this.grid.getData()[attr.row].id : null,
       }
     }
   }

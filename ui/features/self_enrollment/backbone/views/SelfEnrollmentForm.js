@@ -19,14 +19,14 @@
 import $ from 'jquery'
 import Backbone from '@canvas/backbone'
 import registrationErrors from '@canvas/normalize-registration-errors'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import '@canvas/jquery/jquery.instructure_forms'
 import '@canvas/jquery/jquery.ajaxJSON'
 
 export default class SelfEnrollmentForm extends Backbone.View {
   static initClass() {
     this.prototype.events = {
       'change input[name=initial_action]': 'changeAction',
-      'click #logout_link': 'logOutAndRefresh'
+      'click #logout_link': 'logOutAndRefresh',
     }
   }
 
@@ -40,20 +40,23 @@ export default class SelfEnrollmentForm extends Backbone.View {
 
     if (ENV.ACCOUNT.recaptcha_key) {
       const that = this
-      $(window).on('load', function() {
-        that.dataCaptchaId = grecaptcha.render(that.$el.find('.g-recaptcha')[0], {
-          sitekey: ENV.ACCOUNT.recaptcha_key,
-          callback: () => {
-            that.recaptchaPassed = true
-            that.$el.find('#submit_button').prop('disabled', false)
-          },
-          'expired-callback': () => {
-            that.recaptchaPassed = false
-            that.$el.find('#submit_button').prop('disabled', true)
-          }
-        })
+      $(window).on('load', function () {
+        if (typeof grecaptcha !== 'undefined') {
+          // eslint-disable-next-line no-undef
+          that.dataCaptchaId = grecaptcha.render(that.$el.find('.g-recaptcha')[0], {
+            sitekey: ENV.ACCOUNT.recaptcha_key,
+            callback: () => {
+              that.recaptchaPassed = true
+              that.$el.find('#submit_button').prop('disabled', false)
+            },
+            'expired-callback': () => {
+              that.recaptchaPassed = false
+              that.$el.find('#submit_button').prop('disabled', true)
+            },
+          })
+        }
       })
-      if (this.action == 'create') {
+      if (this.action === 'create') {
         this.$el.find('#submit_button').prop('disabled', true)
       }
     }
@@ -62,7 +65,7 @@ export default class SelfEnrollmentForm extends Backbone.View {
       success: data => this.success(data),
       errorFormatter: errors => this.errorFormatter(errors),
       error: () => this.clearCaptcha(),
-      disableWhileLoading: 'spin_on_success'
+      disableWhileLoading: 'spin_on_success',
     })
   }
 
@@ -102,7 +105,7 @@ export default class SelfEnrollmentForm extends Backbone.View {
     )
   }
 
-  success(data) {
+  success(_data) {
     if (this.action === 'enroll') {
       // they should now be authenticated (either registered or pre_registered)
       let q = window.location.search
@@ -130,7 +133,10 @@ export default class SelfEnrollmentForm extends Backbone.View {
 
   clearCaptcha() {
     if (ENV.ACCOUNT.recaptcha_key) {
-      grecaptcha.reset(this.dataCaptchaId)
+      if (typeof grecaptcha !== 'undefined') {
+        // eslint-disable-next-line no-undef
+        grecaptcha.reset(this.dataCaptchaId)
+      }
       this.$el.find('#submit_button').prop('disabled', true)
     }
   }
@@ -151,7 +157,7 @@ export default class SelfEnrollmentForm extends Backbone.View {
 
   loginErrors(errors) {
     const error = errors[errors.length - 1]
-    return {'pseudonym[password]': error}
+    return $.flashError({html: error}, 30000)
   }
 
   enrollErrors(errors) {
@@ -162,7 +168,7 @@ export default class SelfEnrollmentForm extends Backbone.View {
       ) === 'already_enrolled'
     ) {
       // just reload if already enrolled
-      location.reload(true)
+      window.location.reload(true)
       return []
     }
 
@@ -178,7 +184,7 @@ export default class SelfEnrollmentForm extends Backbone.View {
 
   logOut(refresh = false) {
     return $.ajaxJSON('/logout', 'DELETE', {}, () => {
-      if (refresh) location.reload(true)
+      if (refresh) window.location.reload(true)
     })
   }
 

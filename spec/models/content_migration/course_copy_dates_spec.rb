@@ -34,7 +34,8 @@ describe ContentMigration do
                                        lock_at: @old_start + 3.days,
                                        peer_reviews_due_at: @old_start + 4.days)
 
-        att = Attachment.create!(context: @copy_from, filename: "hi.txt",
+        att = Attachment.create!(context: @copy_from,
+                                 filename: "hi.txt",
                                  uploaded_data: StringIO.new("stuff"),
                                  folder: Folder.unfiled_folder(@copy_from))
         att.unlock_at = @old_start - 2.days
@@ -46,7 +47,7 @@ describe ContentMigration do
                                             lock_at: @old_start + 2.days)
         @copy_from.attachments.create!(filename: "blah",
                                        uploaded_data: StringIO.new("blah"),
-                                       folder: folder)
+                                       folder:)
 
         @copy_from.quizzes.create!(due_at: "05 Jul 2012 06:00:00 UTC +00:00",
                                    unlock_at: @old_start + 1.day,
@@ -63,6 +64,10 @@ describe ContentMigration do
         @copy_from.calendar_events.create!(title: "an event",
                                            start_at: @old_start + 4.days,
                                            end_at: @old_start + 4.days + 1.hour)
+        @copy_from.wiki_pages.create!(title: "a page",
+                                      workflow_state: "unpublished",
+                                      todo_date: @old_start + 7.days,
+                                      publish_at: @old_start + 3.days)
         cm = @copy_from.context_modules.build(name: "some module", unlock_at: @old_start + 1.day)
         cm.save!
 
@@ -116,6 +121,10 @@ describe ContentMigration do
         new_event = @copy_to.calendar_events.first
         expect(new_event.start_at.to_i).to eq (@new_start + 4.days).to_i
         expect(new_event.end_at.to_i).to eq (@new_start + 4.days + 1.hour).to_i
+
+        new_page = @copy_to.wiki_pages.first
+        expect(new_page.todo_date.to_i).to eq (@new_start + 7.days).to_i
+        expect(new_page.publish_at.to_i).to eq (@new_start + 3.days).to_i
 
         new_mod = @copy_to.context_modules.first
         expect(new_mod.unlock_at.to_i).to eq (@new_start + 1.day).to_i
@@ -250,10 +259,10 @@ describe ContentMigration do
           opts = {
             everything: true,
             shift_dates: true,
-            old_start_date: old_start_date,
-            old_end_date: old_end_date,
-            new_start_date: new_start_date,
-            new_end_date: new_end_date
+            old_start_date:,
+            old_end_date:,
+            new_start_date:,
+            new_end_date:
           }
           opts[:time_zone] = options[:time_zone].name if options.include?(:time_zone)
           @cm.copy_options = @cm.copy_options.merge(opts)
@@ -504,7 +513,8 @@ describe ContentMigration do
       @new_start = Time.zone.parse("05 Aug 2012 06:00:00 UTC +00:00")
 
       all_day_event = @copy_from.calendar_events.create!(title: "an event",
-                                                         start_at: @old_start + 4.days, all_day: true)
+                                                         start_at: @old_start + 4.days,
+                                                         all_day: true)
 
       options = {
         everything: true,
@@ -532,7 +542,8 @@ describe ContentMigration do
       @old_start = Time.zone.parse("01 Jul 2012 06:00:00 UTC +00:00")
 
       all_day_event = @copy_from.calendar_events.create!(title: "an event",
-                                                         start_at: @old_start + 4.days, all_day: true)
+                                                         start_at: @old_start + 4.days,
+                                                         all_day: true)
 
       options = {
         everything: true,

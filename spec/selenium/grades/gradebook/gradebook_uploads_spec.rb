@@ -47,7 +47,8 @@ describe "Gradebook - uploads" do
 
   it "updates grades for assignments with GPA Scale grading type correctly", priority: "1" do
     assignment = @course.assignments.create!(title: "GPA Scale Assignment",
-                                             grading_type: "gpa_scale", points_possible: 5)
+                                             grading_type: "gpa_scale",
+                                             points_possible: 5)
     assignment.grade_student(@student, grade: "D", grader: @teacher)
     _filename, fullpath, _data = gradebook_file("gradebook0.csv",
                                                 "Student Name,ID,Section,GPA Scale Assignment",
@@ -160,7 +161,7 @@ describe "Gradebook - uploads" do
     expect(@course.assignments.count).to eql(assignment_count + 1)
     assignment = @course.assignments.order(:created_at).last
     expect(assignment.name).to eq "Assignment 2"
-    expect(assignment.submissions.having_submission.count).to eql 0
+    expect(assignment.submissions.having_submission.count).to be 0
     expect(f("#gradebook_wrapper")).to be_displayed
   end
 
@@ -350,9 +351,7 @@ describe "Gradebook - uploads" do
       Gradebook.visit_upload(@course1)
     end
 
-    it "finds changes to override scores when flag enabled" do
-      Account.site_admin.enable_feature!(:import_override_scores_in_gradebook)
-
+    it "finds changes to override scores" do
       _filename, fullpath, _data = gradebook_file("gradebook.csv",
                                                   "Student Name,ID,Section,Assignment 1,Override Score",
                                                   "User,#{@student.id},,10,100")
@@ -367,21 +366,6 @@ describe "Gradebook - uploads" do
 
       expect(ff(".slick-header-column.assignment").length).to eq 1
       expect(f("#assignments_without_changes_alert")).to be_displayed
-    end
-
-    it "does not find changes to override scores when flag disabled" do
-      Account.site_admin.disable_feature!(:import_override_scores_in_gradebook)
-
-      _filename, fullpath, _data = gradebook_file("gradebook.csv",
-                                                  "Student Name,ID,Section,Assignment 1,Override Score",
-                                                  "User,#{@student.id},,10,100")
-
-      Gradebook.grades_uploaded_data.send_keys(fullpath)
-      wait_for_new_page_load { Gradebook.grades_new_upload.submit }
-      run_jobs
-      Gradebook.wait_for_spinner
-
-      expect(f("#no_changes_detected")).to be_displayed
     end
   end
 end

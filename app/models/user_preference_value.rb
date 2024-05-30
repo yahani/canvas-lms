@@ -26,7 +26,7 @@
 class UserPreferenceValue < ActiveRecord::Base
   belongs_to :user
   serialize :value
-  serialize :sub_key, JSON # i'm too lazy to force a distinction between integer and string/symbol keys
+  serialize :sub_key, coder: JSON # i'm too lazy to force a distinction between integer and string/symbol keys
 
   # this means that the preference value is no longer stored on the user object
   # and is in it's own record in the db
@@ -37,7 +37,7 @@ class UserPreferenceValue < ActiveRecord::Base
     # e.g. :course_grades_assignment_order is always looking at data for one course at a time
     # so rather than just storing another big serialized blob somewhere else, actually break it apart into separate rows
     @preference_settings ||= {}
-    @preference_settings[key] = { use_sub_keys: use_sub_keys }
+    @preference_settings[key] = { use_sub_keys: }
   end
 
   add_user_preference :closed_notifications
@@ -49,13 +49,18 @@ class UserPreferenceValue < ActiveRecord::Base
   add_user_preference :gradebook_column_order, use_sub_keys: true
   add_user_preference :gradebook_column_size, use_sub_keys: true
   add_user_preference :gradebook_settings, use_sub_keys: true
-  add_user_preference :isolated_view_deeply_nested_alert
+  add_user_preference :split_screen_view_deeply_nested_alert
   add_user_preference :new_user_tutorial_statuses
   add_user_preference :selected_calendar_contexts
+  add_user_preference :enabled_account_calendars
+  add_user_preference :account_calendar_events_seen
+  add_user_preference :visited_tabs
   add_user_preference :send_scores_in_emails_override, use_sub_keys: true
   add_user_preference :unread_submission_annotations, use_sub_keys: true
   add_user_preference :unread_rubric_comments, use_sub_keys: true
   add_user_preference :module_links_default_new_tab
+  add_user_preference :viewed_auto_subscribed_account_calendars
+  add_user_preference :suppress_faculty_journal_deprecation_notice # remove when :deprecate_faculty_journal is removed
 
   def self.settings
     @preference_settings ||= {}
@@ -64,38 +69,10 @@ class UserPreferenceValue < ActiveRecord::Base
   end
 
   module UserMethods
-    # i could just stuff all this in user.rb directly but it's so full already
-    def needs_preference_migration?
-      preferences.any? do |key, value|
-        UserPreferenceValue.settings[key] && value.present? && value != EXTERNAL
-      end
-    end
-
-    # can remove these when all preferences have been migrated
-    def migrate_preferences_if_needed
-      return unless needs_preference_migration?
-
-      reorganize_gradebook_preferences # may as well while we're at it
-      UserPreferenceValue.settings.each do |key, settings|
-        value = preferences[key]
-        next unless value.present?
-        next if value == EXTERNAL
-
-        if settings[:use_sub_keys]
-          value.each do |sub_key, sub_value|
-            create_user_preference_value(key, sub_key, sub_value)
-          end
-        else
-          create_user_preference_value(key, nil, value)
-        end
-        preferences[key] = EXTERNAL
-      end
-    end
-
     def get_preference(key, sub_key = nil)
       value = preferences[key]
       if value == EXTERNAL
-        id, value = user_preference_values.where(key: key, sub_key: sub_key).pluck(:id, :value).first
+        id, value = user_preference_values.where(key:, sub_key:).pluck(:id, :value).first
         mark_preference_row(key, sub_key) if id # if we know there's a row
         value
       elsif sub_key
@@ -117,9 +94,6 @@ class UserPreferenceValue < ActiveRecord::Base
       end
       raise "invalid key `#{key}`" unless UserPreferenceValue.settings[key]
 
-      # don't bother trying to merge things in - just move everything over
-      migrate_preferences_if_needed
-
       if value.present? || sub_key
         if value.nil?
           remove_user_preference_value(key, sub_key)
@@ -137,7 +111,7 @@ class UserPreferenceValue < ActiveRecord::Base
 
     def clear_all_preferences_for(key)
       if UserPreferenceValue.settings[key]&.[](:use_sub_keys)
-        user_preference_values.where(key: key).delete_all
+        user_preference_values.where(key:).delete_all
         @existing_preference_rows&.clear
         preferences[key] = {}
         save! if changed?
@@ -147,7 +121,7 @@ class UserPreferenceValue < ActiveRecord::Base
     end
 
     def preference_row_exists?(key, sub_key)
-      @existing_preference_rows&.include?([key, sub_key]) || user_preference_values.where(key: key, sub_key: sub_key).exists?
+      @existing_preference_rows&.include?([key, sub_key]) || user_preference_values.where(key:, sub_key:).exists?
     end
 
     def mark_preference_row(key, sub_key)
@@ -158,7 +132,7 @@ class UserPreferenceValue < ActiveRecord::Base
     def create_user_preference_value(key, sub_key, value)
       UserPreferenceValue.unique_constraint_retry do |retry_count|
         if retry_count == 0
-          user_preference_values.create!(key: key, sub_key: sub_key, value: value)
+          user_preference_values.create!(key:, sub_key:, value:)
         else
           update_user_preference_value(key, sub_key, value) # may already exist
         end
@@ -167,11 +141,11 @@ class UserPreferenceValue < ActiveRecord::Base
     end
 
     def update_user_preference_value(key, sub_key, value)
-      user_preference_values.where(key: key, sub_key: sub_key).update_all(value: value)
+      user_preference_values.where(key:, sub_key:).update_all(value:)
     end
 
     def remove_user_preference_value(key, sub_key)
-      user_preference_values.where(key: key, sub_key: sub_key).delete_all
+      user_preference_values.where(key:, sub_key:).delete_all
       @existing_preference_rows&.delete([key, sub_key])
     end
 

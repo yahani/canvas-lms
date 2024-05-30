@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2017 - present Instructure, Inc.
  *
@@ -37,7 +38,7 @@ export const defaultColors = {
   steel: '#E9EDF5', // (・3・)
   pink: '#F8EAF6',
   lavender: '#F0E8EF',
-  white: '#FFFFFF'
+  white: '#FFFFFF',
 }
 
 const defaultStatusColors = {
@@ -46,16 +47,16 @@ const defaultStatusColors = {
   extended: defaultColors.lavender,
   late: defaultColors.blue,
   missing: defaultColors.salmon,
-  resubmitted: defaultColors.green
+  resubmitted: defaultColors.green,
 }
 
-export function statusColors(userColors = {}) {
+export function statusColors(userColors = {}): StatusColors {
   return {
     ...defaultStatusColors,
-    ...userColors
+    ...userColors,
   }
 }
 
-export function darken(color, percent) {
+export function darken(color: string, percent: number) {
   return Color(color).darken(percent)
 }

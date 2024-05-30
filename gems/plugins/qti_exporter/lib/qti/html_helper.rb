@@ -25,7 +25,6 @@ module Qti
     WEBCT_REL_REGEX = "/webct/RelativeResourceManager/Template/"
 
     def sanitize_html_string(string, remove_extraneous_nodes = false)
-      string = escape_unmatched_brackets(string)
       sanitize_html!(Nokogiri::HTML5.fragment(string), remove_extraneous_nodes)
     end
 
@@ -106,37 +105,6 @@ module Qti
       @path_map[path] || @path_map[@sorted_paths.find { |k| k.end_with?(path) }]
     end
 
-    # try to escape unmatched '<' and '>' characters because some people don't format their QTI correctly...
-    def escape_unmatched_brackets(string)
-      unmatched = false
-      lcount = 0
-      string.scan(/[<>]/) do |s|
-        if s == ">"
-          if lcount == 0
-            unmatched = true
-          else
-            lcount -= 1
-          end
-        else
-          lcount += 1
-        end
-      end
-      return string unless unmatched || lcount > 0
-
-      if string.include?("data-equation-content")
-        # try to fix a weird issue with unescaped brackets inside html attribute values
-        string = Nokogiri::HTML5.fragment(string).to_xml rescue string
-      end
-
-      string.split(/(<[^<>]*>)/m).map do |sub|
-        if sub.strip.start_with?("<") && sub.strip.end_with?(">")
-          sub
-        else
-          sub.gsub("<", "&lt;").gsub(">", "&gt;")
-        end
-      end.join
-    end
-
     # returns a tuple of [text, html]
     # html is null if it's not an html blob
     def detect_html(node)
@@ -146,7 +114,7 @@ module Qti
 
       text = clear_html(node.text.gsub(/\s+/, " ")).strip
       html_node = node.at_css("div.html") || (node.name.casecmp?("div") && node["class"] =~ /\bhtml\b/) || @flavor == Qti::Flavors::ANGEL
-      is_html = (html_node && @flavor == Qti::Flavors::CANVAS)
+      is_html = html_node && @flavor == Qti::Flavors::CANVAS
       # heuristic for detecting html: the sanitized html node is more than just a container for a single text node
       sanitized = sanitize_html!(html_node ? Nokogiri::HTML5.fragment(node.text) : node, true) { |s| is_html ||= !(s.children.size == 1 && s.children.first.is_a?(Nokogiri::XML::Text)) }
       if sanitized.present?

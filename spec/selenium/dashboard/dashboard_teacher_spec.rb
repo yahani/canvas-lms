@@ -57,6 +57,34 @@ describe "dashboard" do
       end
     end
 
+    context "render both to do lists" do
+      before do
+        @assignment = assignment_model({ submission_types: "online_text_entry", course: @course })
+        student = user_with_pseudonym(active_user: true, username: "student@example.com", password: "qwertyuiop")
+        @course.enroll_user(student, "StudentEnrollment", enrollment_state: "active")
+        @assignment.reload
+        @assignment.submit_homework(student, { submission_type: "online_text_entry", body: "ABC" })
+        @assignment.reload
+        @course.enroll_user(@teacher, "StudentEnrollment", enrollment_state: "active")
+      end
+
+      it "displays teacher to do list if user has both enrollments when the feature is disabled", priority: "1" do
+        get "/"
+
+        expect(f(".todo-list-header")).to include_text("To Do")
+        expect(f(".to-do-list > li")).to include_text("Grade " + @assignment.title)
+      end
+
+      it "displays student and teacher to do lists if user has both enrollments when the feature is enabled", priority: "1" do
+        Account.site_admin.enable_feature!(:render_both_to_do_lists)
+        get "/"
+
+        todo_headers = ff(".todo-list-header")
+        expect(todo_headers[0]).to include_text("Student To Do")
+        expect(todo_headers[1]).to include_text("Teacher To Do")
+      end
+    end
+
     it "is able to ignore an assignment until the next submission", priority: "1" do
       assignment = assignment_model({ submission_types: "online_text_entry", course: @course })
       student = user_with_pseudonym(active_user: true, username: "student@example.com", password: "qwertyuiop")
@@ -104,6 +132,7 @@ describe "dashboard" do
         expect(fj('.fake-link:contains("Unnamed")')).to be_present
       end
 
+      # EVAL-3711 Remove this test when instui_nav feature flag is removed
       it "does not show an unpublished assignment under recent activity under dashboard", priority: "2" do
         # manually creating assignment as assignment created through backend are published by default
         get "/courses/#{@course.id}/assignments"
@@ -114,7 +143,29 @@ describe "dashboard" do
         wait_for_ajaximations
         f("#assignment_name").send_keys("unpublished assignment")
         f("input[type=checkbox][id=assignment_text_entry]").click
-        f(".datePickerDateField[data-date-type='due_at']").send_keys(Time.zone.now + 1.day)
+        f(".datePickerDateField[data-date-type='due_at']").send_keys(1.day.from_now)
+
+        expect_new_page_load { f(".btn-primary[type=submit]").click }
+        wait_for_ajaximations
+
+        get "/"
+        f("#DashboardOptionsMenu_Container button").click
+        fj('span[role="menuitemradio"]:contains("Recent Activity")').click
+        expect(f(".no_recent_messages")).to be_truthy
+      end
+
+      it "does not show an unpublished assignment under recent activity under dashboard with the instui nav feature flag on", priority: "2" do
+        @course.root_account.enable_feature!(:instui_nav)
+        # manually creating assignment as assignment created through backend are published by default
+        get "/courses/#{@course.id}/assignments"
+        wait_for_ajaximations
+
+        # create assignment
+        f("[data-testid='new_assignment_button']").click
+        wait_for_ajaximations
+        f("#assignment_name").send_keys("unpublished assignment")
+        f("input[type=checkbox][id=assignment_text_entry]").click
+        f(".datePickerDateField[data-date-type='due_at']").send_keys(1.day.from_now)
 
         expect_new_page_load { f(".btn-primary[type=submit]").click }
         wait_for_ajaximations
@@ -204,28 +255,53 @@ describe "dashboard" do
         assignment.submit_homework(@student, { submission_type: "online_text_entry", body: "ABC" })
       end
 
-      it "focuses on the previous ignore link after ignoring a todo item", priority: "1" do
-        skip "Flaky spec to be addressed in LS-3215"
+      def all_todo_links
+        ff(".to-do-list .disable_item_link")
+      end
+
+      it "focuses on the previous ignore link after ignoring a todo item", custom_timeout: 25, priority: "1" do
+        skip("LS-3421 -- multiple attempts not working here either")
         assignment2 = assignment_model({ submission_types: "online_text_entry", course: @course })
         assignment2.submit_homework(@student, { submission_type: "online_text_entry", body: "Number2" })
         enable_cache do
           get "/"
 
-          all_todo_links = ff(".to-do-list .disable_item_link")
           all_todo_links.last.click
           wait_for_ajaximations
 
+          max_attempts = 5
+          num_attempts = 1
+
+          until all_todo_links.count == 1 || num_attempts == max_attempts
+            puts "Getting all todo links count attempt #{num_attempts}"
+            all_todo_links.last.click
+            wait_for_ajaximations
+
+            num_attempts += 1
+          end
+
+          expect(all_todo_links.count).to eq(1)
           check_element_has_focus(all_todo_links.first)
         end
       end
 
-      it "focuses on the 'To Do' header if there are no other todo items", priority: "1" do
-        skip "Flaky spec to be addressed in LS-3215"
+      it "focuses on the 'To Do' header if there are no other todo items", custom_timeout: 25, priority: "1" do
+        skip("LS-3421 flaky -- won't update on page properly")
         enable_cache do
           get "/"
 
           f(".to-do-list .disable_item_link").click
-          wait_for_ajaximations
+          wait_for_animations
+
+          max_attempts = 5
+          num_attempts = 1
+
+          until element_exists?(".to-do-list .disable_item_link") == false || num_attempts == max_attempts
+            puts "Getting all todo links count attempt #{num_attempts}"
+            f(".to-do-list .disable_item_link").click
+            wait_for_animations
+            num_attempts += 1
+          end
 
           check_element_has_focus(f(".todo-list-header"))
         end
@@ -316,7 +392,7 @@ describe "dashboard" do
     it "does not show an unpublished assignment for an unpublished course", priority: "2" do
       name = "venkman"
       due_date = Time.zone.now.utc + 2.days
-      assignment = @course.assignments.create(name: name,
+      assignment = @course.assignments.create(name:,
                                               submission_types: "online",
                                               due_at: due_date,
                                               lock_at: 1.week.from_now,

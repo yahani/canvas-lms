@@ -88,7 +88,7 @@ module Api
       end
 
       def media_object_thumbnail_url(media_id)
-        proxy.media_object_thumbnail_url(media_id, width: 550, height: 448, type: 3, host: host, protocol: protocol)
+        proxy.media_object_thumbnail_url(media_id, width: 550, height: 448, type: 3, host:, protocol:)
       end
 
       def media_context
@@ -114,11 +114,11 @@ module Api
       end
 
       def media_redirect_url(media_id, media_type)
-        proxy.polymorphic_url([media_context, :media_download], entryId: media_id, media_type: media_type, redirect: "1", host: host, protocol: protocol)
+        proxy.polymorphic_url([media_context, :media_download], entryId: media_id, media_type:, redirect: "1", host:, protocol:)
       end
 
       def show_media_tracks_url(media_object_id, media_id)
-        proxy.show_media_tracks_url(media_object_id, media_id, format: :json, host: host, protocol: protocol)
+        proxy.show_media_tracks_url(media_object_id, media_id, format: :json, host:, protocol:)
       end
 
       # rewrite any html attributes that are urls but just absolute paths, to
@@ -160,12 +160,12 @@ module Api
 
           return_type = api_route[0]
           helper = api_route[1]
-          args = { protocol: protocol, host: host }
+          args = { protocol:, host: }
           args.merge! (api_route.slice(2, match.captures.size).zip match.captures).to_h
           # transpose IDs in the URL
           transpose_ids(args) if context.shard != target_shard
           if args[:url] && (return_type == "SessionlessLaunchUrl" || (return_type == "Page" && url.include?("titleize=0")))
-            args[:url] = URI.unescape(args[:url])
+            args[:url] = URI::DEFAULT_PARSER.unescape(args[:url])
           end
           api_route.slice(match.captures.size + 2, 1).each { |opts| args.merge!(opts) }
           return { "data-api-endpoint" => proxy.send(helper, args), "data-api-returntype" => return_type }
@@ -191,7 +191,7 @@ module Api
 
             value = value.dup.force_encoding(Encoding::BINARY)
             value = absolute_controller(value) if key == :controller
-            params[key] = URI.parser.unescape(value)
+            params[key] = URI::DEFAULT_PARSER.unescape(value)
           end
           req.path_parameters = params
           app = route.app

@@ -19,8 +19,6 @@
 
 module Lti::Concerns
   module SessionlessLaunches
-    extend ActiveSupport::Concern
-
     class UnauthorizedClient < StandardError
     end
 
@@ -71,7 +69,7 @@ module Lti::Concerns
       )
     end
 
-    # Generates a token that will initialized a new sesssion when
+    # Generates a token that will initialize a new session when
     # sent in a Canvas request
     def generate_session_token
       # only allow from API, and not from files domain, as /login/session_token does
@@ -101,13 +99,15 @@ module Lti::Concerns
     def sessionless_launch_link(options, context, tool, session_token)
       if options[:assignment].present?
         assignment = options[:assignment]
-        assignment.prepare_for_ags_if_needed!(tool)
-        return assignment_launch_link(assignment, session_token)
+        assignment.migrate_to_1_3_if_needed!(tool)
+        assignment_launch_link(assignment, session_token)
+      elsif options[:module_item].present?
+        module_item_link(options[:module_item], session_token)
+      elsif (options[:launch_url] || options[:lookup_id]) && options[:id].blank? && options[:launch_type].blank?
+        retrieve_launch_link(context, session_token, options[:launch_url], options[:lookup_id])
+      else
+        course_or_account_launch_link(context, tool, session_token, options[:launch_url], options[:launch_type])
       end
-
-      return module_item_link(options[:module_item], session_token) if options[:module_item].present?
-
-      course_or_account_launch_link(context, tool, session_token, options[:launch_url])
     end
 
     def module_item_link(module_item, session_token)
@@ -115,7 +115,7 @@ module Lti::Concerns
         course_id: module_item.context.id,
         id: module_item.id,
         display: :borderless,
-        session_token: session_token
+        session_token:
       )
     end
 
@@ -124,19 +124,33 @@ module Lti::Concerns
         course_id: assignment.course.id,
         id: assignment.id,
         display: :borderless,
-        session_token: session_token
+        session_token:
       )
     end
 
-    def course_or_account_launch_link(context, tool, session_token, launch_url)
+    def retrieve_launch_link(context, session_token, launch_url, lookup_id)
+      context_type = context.class.to_s.downcase
+
+      send(
+        :"retrieve_#{context_type}_external_tools_url",
+        context.id,
+        url: launch_url,
+        display: :borderless,
+        session_token:,
+        resource_link_lookup_uuid: lookup_id
+      )
+    end
+
+    def course_or_account_launch_link(context, tool, session_token, launch_url, launch_type)
       context_type = context.class.to_s.downcase
       send(
-        "#{context_type}_external_tool_url",
+        :"#{context_type}_external_tool_url",
         context.id,
         id: tool.id,
         display: :borderless,
-        session_token: session_token,
-        launch_url: launch_url
+        session_token:,
+        launch_url:,
+        launch_type:
       )
     end
   end

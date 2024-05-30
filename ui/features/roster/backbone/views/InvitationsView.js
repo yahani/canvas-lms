@@ -18,7 +18,7 @@
 import {useScope as useI18nScope} from '@canvas/i18n'
 
 import $ from 'jquery'
-import _ from 'underscore'
+import {last} from 'lodash'
 import DialogBaseView from '@canvas/dialog-base-view'
 import invitationsViewTemplate from '../../jst/InvitationsView.handlebars'
 import '@canvas/rails-flash-notifications'
@@ -33,14 +33,16 @@ export default class InvitationsView extends DialogBaseView {
       buttons: [
         {
           text: I18n.t('cancel', 'Cancel'),
-          click: this.cancel
+          click: this.cancel,
         },
         {
           text: I18n.t('re_send_invitation', 'Resend Invitation'),
           class: 'btn-primary',
-          click: this.resend.bind(this)
-        }
-      ]
+          click: this.resend.bind(this),
+        },
+      ],
+      modal: true,
+      zIndex: 1000,
     }
   }
 
@@ -48,7 +50,7 @@ export default class InvitationsView extends DialogBaseView {
     this.showDialogButtons()
 
     const data = this.model.toJSON()
-    data.time = $.datetimeString(_.last(this.model.get('enrollments')).updated_at)
+    data.time = $.datetimeString(last(this.model.get('enrollments')).updated_at)
     this.$el.html(invitationsViewTemplate(data))
 
     const pending = this.invitationIsPending()
@@ -68,25 +70,29 @@ export default class InvitationsView extends DialogBaseView {
   }
 
   showDialogButtons() {
-    return this.$el
-      .parent()
-      .next('.ui-dialog-buttonpane')
-      .show()
+    return this.$el.parent().next('.ui-dialog-buttonpane').show()
   }
 
   hideDialogButtons() {
-    return this.$el
-      .parent()
-      .next('.ui-dialog-buttonpane')
-      .hide()
+    return this.$el.parent().next('.ui-dialog-buttonpane').hide()
+  }
+
+  sendInvitation(e) {
+    const url = `/confirmations/${this.model.get('id')}/re_send?enrollment_id=${e.id}`
+    $.ajaxJSON(url)
   }
 
   resend(e) {
     e.preventDefault()
     this.close()
     for (e of this.model.get('enrollments')) {
-      const url = `/confirmations/${this.model.get('id')}/re_send?enrollment_id=${e.id}`
-      $.ajaxJSON(url)
+      if (ENV.FEATURES.granular_permissions_manage_users) {
+        if (ENV.permissions.active_granular_enrollment_permissions.includes(e.type)) {
+          this.sendInvitation(e)
+        }
+      } else {
+        this.sendInvitation(e)
+      }
     }
     return $.flashMessage(I18n.t('flash.invitation', 'Invitation sent.'))
   }

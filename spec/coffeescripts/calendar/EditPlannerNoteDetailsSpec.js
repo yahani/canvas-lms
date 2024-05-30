@@ -17,8 +17,9 @@
  */
 
 import $ from 'jquery'
+import 'jquery-migrate'
 import EditPlannerNoteDetails from 'ui/features/calendar/backbone/views/EditPlannerNoteDetails'
-import tzInTest from '@canvas/timezone/specHelpers'
+import tzInTest from '@canvas/datetime/specHelpers'
 import fakeENV from 'helpers/fakeENV'
 import commonEventFactory from '@canvas/calendar/jquery/CommonEvent/index'
 
@@ -33,7 +34,7 @@ const note = {
   workflow_state: 'active',
   type: 'planner_note',
   context_code: 'user_1',
-  all_context_codes: 'user_1'
+  all_context_codes: 'user_1',
 }
 
 QUnit.module('EditPlannerNoteDetails', {
@@ -46,7 +47,7 @@ QUnit.module('EditPlannerNoteDetails', {
     document.getElementById('fixtures').innerHTML = ''
     fakeENV.teardown()
     tzInTest.restore()
-  }
+  },
 })
 const createView = function (event = note) {
   return new EditPlannerNoteDetails(fixtures, event, null, null)
@@ -66,7 +67,7 @@ test('should localize start date', () => {
 
 test('requires name to save assignment note', () => {
   const data = {
-    ...note
+    ...note,
   }
   data.title = ''
   const view = createView(commonEvent(data))
@@ -78,7 +79,7 @@ test('requires name to save assignment note', () => {
 
 test('requires todo_date to save note', () => {
   const data = {
-    ...note
+    ...note,
   }
   data.todo_date = ''
   const view = createView(commonEvent(data))
@@ -90,7 +91,7 @@ test('requires todo_date to save note', () => {
 
 test('requires todo_date not to be in the past', () => {
   const data = {
-    ...note
+    ...note,
   }
   const d = new Date()
   d.setDate(d.getDate() - 1)

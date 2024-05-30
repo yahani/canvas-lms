@@ -15,13 +15,13 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
-import _ from 'underscore'
+import {without, sortedIndexOf, find} from 'lodash'
+import flattenObjects from '@canvas/util/flattenObjects'
 import $ from 'jquery'
 import pageNavTemplate from '../../jst/pageNav.handlebars'
 import Backbone from '@canvas/backbone'
-import EntryCollectionView from './EntryCollectionView.coffee'
+import EntryCollectionView from './EntryCollectionView'
 import 'jquery-scroll-into-view'
-import '../../underscore.flattenObjects'
 
 export default class EntriesView extends Backbone.View {
   static initClass() {
@@ -29,7 +29,7 @@ export default class EntriesView extends Backbone.View {
       initialPage: 0,
       descendants: 2,
       showMoreDescendants: 50,
-      children: 3
+      children: 3,
     }
 
     this.prototype.$window = $(window)
@@ -115,7 +115,7 @@ export default class EntriesView extends Backbone.View {
       ;({parent} = child)
       descendants++
       // put the child on top so we can easily render it
-      const replies = _.without(parent.replies, child)
+      const replies = without(parent.replies, child)
       replies.unshift(child)
       parent.replies = replies
       // see if its rendered
@@ -137,15 +137,12 @@ export default class EntriesView extends Backbone.View {
     return this.$window.scrollTo($el, 200, {
       offset: -150,
       onAfter: () => {
-        $el
-          .find('.discussion-title a')
-          .first()
-          .focus()
+        $el.find('.discussion-title a').first().focus()
         // pretty blinking
         setTimeout(() => $el.addClass('highlight'), 200)
         setTimeout(() => $el.removeClass('highlight'), 400)
         setTimeout(() => $el.addClass('highlight'), 600)
-        var once = () => {
+        const once = () => {
           $el.removeClass('highlight')
           this.$window.off('scroll', once)
           return this.trigger('scrollAwayFromEntry')
@@ -156,7 +153,7 @@ export default class EntriesView extends Backbone.View {
           this.$window.on('scroll', once)
           return setTimeout(once, 5000)
         }, 10)
-      }
+      },
     })
   }
 
@@ -172,7 +169,7 @@ export default class EntriesView extends Backbone.View {
       displayShowMore: false,
       threaded: this.options.threaded,
       root: true,
-      collapsed: this.model.get('collapsed')
+      collapsed: this.model.get('collapsed'),
     })
     this.collectionView.render()
     this.renderPageNav()
@@ -207,25 +204,23 @@ export default class EntriesView extends Backbone.View {
   }
 
   handleKeyDown(e) {
-    let reverse
     const nodeName = e.target.nodeName.toLowerCase()
     if (nodeName === 'input' || nodeName === 'textarea' || ENV.disable_keyboard_shortcuts) return
     if (e.which !== 74 && e.which !== 75) return // j, k
     const entry = $(e.target).closest('.entry')
-    this.traverse(entry, (reverse = e.which === 75))
+    this.traverse(entry, e.which === 75)
     e.preventDefault()
     return e.stopPropagation()
   }
 
   traverse(el, reverse) {
-    let backward
     const id = el.attr('id').replace('entry-', '')
 
     const json = this.collection.toJSON()
     // sub-collections are displayed in reverse when flat, in imitation of Facebook
-    const list = _.flattenObjects(json, 'replies', (backward = !this.options.threaded))
-    const entry = _.find(list, x => `${x.id}` === id)
-    let pos = _.indexOf(list, entry)
+    const list = flattenObjects(json, 'replies', !this.options.threaded)
+    const entry = find(list, x => `${x.id}` === id)
+    let pos = sortedIndexOf(list, entry)
     pos += reverse ? -1 : 1
     pos = Math.min(Math.max(0, pos), list.length - 1)
     const next = list[pos]

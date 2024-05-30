@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2017 - present Instructure, Inc.
  *
@@ -19,11 +20,17 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 import TotalGradeColumnHeader from './TotalGradeColumnHeader'
+import {scoreToPercentage, scoreToScaledPoints} from '@canvas/grading/GradeCalculationHelper'
 import type Gradebook from '../../Gradebook'
+import type GridSupport from '../GridSupport'
+import type {PartialStudent} from '@canvas/grading/grading.d'
+import type {Student} from '../../../../../../api.d'
+import type {SendMessageArgs} from '@canvas/message-students-dialog/react/MessageStudentsWhoDialog'
 
-function getProps(_column, gradebook, gridSupport, options) {
+function getProps(_column, gradebook: Gradebook, gridSupport: GridSupport, options) {
   const columnId = 'total_grade'
   const sortRowsBySetting = gradebook.getSortRowsBySetting()
+  const pointsBased = gradebook.options.grading_standard_points_based
 
   const gradeSortDataLoaded =
     gradebook.assignmentsLoadedForCurrentView() &&
@@ -32,8 +39,10 @@ function getProps(_column, gradebook, gridSupport, options) {
 
   const columns = gridSupport.columns.getColumns()
 
-  const isInBack = columns.scrollable[columns.scrollable.length - 1].id === 'total_grade'
-  const isInFront = columns.frozen.some(frozenColumn => frozenColumn.id === 'total_grade')
+  const isInBack = columns.scrollable[columns.scrollable.length - 1]?.id === 'total_grade'
+  const isInFront = columns.frozen.some(
+    (frozenColumn: {id: string}) => frozenColumn.id === 'total_grade'
+  )
 
   let onApplyScoreToUngraded
   if (gradebook.allowApplyScoreToUngraded()) {
@@ -42,19 +51,40 @@ function getProps(_column, gradebook, gridSupport, options) {
     }
   }
 
+  const processStudent = (student: Student): PartialStudent => {
+    return {
+      id: student.id,
+      isInactive: Boolean(student.isInactive),
+      isTestStudent: student.enrollments[0].type === 'StudentViewEnrollment',
+      name: student.name,
+      sortableName: student.sortable_name || '',
+      submission: null,
+      currentScore: pointsBased
+        ? scoreToScaledPoints(
+            gradebook.calculatedGradesByStudentId[student.id]?.current.score,
+            gradebook.calculatedGradesByStudentId[student.id]?.current.possible,
+            gradebook.options.grading_standard_scaling_factor
+          )
+        : scoreToPercentage(
+            gradebook.calculatedGradesByStudentId[student.id]?.current.score,
+            gradebook.calculatedGradesByStudentId[student.id]?.current.possible
+          ),
+    }
+  }
+
   return {
     ref: options.ref,
-    addGradebookElement: gradebook.keyboardNav.addGradebookElement,
+    addGradebookElement: gradebook.keyboardNav?.addGradebookElement,
     grabFocus: gradebook.totalColumnShouldFocus(),
 
     gradeDisplay: {
       currentDisplay: gradebook.options.show_total_grade_as_points ? 'points' : 'percentage',
       disabled: !gradebook.contentLoadStates.submissionsLoaded,
       hidden: gradebook.weightedGrades(),
-      onSelect: gradebook.togglePointsOrPercentTotals
+      onSelect: gradebook.togglePointsOrPercentTotals,
     },
 
-    onHeaderKeyDown: event => {
+    onHeaderKeyDown: (event: React.KeyboardEvent) => {
       gradebook.handleHeaderKeyDown(event, columnId)
     },
     onMenuDismiss() {
@@ -65,11 +95,14 @@ function getProps(_column, gradebook, gridSupport, options) {
       isInBack,
       isInFront,
       onMoveToBack: gradebook.moveTotalGradeColumnToEnd,
-      onMoveToFront: gradebook.freezeTotalGradeColumn
+      onMoveToFront: gradebook.freezeTotalGradeColumn,
     },
 
     onApplyScoreToUngraded,
-    removeGradebookElement: gradebook.keyboardNav.removeGradebookElement,
+    removeGradebookElement: gradebook.keyboardNav?.removeGradebookElement,
+
+    showMessageStudentsWithObserversDialog:
+      gradebook.options.show_message_students_with_observers_dialog,
 
     sortBySetting: {
       direction: sortRowsBySetting.direction,
@@ -81,28 +114,36 @@ function getProps(_column, gradebook, gridSupport, options) {
       onSortByGradeDescending: () => {
         gradebook.setSortRowsBySetting(columnId, 'grade', 'descending')
       },
-      settingKey: sortRowsBySetting.settingKey
+      settingKey: sortRowsBySetting.settingKey,
     },
 
+    pointsBasedGradingScheme: pointsBased,
     viewUngradedAsZero: gradebook.viewUngradedAsZero(),
     isRunningScoreToUngraded: gradebook.isRunningScoreToUngraded,
-    weightedGroups: gradebook.weightedGroups()
+    weightedGroups: gradebook.weightedGroups(),
+    allStudents: Object.keys(gradebook.students).map(key =>
+      processStudent(gradebook.students[key])
+    ),
+    courseId: gradebook.options.context_id,
+    messageAttachmentUploadFolderId: gradebook.options.message_attachment_upload_folder_id,
+    userId: gradebook.options.currentUserId,
+    onSendMessageStudentsWho: gradebook.sendMessageStudentsWho,
   }
 }
 
 export default class TotalGradeColumnHeaderRenderer {
   gradebook: Gradebook
 
-  constructor(gradebook) {
+  constructor(gradebook: Gradebook) {
     this.gradebook = gradebook
   }
 
-  render(column, $container, gridSupport, options) {
+  render(column, $container: HTMLElement, gridSupport: GridSupport, options) {
     const props = getProps(column, this.gradebook, gridSupport, options)
     ReactDOM.render(<TotalGradeColumnHeader {...props} />, $container)
   }
 
-  destroy(_column, $container, _gridSupport) {
+  destroy(_column, $container: HTMLElement, _gridSupport: GridSupport) {
     ReactDOM.unmountComponentAtNode($container)
   }
 }

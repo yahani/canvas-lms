@@ -17,11 +17,11 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import _ from 'underscore'
+import {debounce, bind, filter, each} from 'lodash'
 import {View} from '@canvas/backbone'
 import SearchableSubmenuView from './SearchableSubmenuView'
 import template from '../../jst/courseOptions.handlebars'
-import '@canvas/datetime'
+import '@canvas/datetime/jquery'
 import 'bootstrap-dropdown'
 import 'bootstrap-select'
 
@@ -64,9 +64,9 @@ export default class CourseSelectionView extends View {
     }
     this.options.courses.favorites.on('reset', () => this.render())
     this.options.courses.all.on('reset', () => this.render())
-    this.listenTo(this.options.courses.all, 'add', _.debounce(_.bind(this.render), 200))
+    this.listenTo(this.options.courses.all, 'add', debounce(bind(this.render), 200))
     this.options.courses.groups.on('reset', () => this.render())
-    this.listenTo(this.options.courses.groups, 'add', _.debounce(_.bind(this.render), 200))
+    this.listenTo(this.options.courses.groups, 'add', debounce(bind(this.render), 200))
     this.$picker = this.$el.next()
     return this.render()
   }
@@ -89,13 +89,13 @@ export default class CourseSelectionView extends View {
     let group_json = this.options.courses.groups.toJSON()
 
     if (this.options.messageableOnly) {
-      group_json = _.filter(group_json, g => g.can_message)
+      group_json = filter(group_json, g => g.can_message)
     }
     const data = {
       defaultOption: this.options.defaultOption,
       favorites: this.options.courses.favorites.toJSON(),
       more,
-      groups: group_json
+      groups: group_json,
     }
 
     if (!this.options.excludeConcluded) {
@@ -122,7 +122,7 @@ export default class CourseSelectionView extends View {
 
   createSearchViews() {
     const searchViews = []
-    this.$picker.find('.dropdown-submenu').each(function() {
+    this.$picker.find('.dropdown-submenu').each(function () {
       searchViews.push(new SearchableSubmenuView({el: this}))
     })
     return (this.searchViews = searchViews)
@@ -135,11 +135,9 @@ export default class CourseSelectionView extends View {
     all._loading = true
 
     groups.fetchAll()
-    return this.$picker.find('> .dropdown-menu').append(
-      $('<div />')
-        .attr('class', 'paginatedLoadingIndicator')
-        .css('clear', 'both')
-    )
+    return this.$picker
+      .find('> .dropdown-menu')
+      .append($('<div />').attr('class', 'paginatedLoadingIndicator').css('clear', 'both'))
   }
 
   setValue(value) {
@@ -172,13 +170,13 @@ export default class CourseSelectionView extends View {
   }
 
   getCurrentContext() {
-    let course
     const matches = this._value.match(/(\w+)_(\d+)/)
     if (!matches) return {}
-    const [match, type, id] = Array.from(matches)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const [_match, type, id] = Array.from(matches)
     const context =
       type === 'course'
-        ? (course = this.options.courses.favorites.get(id) || this.options.courses.all.get(id))
+        ? this.options.courses.favorites.get(id) || this.options.courses.all.get(id)
         : this.options.courses.groups.get(id)
     if (context) {
       return {name: context.get('name'), id: this._value}
@@ -192,20 +190,17 @@ export default class CourseSelectionView extends View {
   }
 
   focus() {
-    return this.$el
-      .next()
-      .find('.dropdown-toggle')
-      .focus()
+    return this.$el.next().find('.dropdown-toggle').focus()
   }
 
   truncate_course_name_data(course_data) {
-    return _.each(['favorites', 'more', 'concluded', 'groups'], key =>
+    each(['favorites', 'more', 'concluded', 'groups'], key =>
       this.truncate_course_names(course_data[key])
     )
   }
 
   truncate_course_names(courses) {
-    return _.each(courses, c => this.truncate_course(c))
+    each(courses, c => this.truncate_course(c))
   }
 
   truncate_course(course) {

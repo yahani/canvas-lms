@@ -18,37 +18,40 @@
 
 import fetchMock from 'fetch-mock'
 import {renderHook, act} from '@testing-library/react-hooks/dom'
-import {useSvgSettings, svgFromUrl, statuses} from '../settings'
-import Editor from '../../../shared/__tests__/FakeEditor'
-import RceApiSource from '../../../../../rcs/api'
+import {useSvgSettings, statuses} from '../settings'
+import Editor from '../../../../__tests__/FakeEditor'
 
-jest.mock('../../../../../rcs/api')
+jest.mock('../../../shared/ImageCropper/imageCropUtils', () => ({
+  createCroppedImageSvg: jest.fn().mockReturnValue(
+    Promise.resolve({
+      outerHTML: null,
+    })
+  ),
+}))
+
+jest.mock('../../../shared/fileUtils', () => {
+  return {
+    convertFileToBase64: jest
+      .fn()
+      .mockReturnValue(Promise.resolve('data:image/svg+xml;base64,CROPPED')),
+  }
+})
 
 describe('useSvgSettings()', () => {
-  let editing, ed, rcs
+  let editing, ed
+  const canvasOrigin = 'https://domain.from.env'
 
   beforeEach(() => {
     ed = new Editor()
-    rcs = {
-      getFile: jest.fn(() => Promise.resolve({name: 'Test Icon.svg'})),
-      contextType: 'course',
-      contextId: 1,
-      canvasUrl: 'https://domain.from.env'
-    }
-    RceApiSource.mockImplementation(() => rcs)
   })
 
-  afterEach(() => RceApiSource.mockClear())
-
-  const subject = () => renderHook(() => useSvgSettings(ed, editing, rcs)).result
+  const subject = () => renderHook(() => useSvgSettings(ed, editing, canvasOrigin)).result
 
   describe('when a new icon is being created (not editing)', () => {
     beforeEach(() => {
       editing = false
       global.fetch = jest.fn()
     })
-
-    afterEach(() => jest.restoreAllMocks())
 
     it('initializes settings to the default', () => {
       const [settings, ,] = subject().current
@@ -57,9 +60,11 @@ describe('useSvgSettings()', () => {
         Object {
           "alt": "",
           "color": null,
-          "encodedImage": "",
-          "encodedImageName": "",
-          "encodedImageType": "",
+          "embedImage": null,
+          "error": null,
+          "externalHeight": null,
+          "externalStyle": null,
+          "externalWidth": null,
           "height": 0,
           "imageSettings": null,
           "isDecorative": false,
@@ -111,9 +116,11 @@ describe('useSvgSettings()', () => {
           Object {
             "alt": "",
             "color": null,
-            "encodedImage": "",
-            "encodedImageName": "",
-            "encodedImageType": "",
+            "embedImage": null,
+            "error": null,
+            "externalHeight": null,
+            "externalStyle": null,
+            "externalWidth": null,
             "height": 0,
             "imageSettings": null,
             "isDecorative": false,
@@ -160,10 +167,8 @@ describe('useSvgSettings()', () => {
       // Icon Maker icons that have it
       //
       body = `
-        <svg height="100" width="100">
-        <metadata>
           {
-            "name":"Test Image",
+            "name":"Test Icon",
             "alt":"a test image",
             "shape":"triangle",
             "size":"large",
@@ -175,30 +180,34 @@ describe('useSvgSettings()', () => {
             "textColor":"#009606",
             "textBackgroundColor":"#06A3B7",
             "textPosition":"below"
-          }
-        </metadata>
-        <circle cx="50" cy="50" r="40" stroke="black" stroke-width="3" fill="red"/>
-      </svg>`
+          }`
 
       // Stub fetch to return an SVG file
       mock = fetchMock.mock({
-        name: 'download-url',
+        name: 'icon_metadata',
         matcher: '*',
-        response: () => ({body})
+        response: () => ({body}),
       })
     })
 
     afterEach(() => {
-      jest.resetAllMocks()
       fetchMock.restore()
     })
 
-    it('fetches the SVG file, specifying the course ID and timestamp', () => {
+    const overwriteUrl = () =>
+      (mock = fetchMock.mock({
+        name: 'icon_metadata',
+        matcher: '*',
+        response: () => ({body}),
+        overwriteRoutes: true,
+      }))
+
+    it('fetches the icon metadata, specifying the course ID and timestamp', () => {
       subject()
 
-      expect(mock.called('download-url')).toBe(true)
-      expect(mock.calls('download-url')[0][0]).toMatch(
-        /https:\/\/domain.from.env\/files\/1\/download\?replacement_chain_context_type=course&replacement_chain_context_id=1&ts=\d+&download_frd=1/
+      expect(mock.called('icon_metadata')).toBe(true)
+      expect(mock.calls('icon_metadata')[0][0]).toMatch(
+        /https:\/\/domain.from.env\/api\/v1\/files\/1\/icon_metadata/
       )
     })
 
@@ -210,12 +219,12 @@ describe('useSvgSettings()', () => {
         ed.setSelectedNode(ed.dom.select('#test-image')[0])
       })
 
-      it('fetches the SVG file using the /files/:file_id/download endpoint', () => {
+      it('fetches the icon metadata using the /files/:file_id/icon_metadata endpoint', () => {
         subject()
 
-        expect(mock.called('download-url')).toBe(true)
-        expect(mock.calls('download-url')[0][0]).toMatch(
-          /https:\/\/domain.from.env\/files\/1\/download\?replacement_chain_context_type=course&replacement_chain_context_id=1&ts=\d+&download_frd=1/
+        expect(mock.called('icon_metadata')).toBe(true)
+        expect(mock.calls('icon_metadata')[0][0]).toMatch(
+          /https:\/\/domain.from.env\/api\/v1\/files\/1\/icon_metadata/
         )
       })
     })
@@ -228,12 +237,10 @@ describe('useSvgSettings()', () => {
         ed.setSelectedNode(ed.dom.select('#test-image')[0])
       })
 
-      it('fetches the SVG file, specifying the course ID and timestamp', () => {
+      it('fetches the icon metadata, specifying the course ID and timestamp', () => {
         subject()
-        const calledUrl = mock.calls('download-url')[0][0]
-        expect(calledUrl).toMatch(
-          /https:\/\/domain.from.env\/files\/1\/download\?replacement_chain_context_type=course&replacement_chain_context_id=1&ts=\d+&download_frd=1/
-        )
+        const calledUrl = mock.calls('icon_metadata')[0][0]
+        expect(calledUrl).toMatch(/https:\/\/domain.from.env\/api\/v1\/files\/1\/icon_metadata/)
       })
     })
 
@@ -245,30 +252,17 @@ describe('useSvgSettings()', () => {
         ed.setSelectedNode(ed.dom.select('#containing')[0])
       })
 
-      it('fetches the SVG file, specifying the course ID and timestamp', () => {
+      it('fetches the icon metadata, specifying the course ID and timestamp', () => {
         subject()
-        const calledUrl = mock.calls('download-url')[0][0]
-        expect(calledUrl).toMatch(
-          /https:\/\/domain.from.env\/files\/1\/download\?replacement_chain_context_type=course&replacement_chain_context_id=1&ts=\d+&download_frd=1/
-        )
+        const calledUrl = mock.calls('icon_metadata')[0][0]
+        expect(calledUrl).toMatch(/https:\/\/domain.from.env\/api\/v1\/files\/1\/icon_metadata/)
       })
     })
 
-    it('uses replacement chain context info in request for file name', async () => {
-      const {result, waitForValueToChange} = renderHook(() => useSvgSettings(ed, editing, rcs))
-
-      await waitForValueToChange(() => {
-        return result.current[0]
-      })
-
-      expect(rcs.getFile).toHaveBeenCalledWith('1', {
-        replacement_chain_context_id: 1,
-        replacement_chain_context_type: 'course'
-      })
-    })
-
-    it('parses the SVG settings from the SVG metadata', async () => {
-      const {result, waitForValueToChange} = renderHook(() => useSvgSettings(ed, editing, rcs))
+    it('parses the SVG settings from the icon metadata', async () => {
+      const {result, waitForValueToChange} = renderHook(() =>
+        useSvgSettings(ed, editing, canvasOrigin)
+      )
 
       await waitForValueToChange(() => {
         return result.current[0]
@@ -278,9 +272,11 @@ describe('useSvgSettings()', () => {
         Object {
           "alt": "a red circle",
           "color": "#FF2717",
-          "encodedImage": "",
-          "encodedImageName": "",
-          "encodedImageType": "",
+          "embedImage": null,
+          "error": null,
+          "externalHeight": null,
+          "externalStyle": null,
+          "externalWidth": null,
           "height": 0,
           "imageSettings": null,
           "isDecorative": false,
@@ -308,45 +304,32 @@ describe('useSvgSettings()', () => {
 
     describe('parses the SVG settings from a legacy SVG metadata structure', () => {
       const bodyGenerator = overrideParams => `
-          <svg height="100" width="100">
-          <metadata>
-            ${JSON.stringify({
-              ...{
-                name: 'Test Image',
-                alt: 'a test image',
-                shape: 'triangle',
-                size: 'large',
-                color: '#FF2717',
-                outlineColor: '#06A3B7',
-                outlineSize: 'small',
-                text: 'Some Text',
-                textSize: 'medium',
-                textColor: '#009606',
-                textBackgroundColor: '#06A3B7',
-                textPosition: 'below',
-                imageSettings: {
-                  cropperSettings: null,
-                  icon: {
-                    label: 'Art Icon'
-                  },
-                  iconFillColor: '#FFFFFF',
-                  image: 'Art Icon',
-                  mode: 'SingleColor'
-                }
+        ${JSON.stringify({
+          ...{
+            name: 'Test Icon',
+            alt: 'a test image',
+            shape: 'triangle',
+            size: 'large',
+            color: '#FF2717',
+            outlineColor: '#06A3B7',
+            outlineSize: 'small',
+            text: 'Some Text',
+            textSize: 'medium',
+            textColor: '#009606',
+            textBackgroundColor: '#06A3B7',
+            textPosition: 'below',
+            imageSettings: {
+              cropperSettings: null,
+              icon: {
+                label: 'Art Icon',
               },
-              ...overrideParams
-            })}
-          </metadata>
-          <circle cx="50" cy="50" r="40" stroke="black" stroke-width="3" fill="red"/>
-        </svg>`
-
-      const overwriteUrl = () =>
-        (mock = fetchMock.mock({
-          name: 'download-url',
-          matcher: '*',
-          response: () => ({body}),
-          overwriteRoutes: true
-        }))
+              iconFillColor: '#FFFFFF',
+              image: 'Art Icon',
+              mode: 'SingleColor',
+            },
+          },
+          ...overrideParams,
+        })}`
 
       beforeEach(() => {
         // Legacy metadata structure
@@ -355,7 +338,9 @@ describe('useSvgSettings()', () => {
       })
 
       it('replaces icon type from object to string for single-color images', async () => {
-        const {result, waitForValueToChange} = renderHook(() => useSvgSettings(ed, editing, rcs))
+        const {result, waitForValueToChange} = renderHook(() =>
+          useSvgSettings(ed, editing, canvasOrigin)
+        )
 
         await waitForValueToChange(() => {
           return result.current[0]
@@ -365,9 +350,11 @@ describe('useSvgSettings()', () => {
           Object {
             "alt": "a red circle",
             "color": "#FF2717",
-            "encodedImage": "",
-            "encodedImageName": "",
-            "encodedImageType": "",
+            "embedImage": "Art Icon",
+            "error": null,
+            "externalHeight": null,
+            "externalStyle": null,
+            "externalWidth": null,
             "height": 0,
             "imageSettings": Object {
               "cropperSettings": null,
@@ -405,16 +392,18 @@ describe('useSvgSettings()', () => {
             cropperSettings: null,
             icon: {
               // Spanish label
-              label: 'Ícono de arte'
+              label: 'Ícono de arte',
             },
             iconFillColor: '#FFFFFF',
             image: 'Art Icon',
-            mode: 'SingleColor'
-          }
+            mode: 'SingleColor',
+          },
         })
         overwriteUrl()
 
-        const {result, waitForValueToChange} = renderHook(() => useSvgSettings(ed, editing, rcs))
+        const {result, waitForValueToChange} = renderHook(() =>
+          useSvgSettings(ed, editing, canvasOrigin)
+        )
 
         await waitForValueToChange(() => {
           return result.current[0]
@@ -424,9 +413,11 @@ describe('useSvgSettings()', () => {
           Object {
             "alt": "a red circle",
             "color": "#FF2717",
-            "encodedImage": "",
-            "encodedImageName": "",
-            "encodedImageType": "",
+            "embedImage": "Art Icon",
+            "error": null,
+            "externalHeight": null,
+            "externalStyle": null,
+            "externalWidth": null,
             "height": 0,
             "imageSettings": Object {
               "cropperSettings": null,
@@ -464,16 +455,18 @@ describe('useSvgSettings()', () => {
             cropperSettings: null,
             icon: {
               // Invalid label
-              label: 'Banana'
+              label: 'Banana',
             },
             iconFillColor: '#FFFFFF',
             image: 'Art Icon',
-            mode: 'SingleColor'
-          }
+            mode: 'SingleColor',
+          },
         })
         overwriteUrl()
 
-        const {result, waitForValueToChange} = renderHook(() => useSvgSettings(ed, editing, rcs))
+        const {result, waitForValueToChange} = renderHook(() =>
+          useSvgSettings(ed, editing, canvasOrigin)
+        )
 
         await waitForValueToChange(() => {
           return result.current[0]
@@ -483,11 +476,137 @@ describe('useSvgSettings()', () => {
           Object {
             "alt": "a red circle",
             "color": "#FF2717",
-            "encodedImage": "",
-            "encodedImageName": "",
-            "encodedImageType": "",
+            "embedImage": null,
+            "error": null,
+            "externalHeight": null,
+            "externalStyle": null,
+            "externalWidth": null,
             "height": 0,
             "imageSettings": null,
+            "isDecorative": false,
+            "name": "Test Icon",
+            "originalName": "Test Icon",
+            "outlineColor": "#06A3B7",
+            "outlineSize": "small",
+            "shape": "triangle",
+            "size": "large",
+            "text": "Some Text",
+            "textBackgroundColor": "#06A3B7",
+            "textColor": "#009606",
+            "textPosition": "below",
+            "textSize": "medium",
+            "transform": "",
+            "translateX": 0,
+            "translateY": 0,
+            "type": "image/svg+xml-icon-maker-icons",
+            "width": 0,
+            "x": 0,
+            "y": 0,
+          }
+        `)
+      })
+
+      it('sets image to the original one stored in cropper settings', async () => {
+        body = bodyGenerator({
+          imageSettings: {
+            cropperSettings: {
+              image: 'data:image/svg+xml;base64,aaa',
+              shape: 'triangle',
+            },
+            image: 'data:image/svg+xml;base64,bbb',
+            mode: 'Course',
+          },
+        })
+        overwriteUrl()
+
+        const {result, waitForValueToChange} = renderHook(() =>
+          useSvgSettings(ed, editing, canvasOrigin)
+        )
+
+        await waitForValueToChange(() => {
+          return result.current[0]
+        })
+
+        expect(result.current[0]).toMatchInlineSnapshot(`
+          Object {
+            "alt": "a red circle",
+            "color": "#FF2717",
+            "embedImage": "data:image/svg+xml;base64,CROPPED",
+            "error": null,
+            "externalHeight": null,
+            "externalStyle": null,
+            "externalWidth": null,
+            "height": 0,
+            "imageSettings": Object {
+              "cropperSettings": Object {
+                "shape": "triangle",
+              },
+              "image": "data:image/svg+xml;base64,aaa",
+              "mode": "Course",
+            },
+            "isDecorative": false,
+            "name": "Test Icon",
+            "originalName": "Test Icon",
+            "outlineColor": "#06A3B7",
+            "outlineSize": "small",
+            "shape": "triangle",
+            "size": "large",
+            "text": "Some Text",
+            "textBackgroundColor": "#06A3B7",
+            "textColor": "#009606",
+            "textPosition": "below",
+            "textSize": "medium",
+            "transform": "",
+            "translateX": 0,
+            "translateY": 0,
+            "type": "image/svg+xml-icon-maker-icons",
+            "width": 0,
+            "x": 0,
+            "y": 0,
+          }
+        `)
+      })
+
+      it('removes old image fields from metadata', async () => {
+        body = bodyGenerator({
+          encodedImage: 'banana',
+          encodedImageType: 'kiwi',
+          encodedImageName: 'peanut',
+          imageSettings: {
+            cropperSettings: {
+              shape: 'triangle',
+            },
+            image: 'data:image/svg+xml;base64,bbb',
+            mode: 'Course',
+          },
+        })
+        overwriteUrl()
+
+        const {result, waitForValueToChange} = renderHook(() =>
+          useSvgSettings(ed, editing, canvasOrigin)
+        )
+
+        await waitForValueToChange(() => {
+          return result.current[0]
+        })
+
+        expect(result.current[0]).toMatchInlineSnapshot(`
+          Object {
+            "alt": "a red circle",
+            "color": "#FF2717",
+            "embedImage": "data:image/svg+xml;base64,CROPPED",
+            "error": null,
+            "externalHeight": null,
+            "externalStyle": null,
+            "externalWidth": null,
+            "height": 0,
+            "imageSettings": Object {
+              "cropperSettings": Object {
+                "shape": "triangle",
+              },
+              "image": "data:image/svg+xml;base64,bbb",
+              "mode": "Course",
+            },
             "isDecorative": false,
             "name": "Test Icon",
             "originalName": "Test Icon",
@@ -518,7 +637,9 @@ describe('useSvgSettings()', () => {
     })
 
     it('returns the status to "idle"', async () => {
-      const {result, waitForValueToChange} = renderHook(() => useSvgSettings(ed, editing, rcs))
+      const {result, waitForValueToChange} = renderHook(() =>
+        useSvgSettings(ed, editing, canvasOrigin)
+      )
 
       await waitForValueToChange(() => {
         return result.current[1]
@@ -540,9 +661,11 @@ describe('useSvgSettings()', () => {
           Object {
             "alt": "",
             "color": null,
-            "encodedImage": "",
-            "encodedImageName": "",
-            "encodedImageType": "",
+            "embedImage": null,
+            "error": null,
+            "externalHeight": null,
+            "externalStyle": null,
+            "externalWidth": null,
             "height": 0,
             "imageSettings": null,
             "isDecorative": false,
@@ -576,9 +699,11 @@ describe('useSvgSettings()', () => {
           Object {
             "alt": "",
             "color": null,
-            "encodedImage": "",
-            "encodedImageName": "",
-            "encodedImageType": "",
+            "embedImage": null,
+            "error": null,
+            "externalHeight": null,
+            "externalStyle": null,
+            "externalWidth": null,
             "height": 0,
             "imageSettings": null,
             "isDecorative": false,
@@ -602,6 +727,291 @@ describe('useSvgSettings()', () => {
         `)
       })
     })
+
+    it('sets embed image when there cropper settings exist', async () => {
+      body = `
+          {
+            "name":"Test Icon",
+            "alt":"a test image",
+            "shape":"triangle",
+            "size":"large",
+            "color":"#FF2717",
+            "outlineColor":"#06A3B7",
+            "outlineSize":"small",
+            "text":"Some Text",
+            "textSize":"medium",
+            "textColor":"#009606",
+            "textBackgroundColor":"#06A3B7",
+            "textPosition":"below",
+            "imageSettings": {
+              "cropperSettings": {
+                "shape": "triangle"
+              },
+              "image": "data:image/svg+xml;base64,ORIGINAL"
+            }
+          }`
+      overwriteUrl()
+
+      const {result, waitForValueToChange} = renderHook(() =>
+        useSvgSettings(ed, editing, canvasOrigin)
+      )
+
+      await waitForValueToChange(() => {
+        return result.current[0]
+      })
+
+      expect(result.current[0]).toMatchInlineSnapshot(`
+        Object {
+          "alt": "a red circle",
+          "color": "#FF2717",
+          "embedImage": "data:image/svg+xml;base64,CROPPED",
+          "error": null,
+          "externalHeight": null,
+          "externalStyle": null,
+          "externalWidth": null,
+          "height": 0,
+          "imageSettings": Object {
+            "cropperSettings": Object {
+              "shape": "triangle",
+            },
+            "image": "data:image/svg+xml;base64,ORIGINAL",
+          },
+          "isDecorative": false,
+          "name": "Test Icon",
+          "originalName": "Test Icon",
+          "outlineColor": "#06A3B7",
+          "outlineSize": "small",
+          "shape": "triangle",
+          "size": "large",
+          "text": "Some Text",
+          "textBackgroundColor": "#06A3B7",
+          "textColor": "#009606",
+          "textPosition": "below",
+          "textSize": "medium",
+          "transform": "",
+          "translateX": 0,
+          "translateY": 0,
+          "type": "image/svg+xml-icon-maker-icons",
+          "width": 0,
+          "x": 0,
+          "y": 0,
+        }
+      `)
+    })
+
+    it('sets embed image when there cropper settings do not exist', async () => {
+      body = `
+          {
+            "name":"Test Icon",
+            "alt":"a test image",
+            "shape":"triangle",
+            "size":"large",
+            "color":"#FF2717",
+            "outlineColor":"#06A3B7",
+            "outlineSize":"small",
+            "text":"Some Text",
+            "textSize":"medium",
+            "textColor":"#009606",
+            "textBackgroundColor":"#06A3B7",
+            "textPosition":"below",
+            "imageSettings": {
+              "image": "data:image/svg+xml;base64,ORIGINAL"
+            }
+          }`
+      overwriteUrl()
+
+      const {result, waitForValueToChange} = renderHook(() =>
+        useSvgSettings(ed, editing, canvasOrigin)
+      )
+
+      await waitForValueToChange(() => {
+        return result.current[0]
+      })
+
+      expect(result.current[0]).toMatchInlineSnapshot(`
+        Object {
+          "alt": "a red circle",
+          "color": "#FF2717",
+          "embedImage": "data:image/svg+xml;base64,ORIGINAL",
+          "error": null,
+          "externalHeight": null,
+          "externalStyle": null,
+          "externalWidth": null,
+          "height": 0,
+          "imageSettings": Object {
+            "image": "data:image/svg+xml;base64,ORIGINAL",
+          },
+          "isDecorative": false,
+          "name": "Test Icon",
+          "originalName": "Test Icon",
+          "outlineColor": "#06A3B7",
+          "outlineSize": "small",
+          "shape": "triangle",
+          "size": "large",
+          "text": "Some Text",
+          "textBackgroundColor": "#06A3B7",
+          "textColor": "#009606",
+          "textPosition": "below",
+          "textSize": "medium",
+          "transform": "",
+          "translateX": 0,
+          "translateY": 0,
+          "type": "image/svg+xml-icon-maker-icons",
+          "width": 0,
+          "x": 0,
+          "y": 0,
+        }
+      `)
+    })
+
+    it('cleans image settings when there is no icon or image embed', async () => {
+      body = `
+          {
+            "name":"Test Icon",
+            "alt":"a test image",
+            "shape":"triangle",
+            "size":"large",
+            "color":"#FF2717",
+            "outlineColor":"#06A3B7",
+            "outlineSize":"small",
+            "text":"Some Text",
+            "textSize":"medium",
+            "textColor":"#009606",
+            "textBackgroundColor":"#06A3B7",
+            "textPosition":"below",
+            "imageSettings": {
+              "mode": "",
+              "image": "",
+              "imageName": "",
+              "icon": "",
+              "iconFillColor": "#000000",
+              "cropperSettings": {
+                "shape": "square"
+              }
+            }
+          }`
+      overwriteUrl()
+
+      const {result, waitForValueToChange} = renderHook(() =>
+        useSvgSettings(ed, editing, canvasOrigin)
+      )
+
+      await waitForValueToChange(() => {
+        return result.current[0]
+      })
+
+      expect(result.current[0]).toMatchInlineSnapshot(`
+        Object {
+          "alt": "a red circle",
+          "color": "#FF2717",
+          "embedImage": null,
+          "error": null,
+          "externalHeight": null,
+          "externalStyle": null,
+          "externalWidth": null,
+          "height": 0,
+          "imageSettings": null,
+          "isDecorative": false,
+          "name": "Test Icon",
+          "originalName": "Test Icon",
+          "outlineColor": "#06A3B7",
+          "outlineSize": "small",
+          "shape": "triangle",
+          "size": "large",
+          "text": "Some Text",
+          "textBackgroundColor": "#06A3B7",
+          "textColor": "#009606",
+          "textPosition": "below",
+          "textSize": "medium",
+          "transform": "",
+          "translateX": 0,
+          "translateY": 0,
+          "type": "image/svg+xml-icon-maker-icons",
+          "width": 0,
+          "x": 0,
+          "y": 0,
+        }
+      `)
+    })
+
+    it("replaces the cropper settings shape with icon's shape it they don't match", async () => {
+      body = `
+          {
+            "name":"Test Icon",
+            "alt":"a test image",
+            "shape":"triangle",
+            "size":"large",
+            "color":"#FF2717",
+            "outlineColor":"#06A3B7",
+            "outlineSize":"small",
+            "text":"Some Text",
+            "textSize":"medium",
+            "textColor":"#009606",
+            "textBackgroundColor":"#06A3B7",
+            "textPosition":"below",
+            "imageSettings": {
+              "mode": "Course",
+              "image": "data:image/jpeg;base64,SGVsbG8sIFdvcmxkIQ==",
+              "imageName": "banana.jpg",
+              "icon": "",
+              "iconFillColor": "",
+              "cropperSettings": {
+                "shape": "square"
+              }
+            }
+          }`
+      overwriteUrl()
+
+      const {result, waitForValueToChange} = renderHook(() =>
+        useSvgSettings(ed, editing, canvasOrigin)
+      )
+
+      await waitForValueToChange(() => {
+        return result.current[0]
+      })
+
+      expect(result.current[0]).toMatchInlineSnapshot(`
+        Object {
+          "alt": "a red circle",
+          "color": "#FF2717",
+          "embedImage": "data:image/svg+xml;base64,CROPPED",
+          "error": null,
+          "externalHeight": null,
+          "externalStyle": null,
+          "externalWidth": null,
+          "height": 0,
+          "imageSettings": Object {
+            "cropperSettings": Object {
+              "shape": "triangle",
+            },
+            "icon": "",
+            "iconFillColor": "",
+            "image": "data:image/jpeg;base64,SGVsbG8sIFdvcmxkIQ==",
+            "imageName": "banana.jpg",
+            "mode": "Course",
+          },
+          "isDecorative": false,
+          "name": "Test Icon",
+          "originalName": "Test Icon",
+          "outlineColor": "#06A3B7",
+          "outlineSize": "small",
+          "shape": "triangle",
+          "size": "large",
+          "text": "Some Text",
+          "textBackgroundColor": "#06A3B7",
+          "textColor": "#009606",
+          "textPosition": "below",
+          "textSize": "medium",
+          "transform": "",
+          "translateX": 0,
+          "translateY": 0,
+          "type": "image/svg+xml-icon-maker-icons",
+          "width": 0,
+          "x": 0,
+          "y": 0,
+        }
+      `)
+    })
   })
 
   describe('when an existing icon is edited while the tray is already open', () => {
@@ -618,48 +1028,40 @@ describe('useSvgSettings()', () => {
           data-download-url="https://canvas.instructure.com/files/2/download" />
       `)
 
-      fetchMock.mock('begin:https://domain.from.env/files/1/download', {
+      fetchMock.mock('begin:https://domain.from.env/api/v1/files/1/icon_metadata', {
         body: `
-          <svg height="100" width="100">
-            <metadata>
-              {
-                "alt":"the first test image",
-                "shape":"triangle",
-                "size":"large",
-                "color":"#FF2717",
-                "outlineColor":"#06A3B7",
-                "outlineSize":"small",
-                "text":"Some Text",
-                "textSize":"medium",
-                "textColor":"#009606",
-                "textBackgroundColor":"#06A3B7",
-                "textPosition":"below"
-              }
-            </metadata>
-            <circle cx="50" cy="50" r="40" stroke="black" stroke-width="3" fill="red"/>
-          </svg>`
+          {
+            "name":"Test Icon.svg",
+            "alt":"the first test image",
+            "shape":"triangle",
+            "size":"large",
+            "color":"#FF2717",
+            "outlineColor":"#06A3B7",
+            "outlineSize":"small",
+            "text":"Some Text",
+            "textSize":"medium",
+            "textColor":"#009606",
+            "textBackgroundColor":"#06A3B7",
+            "textPosition":"below"
+          }`,
       })
 
-      fetchMock.mock('begin:https://domain.from.env/files/2/download', {
+      fetchMock.mock('begin:https://domain.from.env/api/v1/files/2/icon_metadata', {
         body: `
-          <svg height="100" width="100">
-            <metadata>
-              {
-                "alt":"the second test image",
-                "shape":"square",
-                "size":"medium",
-                "color":"#FF2717",
-                "outlineColor":"#06A3B7",
-                "outlineSize":"small",
-                "text":"Some Text",
-                "textSize":"medium",
-                "textColor":"#009606",
-                "textBackgroundColor":"#06A3B7",
-                "textPosition":"below"
-              }
-            </metadata>
-            <circle cx="50" cy="50" r="40" stroke="black" stroke-width="3" fill="red"/>
-          </svg>`
+          {
+            "name":"Test Icon.svg",
+            "alt":"the second test image",
+            "shape":"square",
+            "size":"medium",
+            "color":"#FF2717",
+            "outlineColor":"#06A3B7",
+            "outlineSize":"small",
+            "text":"Some Text",
+            "textSize":"medium",
+            "textColor":"#009606",
+            "textBackgroundColor":"#06A3B7",
+            "textPosition":"below"
+          }`,
       })
     })
 
@@ -667,7 +1069,7 @@ describe('useSvgSettings()', () => {
 
     it('loads the correct metadata', async () => {
       const {result, rerender, waitForValueToChange} = renderHook(() =>
-        useSvgSettings(ed, editing, rcs)
+        useSvgSettings(ed, editing, canvasOrigin)
       )
 
       ed.setSelectedNode(ed.dom.select('#test-image-1')[0])
@@ -680,50 +1082,6 @@ describe('useSvgSettings()', () => {
 
       expect(result.current[0].name).toEqual('Test Icon')
       expect(result.current[0].shape).toEqual('square')
-    })
-  })
-})
-
-describe('svgFromUrl()', () => {
-  let svgResponse
-
-  const subject = () => svgFromUrl('https://www.instructure.com/svg')
-
-  beforeEach(() => {
-    fetchMock.mock('https://www.instructure.com/svg', () => ({
-      body: svgResponse,
-      sendAsJson: false
-    }))
-  })
-
-  afterEach(() => {
-    fetchMock.restore()
-    jest.resetAllMocks()
-  })
-
-  describe('when the url points to an SVG file', () => {
-    beforeEach(() => {
-      svgResponse = `
-        <svg height="100" width="100">
-          <circle cx="50" cy="50" r="40" stroke="black" stroke-width="3" fill="red"/>
-        </svg>
-      `
-    })
-
-    it('returns the parsed SVG document', async () => {
-      const svgDoc = await subject()
-      expect(svgDoc.querySelector('svg').innerHTML).toContain(
-        '<circle cx="50" cy="50" r="40" stroke="black" stroke-width="3" fill="red"/>'
-      )
-    })
-  })
-
-  describe('when the url points to a document that is not parsable', () => {
-    beforeEach(() => (svgResponse = 'asdf'))
-
-    it('returns an empty document', async () => {
-      const doc = await subject()
-      expect(doc.firstChild.toString.innerHTML).toEqual(undefined)
     })
   })
 })

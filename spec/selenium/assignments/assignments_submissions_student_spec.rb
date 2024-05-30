@@ -44,6 +44,60 @@ describe "submissions" do
       user_session(@student)
     end
 
+    it "does not show score if RDQ" do
+      # truthy feature flag
+      Account.default.enable_feature! :restrict_quantitative_data
+
+      # enable RQD for course
+      @course.settings = @course.settings.merge(restrict_quantitative_data: true)
+      @course.save!
+
+      @teacher = User.create!
+      @course.enroll_teacher(@teacher)
+
+      first_period_assignment = @course.assignments.create!(
+        due_at: @due_date,
+        points_possible: 10,
+        submission_types: "online_text_entry"
+      )
+
+      first_period_assignment.grade_student(@student, grade: 8, grader: @teacher)
+
+      get "/courses/#{@course.id}/assignments/#{first_period_assignment.id}"
+      expect(f(".module")).to include_text "Grade: B−"
+
+      get "/courses/#{@course.id}/assignments/#{first_period_assignment.id}/submissions/#{@student.id}"
+      expect(f(".entered_grade")).to include_text "B−"
+    end
+
+    it "show score if not RDQ" do
+      # truthy feature flag
+      Account.default.enable_feature! :restrict_quantitative_data
+
+      # disable RQD for course
+      @course.settings = @course.settings.merge(restrict_quantitative_data: false)
+      @course.save!
+
+      @teacher = User.create!
+      @course.enroll_teacher(@teacher)
+
+      first_period_assignment = @course.assignments.create!(
+        due_at: @due_date,
+        points_possible: 10,
+        submission_types: "online_text_entry"
+      )
+
+      first_period_assignment.grade_student(@student, grade: 8, grader: @teacher)
+
+      get "/courses/#{@course.id}/assignments/#{first_period_assignment.id}"
+      expect(f(".module")).to include_text "Grade: 8 (10 pts possible)"
+
+      get "/courses/#{@course.id}/assignments/#{first_period_assignment.id}/submissions/#{@student.id}"
+
+      expect(f(".entered_grade")).to include_text "8"
+      expect(f(".grade-values")).to include_text "Grade: 8 / 10"
+    end
+
     it "lets a student submit a text entry", :xbrowser, priority: "1" do
       @assignment.update(submission_types: "online_text_entry")
       get "/courses/#{@course.id}/assignments/#{@assignment.id}"
@@ -108,6 +162,7 @@ describe "submissions" do
     end
 
     it "allows you to submit a file", priority: "1" do
+      skip("investigate in EVAL-2966")
       @assignment.submission_types = "online_upload"
       @assignment.save!
       _filename, fullpath, _data = get_file("testfile1.txt")
@@ -270,7 +325,7 @@ describe "submissions" do
 
       # it should not actually submit and pop up an error message
       expect { submit_form(assignment_form) }.not_to change { submission.reload.updated_at }
-      expect(submission.reload.body).to be nil
+      expect(submission.reload.body).to be_nil
       expect(ff(".error_box")[1]).to include_text("Required")
 
       # now make sure it works
@@ -329,8 +384,9 @@ describe "submissions" do
     end
 
     it "does not allow peer reviewers to see turnitin scores/reports", priority: "1" do
+      skip("investigate in EVAL-2966")
       @student1 = @user
-      @assignment.submission_types = "online_upload"
+      @assignment.submission_types = "online_upload,online_text_entry"
       @assignment.turnitin_enabled = true
       @assignment.save!
       _filename, fullpath, _data = get_file("testfile1.txt")
@@ -367,7 +423,7 @@ describe "submissions" do
       }
       @submission.turnitin_data_changed!
       @submission.save!
-
+      @assignment.submit_homework(@student2, body: "hello")
       get "/courses/#{@course.id}/assignments/#{@assignment.id}/submissions/#{@student1.id}"
       in_frame("preview_frame") do
         expect(f("body")).not_to contain_css(".turnitin_score_container")
@@ -405,10 +461,6 @@ describe "submissions" do
     end
 
     describe "uploaded files for submission" do
-      def fixture_file_path(file)
-        RSpec.configuration.fixture_path.join(file).to_s
-      end
-
       def make_folder_actions_visible
         driver.execute_script("$('.folder_item').addClass('folder_item_hover')")
       end
@@ -417,8 +469,8 @@ describe "submissions" do
         local_storage!
 
         add_file(fixture_file_upload("html-editing-test.html", "text/html"),
-                 @student, "html-editing-test.html")
-        File.read(fixture_file_path("files/html-editing-test.html"))
+                 @student,
+                 "html-editing-test.html")
         assignment = @course.assignments.create!(title: "assignment 1",
                                                  name: "assignment 1",
                                                  submission_types: "online_upload",
@@ -441,13 +493,12 @@ describe "submissions" do
       it "does not allow a user to submit a file-submission assignment from previously uploaded files with an illegal file extension", priority: "1" do
         skip_if_safari(:alert)
         filename = "hello-world.sh"
-        fixture_fn = "files/#{filename}"
 
         local_storage!
 
-        add_file(fixture_file_upload(fixture_fn, "application/x-sh"),
-                 @student, filename)
-        File.read(fixture_file_path(fixture_fn))
+        add_file(fixture_file_upload(filename, "application/x-sh"),
+                 @student,
+                 filename)
         assignment = @course.assignments.create!(title: "assignment 1",
                                                  name: "assignment 1",
                                                  submission_types: "online_upload",

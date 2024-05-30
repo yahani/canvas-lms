@@ -41,5 +41,13 @@ export const coursePaceDateFormatter = (locale = ENV.LOCALE) =>
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-    timeZone: coursePaceTimezone
+    timeZone: coursePaceTimezone,
+  }).format
+
+export const coursePaceDateShortFormatter = (locale = ENV.LOCALE) =>
+  new Intl.DateTimeFormat(locale, {
+    month: 'numeric',
+    day: 'numeric',
+    year: '2-digit',
+    timeZone: coursePaceTimezone,
   }).format

@@ -65,7 +65,7 @@ describe ProfileController do
         student_in_course(user: @user, active_all: true)
 
         get "show", params: { user_id: @user.id }
-        expect(assigns(:user_data)[:common_contexts].size).to eql(2)
+        expect(assigns(:user_data)[:common_contexts].size).to be(2)
         expect(assigns(:user_data)[:common_contexts][0]["id"]).to eql(@course.id)
         expect(assigns(:user_data)[:common_contexts][0]["roles"]).to eql(["Student"])
         expect(assigns(:user_data)[:common_contexts][1]["id"]).to eql(group.id)
@@ -106,7 +106,7 @@ describe ProfileController do
 
       it "allows changing pronouns" do
         user_session(@user, @pseudonym)
-        expect(@user.pronouns).to eq nil
+        expect(@user.pronouns).to be_nil
         put "update", params: { user: { pronouns: "  He/Him " } }, format: "json"
         expect(response).to be_successful
         @user.reload
@@ -122,16 +122,16 @@ describe ProfileController do
         put "update", params: { user: { pronouns: "" } }, format: "json"
         expect(response).to be_successful
         @user.reload
-        expect(@user.pronouns).to eq nil
+        expect(@user.pronouns).to be_nil
       end
 
       it "does not allow setting pronouns not on the approved list" do
         user_session(@user, @pseudonym)
-        expect(@user.pronouns).to eq nil
+        expect(@user.pronouns).to be_nil
         put "update", params: { user: { pronouns: "Pro/Noun" } }, format: "json"
         expect(response).to be_successful
         @user.reload
-        expect(@user.pronouns).to eq nil
+        expect(@user.pronouns).to be_nil
       end
 
       it "does not allow setting pronouns if the setting is disabled" do
@@ -141,7 +141,7 @@ describe ProfileController do
         put "update", params: { user: { pronouns: "Pro/Noun" } }, format: "json"
         expect(response).to be_successful
         @user.reload
-        expect(@user.pronouns).to eq nil
+        expect(@user.pronouns).to be_nil
       end
     end
 
@@ -189,6 +189,23 @@ describe ProfileController do
       user_session(@user, @pseudonym.reload)
     end
 
+    it "alert is set to success when profile update is successful" do
+      put "update_profile",
+          params: { user: { short_name: "Monsturd", name: "Jenkins" },
+                    user_profile: { bio: "...", title: "!!!" } },
+          format: "json"
+      expect(flash[:success]).to be_truthy
+    end
+
+    it "alert is set to failed when user validation fails" do
+      name = "a" * 1000
+      put "update_profile",
+          params: { user: { short_name: name, name: "Jenkins" },
+                    user_profile: { bio: "...", title: "!!!" } },
+          format: "json"
+      expect(flash[:success]).to be_falsey
+    end
+
     it "lets you change your short_name and profile information" do
       put "update_profile",
           params: { user: { short_name: "Monsturd", name: "Jenkins" },
@@ -221,6 +238,22 @@ describe ProfileController do
       expect(@user.name).not_to eql "Jenkins"
       expect(@user.profile.bio).to eql "..."
       expect(@user.profile.title).to eql old_title
+    end
+
+    it "does not let you change your profile information if you are not allowed" do
+      account = Account.default
+      account.settings = { users_can_edit_profile: false }
+      account.save!
+
+      old_bio = @user.profile.bio
+      put "update_profile",
+          params: { user: { short_name: "Monsturd", name: "Jenkins" },
+                    user_profile: { bio: "...", title: "!!!" } },
+          format: "json"
+      expect(response).to be_successful
+
+      @user.reload
+      expect(@user.profile.bio).to eql old_bio
     end
 
     it "lets you set visibility on user_services" do
@@ -271,7 +304,7 @@ describe ProfileController do
     end
 
     it "shows if user has any non-student enrollments" do
-      allow(DynamicSettings).to receive(:find).and_return({ "base_url" => "the_ccv_url" })
+      allow(DynamicSettings).to receive(:find).and_return(DynamicSettings::FallbackProxy.new({ "base_url" => "the_ccv_url" }))
       user_session(@teacher)
       get "content_shares", params: { user_id: @teacher.id }
       expect(response).to render_template("content_shares")
@@ -361,6 +394,20 @@ describe ProfileController do
     end
 
     describe "js_env" do
+      it "sets discussions_reporting to falsey if react_discussions_post is off" do
+        Account.default.disable_feature! :react_discussions_post
+        user_session(@user)
+        get "communication"
+        expect(assigns[:js_env][:discussions_reporting]).to be_falsey
+      end
+
+      it "sets discussions_reporting to truthy if react_discussions_post is on" do
+        Account.default.enable_feature! :react_discussions_post
+        user_session(@user)
+        get "communication"
+        expect(assigns[:js_env][:discussions_reporting]).to be_truthy
+      end
+
       it "sets the weekly_notification_range" do
         allow(@user).to receive(:weekly_notification_bucket).and_return(0)
         user_session(@user)

@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "csv"
-
 describe Quizzes::QuizStatistics do
   before(:once) do
     student_in_course(active_all: true)
@@ -140,9 +138,8 @@ describe Quizzes::QuizStatistics do
   end
 
   it "uses inst-fs to store attachment when enabled" do
-    allow(InstFS).to receive(:enabled?).and_return(true)
     @uuid = "1234-abcd"
-    allow(InstFS).to receive(:direct_upload).and_return(@uuid)
+    allow(InstFS).to receive_messages(enabled?: true, direct_upload: @uuid)
 
     stats = @quiz.current_statistics_for "student_analysis"
     attachment = stats.generate_csv
@@ -153,7 +150,7 @@ describe Quizzes::QuizStatistics do
     allow(InstFS).to receive(:enabled?).and_return(false)
     stats = @quiz.current_statistics_for "student_analysis"
     attachment = stats.generate_csv
-    expect(attachment.instfs_uuid).to eq(nil)
+    expect(attachment.instfs_uuid).to be_nil
   end
 
   describe "self#large_quiz?" do
@@ -167,8 +164,7 @@ describe Quizzes::QuizStatistics do
 
     let :quiz do
       Quizzes::Quiz.new.tap do |quiz|
-        allow(quiz).to receive(:active_quiz_questions).and_return(active_quiz_questions)
-        allow(quiz).to receive(:quiz_submissions).and_return(quiz_submissions)
+        allow(quiz).to receive_messages(active_quiz_questions:, quiz_submissions:)
       end
     end
 

@@ -19,6 +19,8 @@
 #
 
 class ExternalFeed < ActiveRecord::Base
+  self.ignored_columns += %w[author_email author_name author_url]
+
   belongs_to :user
   belongs_to :context, polymorphic: [:course, :group]
 
@@ -50,7 +52,7 @@ class ExternalFeed < ActiveRecord::Base
 
   def display_name(short = true)
     short_url = (url || "").split("/")[0, 3].join("/")
-    title || (short ? t(:short_feed_title, "%{short_url} feed", short_url: short_url) : url)
+    title || (short ? t(:short_feed_title, "%{short_url} feed", short_url:) : url)
   end
 
   def header_match=(str)
@@ -77,8 +79,7 @@ class ExternalFeed < ActiveRecord::Base
   end
 
   def add_atom_entries(atom)
-    items = []
-    atom.each_entry { |item| items << add_entry(item, atom, :atom) }
+    items = atom.entries.map { |item| add_entry(item, atom, :atom) }
     items.compact!
     context.add_aggregate_entries(items, self) if context.respond_to?(:add_aggregate_entries)
     items
@@ -106,7 +107,7 @@ class ExternalFeed < ActiveRecord::Base
       end
       uuid ||= Digest::SHA256.hexdigest("#{item.title}#{item.date.strftime("%Y-%m-%d")}")
 
-      entry = external_feed_entries.where(uuid: uuid).first
+      entry = external_feed_entries.where(uuid:).first
       entry ||= external_feed_entries.where(url: item.link).first
       description = entry&.message
       if description.blank?
@@ -133,51 +134,44 @@ class ExternalFeed < ActiveRecord::Base
         source_name: feed.channel.title,
         source_url: feed.channel.link,
         posted_at: Time.parse(date.to_s),
-        user: user,
+        user:,
         url: item.link,
-        uuid: uuid
+        uuid:
       )
-      return entry if entry.save
+      entry if entry.save
     when :atom
       uuid = item.id || Digest::SHA256.hexdigest("#{item.title}#{item.published.utc.strftime("%Y-%m-%d")}")
-      entry = external_feed_entries.where(uuid: uuid).first
-      entry ||= external_feed_entries.where(url: item.links.alternate.to_s).first
-      author = item.authors.first || OpenObject.new
+      entry = external_feed_entries.where(uuid:).first
+      entry ||= external_feed_entries.where(url: item.url).first
       description = entry&.message
       if description.blank?
-        description = "<a href='#{ERB::Util.h(item.links.alternate.to_s)}'>#{ERB::Util.h(t(:original_article, "Original article"))}</a><br/><br/>"
+        description = "<a href='#{ERB::Util.h(item.url)}'>#{ERB::Util.h(t(:original_article, "Original article"))}</a><br/><br/>"
         description += format_description(item.content || item.title)
       end
       if entry
         entry.update_feed_attributes(
           title: item.title.to_s,
           message: description,
-          url: item.links.alternate.to_s,
-          author_name: author.name,
-          author_url: author.uri,
-          author_email: author.email
+          url: item.url
         )
         return entry
       end
       return nil if header_match && !item.title.downcase.include?(header_match.downcase)
       return nil if (item.published && created_at > item.published rescue false)
 
-      description = "<a href='#{ERB::Util.h(item.links.alternate.to_s)}'>#{ERB::Util.h(t(:original_article, "Original article"))}</a><br/><br/>"
+      description = "<a href='#{ERB::Util.h(item.url)}'>#{ERB::Util.h(t(:original_article, "Original article"))}</a><br/><br/>"
       description += format_description(item.content || item.title)
       entry = external_feed_entries.new(
         title: item.title,
         message: description,
         source_name: feed.title.to_s,
-        source_url: feed.links.alternate.to_s,
+        source_url: feed.url,
         posted_at: item.published,
-        url: item.links.alternate.to_s,
-        user: user,
-        author_name: author.name,
-        author_url: author.uri,
-        author_email: author.email,
-        uuid: uuid
+        url: item.url,
+        user:,
+        uuid:
       )
-      return entry if entry.save
+      entry if entry.save
     end
   end
 end

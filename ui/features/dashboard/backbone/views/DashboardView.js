@@ -35,7 +35,7 @@ export default class DashboardView extends View {
       'click .stream-details': 'handleDetailsClick',
       'click .close_conference_link': 'closeConference',
       'focus .todo-tooltip': 'handleTooltipFocus',
-      'beforeremove .stream-category': 'updateCategoryCounts' // ujsLinks event
+      'beforeremove .stream-category': 'updateCategoryCounts', // ujsLinks event
     }
   }
 
@@ -70,6 +70,7 @@ export default class DashboardView extends View {
     const assistiveText = this.getCategoryText(categoryName, count, !isExpanded)
     const $link = $category.find('.toggle-details')
     $link.html(showMoreTemplate({expanded: isExpanded, assistiveText}))
+    $link.attr('aria-expanded', isExpanded)
   }
 
   getCategoryText(category, count, forExpand) {
@@ -79,7 +80,7 @@ export default class DashboardView extends View {
           'announcements_expand',
           {
             one: 'Expand %{count} announcement',
-            other: 'Expand %{count} announcements'
+            other: 'Expand %{count} announcements',
           },
           {count}
         )
@@ -88,7 +89,7 @@ export default class DashboardView extends View {
           'announcements_collapse',
           {
             one: 'Collapse %{count} announcement',
-            other: 'Collapse %{count} announcements'
+            other: 'Collapse %{count} announcements',
           },
           {count}
         )
@@ -99,7 +100,7 @@ export default class DashboardView extends View {
           'conversations_expand',
           {
             one: 'Expand %{count} conversation message',
-            other: 'Expand %{count} conversation messages'
+            other: 'Expand %{count} conversation messages',
           },
           {count}
         )
@@ -108,7 +109,7 @@ export default class DashboardView extends View {
           'conversations_collapse',
           {
             one: 'Collapse %{count} conversation message',
-            other: 'Collapse %{count} conversation messages'
+            other: 'Collapse %{count} conversation messages',
           },
           {count}
         )
@@ -119,7 +120,7 @@ export default class DashboardView extends View {
           'assignments_expand',
           {
             one: 'Expand %{count} assignment notification',
-            other: 'Expand %{count} assignment notifications'
+            other: 'Expand %{count} assignment notifications',
           },
           {count}
         )
@@ -128,7 +129,7 @@ export default class DashboardView extends View {
           'assignments_collapse',
           {
             one: 'Collapse %{count} assignment notification',
-            other: 'Collapse %{count} assignment notifications'
+            other: 'Collapse %{count} assignment notifications',
           },
           {count}
         )
@@ -139,7 +140,7 @@ export default class DashboardView extends View {
           'discussions_expand',
           {
             one: 'Expand %{count} discussion',
-            other: 'Expand %{count} discussions'
+            other: 'Expand %{count} discussions',
           },
           {count}
         )
@@ -148,7 +149,7 @@ export default class DashboardView extends View {
           'discussions_collapse',
           {
             one: 'Collapse %{count} discussion',
-            other: 'Collapse %{count} discussions'
+            other: 'Collapse %{count} discussions',
           },
           {count}
         )
@@ -188,7 +189,7 @@ export default class DashboardView extends View {
   closeConference(e) {
     e.preventDefault()
     if (
-      !confirm(
+      !window.confirm(
         I18n.t(
           'confirm.close',
           'Are you sure you want to end this conference?\n\nYou will not be able to reopen it.'
@@ -197,7 +198,7 @@ export default class DashboardView extends View {
     )
       return
     const link = $(e.currentTarget)
-    return $.ajaxJSON(link.attr('href'), 'POST', {}, data =>
+    return $.ajaxJSON(link.attr('href'), 'POST', {}, _data =>
       link.parents('.ic-notification.conference').hide()
     )
   }

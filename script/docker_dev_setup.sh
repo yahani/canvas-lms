@@ -29,13 +29,13 @@ fi
 
 create_log_file
 init_log_file "Docker Dev Setup"
+detect_local_canvas
 os_setup
 message 'Now we can set up Canvas!'
 copy_docker_config
 setup_docker_compose_override
 build_images
 docker_compose_up
-check_gemfile
 build_assets
 create_db
 display_next_steps

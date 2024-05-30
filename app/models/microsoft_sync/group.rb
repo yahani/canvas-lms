@@ -18,9 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-# It seems like it sometimes gets confused and misses the table prefix without this...
-require_dependency "microsoft_sync"
-
 #
 # MicrosoftSync contains models used to sync course enrollments to Microsoft
 # Teams via Microsoft's APIs. For customers using their new (in development as
@@ -71,6 +68,7 @@ class MicrosoftSync::Group < ActiveRecord::Base
   end
 
   serialize :job_state
+  serialize :debug_info
 
   resolves_root_account through: :course
 
@@ -105,7 +103,7 @@ class MicrosoftSync::Group < ActiveRecord::Base
   # Returns true if the record was updated (i.e. record exists and is not deleted).
   def update_unless_deleted(attrs = {})
     records_updated = self.class
-                          .where(id: id).where.not(workflow_state: "deleted").update_all(attrs)
+                          .where(id:).where.not(workflow_state: "deleted").update_all(attrs)
     if records_updated == 0
       # It could actually be that the record was hard-deleted and not
       # workflow_state=deleted, but whatever

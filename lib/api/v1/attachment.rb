@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "uri"
-
 module Api::V1::Attachment
   include Api::V1::Json
   include Api::V1::Locked
@@ -47,14 +45,12 @@ module Api::V1::Attachment
   end
 
   def attachment_json(attachment, user, url_options = {}, options = {})
-    hash = {
-      "id" => attachment.id,
-      "uuid" => attachment.uuid,
-      "folder_id" => attachment.folder_id,
-      "display_name" => attachment.display_name,
-      "filename" => attachment.filename,
-      "upload_status" => AttachmentUploadStatus.upload_status(attachment)
-    }
+    hash = attachment.slice("id", "uuid", "folder_id", "display_name", "filename")
+    hash["upload_status"] = AttachmentUploadStatus.upload_status(attachment)
+
+    if options[:can_view_hidden_files] && options[:context] && options[:include].include?("blueprint_course_status") && !options[:master_course_status]
+      options[:master_course_status] = setup_master_course_restrictions([attachment], options[:context])
+    end
 
     if options[:master_course_status]
       hash.merge!(attachment.master_course_api_restriction_data(options[:master_course_status]))
@@ -96,7 +92,8 @@ module Api::V1::Attachment
         url = thumbnail_url
       else
         h = { download: "1", download_frd: "1" }
-        h[:verifier] = attachment.uuid unless options[:omit_verifier_in_app] && ((respond_to?(:in_app?, true) && in_app?) || @authenticated_with_jwt)
+        h[:verifier] = options[:verifier] if options[:verifier].present?
+        h[:verifier] ||= attachment.uuid unless options[:omit_verifier_in_app] && ((respond_to?(:in_app?, true) && in_app?) || @authenticated_with_jwt)
         url = file_download_url(attachment, h.merge(url_options))
       end
       # and svg can stand in as its own thumbnail, but let's be reasonable about their size
@@ -122,12 +119,18 @@ module Api::V1::Attachment
       "thumbnail_url" => thumbnail_url,
       "modified_at" => attachment.modified_at || attachment.updated_at,
       "mime_class" => attachment.mime_class,
-      "media_entry_id" => attachment.media_entry_id
+      "media_entry_id" => attachment.media_entry_id,
+      "category" => attachment.category
     )
+
     if skip_permission_checks
       hash["locked_for_user"] = false
     else
       locked_json(hash, attachment, user, "file")
+    end
+
+    if attachment.supports_visibility?
+      hash["visibility_level"] = attachment.visibility_level
     end
 
     if includes.include? "user"
@@ -154,10 +157,8 @@ module Api::V1::Attachment
       url_opts = {
         annotate: 0
       }
-      omit_verifier = options[:omit_verifier_in_app] && ((respond_to?(:in_app?, true) && in_app?) || @authenticated_with_jwt)
-      if downloadable && !omit_verifier
-        url_opts[:verifier] = attachment.uuid
-      end
+      url_opts[:verifier] = options[:verifier] if options[:verifier].present?
+      url_opts[:verifier] ||= attachment.uuid if downloadable && !options[:omit_verifier_in_app] && !((respond_to?(:in_app?, true) && in_app?) || @authenticated_with_jwt)
       hash["preview_url"] = context_url(attachment.context, :context_file_file_preview_url, attachment, url_opts)
     end
     if includes.include? "usage_rights"
@@ -225,7 +226,7 @@ module Api::V1::Attachment
     if !context.respond_to?(:folders)
       nil
     elsif params[:parent_folder_id]
-      context.folders.active.where(id: params[:parent_folder_id]).first
+      context.folders.active.find_by(id: params[:parent_folder_id])
     elsif params[:parent_folder_path].is_a?(String)
       Folder.assert_path(params[:parent_folder_path], context)
     end
@@ -303,10 +304,17 @@ module Api::V1::Attachment
     # an LTI request
     actual_user = opts[:override_logged_in_user] ? current_user : logged_in_user
 
-    # user must have permission on folder to user a custom folder other
+    # user must have permission on folder to use a custom folder other
     # than the "preferred" folder (that specified by the caller).
     folder = infer_upload_folder(context, params)
     return if folder && !authorized_action(folder, current_user, :manage_contents)
+
+    # given parent folder id doesn't exist or has been deleted
+    if folder.nil? && params[:parent_folder_id]
+      return render status: :not_found, json: {
+        message: I18n.t("The specified resource does not exist.")
+      }
+    end
 
     # no permission check required to use the preferred folder
 
@@ -341,13 +349,18 @@ module Api::V1::Attachment
       # when the attachment record is created
       additional_capture_params[:category] = params[:category] if params[:category].present?
 
+      if opts[:precreate_attachment]
+        @attachment = create_new_attachment(context, params, current_user, opts, folder)
+        additional_capture_params[:precreated_attachment_id] = @attachment.global_id.to_s
+      end
+
       json = InstFS.upload_preflight_json(
-        context: context,
+        context:,
         root_account: context.try(:root_account) || @domain_root_account,
         user: actual_user,
         acting_as: current_user,
         access_token: @access_token,
-        folder: folder,
+        folder:,
         filename: infer_upload_filename(params),
         content_type: infer_upload_content_type(params, "unknown/unknown"),
         on_duplicate: infer_on_duplicate(params),
@@ -356,30 +369,17 @@ module Api::V1::Attachment
         target_url: params[:url],
         progress_json: progress_json_result,
         include_param: params[:success_include],
-        additional_capture_params: additional_capture_params
+        additional_capture_params:
       )
     else
-      @attachment = Attachment.new
-      @attachment.shard = context.shard
-      @attachment.context = context
-      @attachment.user = current_user
-      @attachment.filename = infer_upload_filename(params)
-      @attachment.content_type = infer_upload_content_type(params, "unknown/unknown")
-      @attachment.folder = folder
-      @attachment.set_publish_state_for_usage_rights
-      @attachment.file_state = "deleted"
-      @attachment.workflow_state = opts[:temporary] ? "unattached_temporary" : "unattached"
-      @attachment.modified_at = Time.now.utc
-      @attachment.category = params[:category] if params[:category].present?
-      @attachment.save!
-
+      @attachment = create_new_attachment(context, params, current_user, opts, folder)
       on_duplicate = infer_on_duplicate(params)
       if params[:url]
         progress = ::Progress.new(context: progress_context, user: current_user, tag: :upload_via_url)
         progress.reset!
 
         executor = Services::SubmitHomeworkService.create_clone_url_executor(
-          params[:url], on_duplicate, opts[:check_quota], progress: progress
+          params[:url], on_duplicate, opts[:check_quota], progress:
         )
 
         Services::SubmitHomeworkService.submit_job(
@@ -392,15 +392,15 @@ module Api::V1::Attachment
         quota_exemption = @attachment.quota_exemption_key unless opts[:check_quota]
         json = @attachment.ajax_upload_params(
           api_v1_files_create_url(
-            on_duplicate: on_duplicate,
-            quota_exemption: quota_exemption,
+            on_duplicate:,
+            quota_exemption:,
             success_include: params[:success_include]
           ),
           api_v1_files_create_success_url(
             @attachment,
             uuid: @attachment.uuid,
-            on_duplicate: on_duplicate,
-            quota_exemption: quota_exemption,
+            on_duplicate:,
+            quota_exemption:,
             include: params[:success_include]
           ),
           ssl: request.ssl?,
@@ -411,11 +411,34 @@ module Api::V1::Attachment
       end
     end
 
-    if opts[:return_json]
+    # return json and the attachment if the attachment is to be precreated
+    if opts[:precreate_attachment] && opts[:return_json]
+      {
+        json:,
+        attachment: @attachment
+      }
+    elsif opts[:return_json]
       json
     else
-      render json: json
+      render json:
     end
+  end
+
+  def create_new_attachment(context, params, current_user, opts, folder)
+    attachment = Attachment.new
+    attachment.shard = context.shard
+    attachment.context = context
+    attachment.user = current_user
+    attachment.filename = infer_upload_filename(params)
+    attachment.content_type = infer_upload_content_type(params, "unknown/unknown")
+    attachment.folder = folder
+    attachment.set_publish_state_for_usage_rights
+    attachment.file_state = "deleted"
+    attachment.workflow_state = opts[:temporary] ? "unattached_temporary" : "unattached"
+    attachment.modified_at = Time.now.utc
+    attachment.category = params[:category] if params[:category].present?
+    attachment.save!
+    attachment
   end
 
   def api_attachment_preflight_json(context, request, opts = {})

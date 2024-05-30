@@ -27,13 +27,14 @@ class ContentExportsController < ApplicationController
   def require_permission
     get_context
     @context ||= @current_user # if we're going through the dashboard
-    return render_unauthorized_action unless @context&.grants_all_rights?(@current_user, :read, :read_as_admin)
+    authorized_action(@context, @current_user, [:read, :read_as_admin], all_rights: true)
   end
 
   def index
     scope = @context.content_exports_visible_to(@current_user).without_epub
     @exports = scope.active.not_for_copy.order("content_exports.created_at DESC")
     @current_export_id = scope.running.first.try(:id)
+    @warning_messages = @context.export_warnings if @context.is_a?(Course)
   end
 
   def show
@@ -61,6 +62,8 @@ class ContentExportsController < ApplicationController
           export.selected_content = params[:copy].to_unsafe_h
         else
           export.export_type = ContentExport::COMMON_CARTRIDGE
+          export.set_contains_new_quizzes_settings
+          export.mark_waiting_for_external_tool if export.contains_new_quizzes?
           export.selected_content = { everything: true }
         end
       when User
@@ -69,7 +72,7 @@ class ContentExportsController < ApplicationController
 
       export.progress = 0
       if export.save
-        export.export
+        export.export unless export.waiting_for_external_tool?
         render_export(export)
       else
         render json: { error_message: t("errors.couldnt_create", "Couldn't create content export.") }
@@ -100,6 +103,6 @@ class ContentExportsController < ApplicationController
   def render_export(export)
     json = export.as_json(only: %i[id progress workflow_state], methods: [:error_message])
     json["content_export"]["download_url"] = verified_file_download_url(export.attachment, export) if export.attachment && !export.expired?
-    render json: json
+    render json:
   end
 end

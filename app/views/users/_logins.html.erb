@@ -34,7 +34,8 @@
       <% pseudonyms.each do |pseudonym| %>
         <tr class="login<%= ' blank' unless pseudonym %>" <%= raw %Q(style="display: none") unless pseudonym %>>
           <td class="sso-icon" <%= raw %Q(data-pseudonym-id="#{pseudonym.id}") if pseudonym %>>
-            <% if lookup_context.template_exists?("shared/svg/_svg_icon_#{pseudonym.try(:authentication_provider).try(:auth_type)}.svg") %>
+            <% icon_file_path = Rails.root.join("app/views/shared/svg/_svg_icon_#{pseudonym.try(:authentication_provider).try(:auth_type)}.svg") %>
+            <% if File.exist?(icon_file_path) %>
               <%= render(partial: "shared/svg/svg_icon_#{pseudonym.authentication_provider.auth_type}", formats: [:svg]) %>
               <span class="screenreader-only">
                 <%= t("This login is for %{provider}", provider: pseudonym.authentication_provider.class.display_name) %>
@@ -107,13 +108,14 @@
           <% end %>
         </tr>
       <% end %>
-      <% can_add_pseudonym = can_do(@user.pseudonyms.build(account: @domain_root_account), @current_user, :create) %>
+      <% new_pseudonym = @user.pseudonyms.build(account: @domain_root_account) %>
+      <% can_add_pseudonym = can_do(new_pseudonym, @current_user, :create) %>
       <% can_reset_mfa = @user.otp_secret_key && can_do(@user, @current_user, :reset_mfa) %>
       <% if can_add_pseudonym || can_reset_mfa %>
         <tr class="add_holder">
           <td colspan="5">
             <% if can_add_pseudonym %>
-              <a href="#" rel="<%= user_pseudonyms_url(@user.id) %>" class="add_pseudonym_link"><%= t('add_login', 'Add Login') %></a>
+              <a href="#" rel="<%= user_pseudonyms_url(@user.id) %>" data-can-manage-sis="<%= can_do(new_pseudonym, @current_user, :manage_sis) %>"  class="add_pseudonym_link"><%= t('add_login', 'Add Login') %></a>
             <% end %>
             <% if can_add_pseudonym && can_reset_mfa %> | <% end %>
             <% if can_reset_mfa %>
@@ -132,14 +134,9 @@
         <td><%= f.blabel :unique_id, :en => "Login" %></td>
         <td><%= f.text_field :unique_id %></td>
       </tr>
-      <tr style="display:none;" class="sis_user_id">
-        <td><%= f.blabel :sis_user_id, :en => "SIS ID" %></td>
-        <td><%= f.text_field :sis_user_id %></td>
-      </tr>
-      <tr style="display:none;" class="integration_id">
-        <td><%= f.blabel :integration_id, :en => "Integration ID" %></td>
-        <td><%= f.text_field :integration_id %></td>
-      </tr>
+      <tr data-react-component="external-ids" />
+      <tr class="sis_user_id" data-external-placeholder="sis-user-id" data-label="<%= before_label('sis_id', 'SIS ID') %>" />
+      <tr class="integration_id" data-external-placeholder="integration-id" data-label="<%= before_label('integration_id', 'Integration ID') %>" />
       <% if can_do(Account.site_admin, @current_user, :manage_user_logins) %>
         <% js_env :PASSWORD_POLICIES => Hash[Account.root_accounts.active.non_shadow.map{ |a| [a.id, a.password_policy]}] %>
         <tr class="account_id">

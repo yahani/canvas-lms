@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -33,8 +34,10 @@ export const initialState: UIState = {
   loadingMessage: '',
   editingBlackoutDates: false,
   showLoadingOverlay: false,
+  showPaceModal: false,
   responsiveSize: 'large',
-  showProjections: true
+  showProjections: true,
+  blueprintLocked: window.ENV.MASTER_COURSE_DATA?.restricted_by_master_course,
 }
 
 /* Selectors */
@@ -44,6 +47,7 @@ export const getAutoSaving = (state: StoreState) => state.ui.autoSaving
 // begins publishing. use getSyncing to keep the ui consistent in the transition
 export const getSyncing = (state: StoreState): boolean =>
   state.ui.syncing > 0 || getBlackoutDatesSyncing(state) || getPacePublishing(state)
+export const getAnyActiveRequests = (state: StoreState): boolean => state.ui.syncing > 0
 export const getErrors = (state: StoreState) => state.ui.errors
 export const getCategoryError = (state: StoreState, category: string | string[]) => {
   if (Array.isArray(category)) {
@@ -61,8 +65,12 @@ export const getSelectedContextType = (state: StoreState) => state.ui.selectedCo
 export const getSelectedContextId = (state: StoreState) => state.ui.selectedContextId
 export const getLoadingMessage = (state: StoreState) => state.ui.loadingMessage
 export const getResponsiveSize = (state: StoreState) => state.ui.responsiveSize
+export const getOuterResponsiveSize = (state: StoreState) => state.ui.outerResponsiveSize
 export const getShowLoadingOverlay = (state: StoreState) => state.ui.showLoadingOverlay
+export const getShowPaceModal = (state: StoreState) => state.ui.showPaceModal
 export const getEditingBlackoutDates = (state: StoreState) => state.ui.editingBlackoutDates
+export const getIsSyncing = (state: StoreState) => state.ui.syncing
+export const getBlueprintLocked = (state: StoreState) => state.ui.blueprintLocked
 
 export const getShowProjections = createSelector(
   state => state.ui.showProjections,
@@ -97,14 +105,24 @@ export default (state = initialState, action: UIAction): UIState => {
       return {
         ...state,
         selectedContextType: action.payload.contextType,
-        selectedContextId: action.payload.contextId
+        selectedContextId: action.payload.contextId,
       }
     case UIConstants.SET_RESPONSIVE_SIZE:
       return {...state, responsiveSize: action.payload}
+    case UIConstants.SET_OUTER_RESPONSIVE_SIZE:
+      return {...state, outerResponsiveSize: action.payload}
     case UIConstants.SHOW_LOADING_OVERLAY:
       return {...state, showLoadingOverlay: true, loadingMessage: action.payload}
     case UIConstants.HIDE_LOADING_OVERLAY:
       return {...state, showLoadingOverlay: false, loadingMessage: ''}
+    case UIConstants.HIDE_PACE_MODAL:
+      return {...state, showPaceModal: false}
+    case UIConstants.SHOW_PACE_MODAL:
+      return {...state, showPaceModal: true}
+    case UIConstants.SET_SELECTED_PACE_CONTEXT_TYPE:
+      return {...state, selectedContextType: action.payload}
+    case UIConstants.SET_BLUEPRINT_LOCK:
+      return {...state, blueprintLocked: action.payload}
     default:
       return state
   }

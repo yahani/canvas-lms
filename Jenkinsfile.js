@@ -34,14 +34,20 @@ pipeline {
     COMPOSE_DOCKER_CLI_BUILD = 1
     COMPOSE_FILE = 'docker-compose.new-jenkins-js.yml'
     DOCKER_BUILDKIT = 1
-    FORCE_FAILURE = configuration.forceFailureJS()
+    FORCE_FAILURE = commitMessageFlag('force-failure-js').asBooleanInteger()
     PROGRESS_NO_TRUNC = 1
+    SELENIUM_NODE_IMAGE = "starlord.inscloudgate.net/jenkins/selenium-node-chrome:120.0"
+    SELENIUM_HUB_IMAGE = "starlord.inscloudgate.net/jenkins/selenium-hub:4.16"
   }
 
   stages {
     stage('Environment') {
       steps {
         script {
+          def hostSh = { script ->
+            sh(script)
+          }
+
           def postRunnerHandler = [
             onStageEnded: { stageName, stageConfig, result ->
               node('master') {
@@ -50,7 +56,13 @@ pipeline {
             }
           ]
 
-          def postStageHandler = [
+          def stageHooks = [
+            onNodeAcquired: { ->
+              libraryScript.load('bash/docker-with-flakey-network-protection.sh', './docker-with-flakey-network-protection.sh')
+              libraryScript.load('js/docker-provision.sh', './docker-provision.sh')
+
+              hostSh('./docker-provision.sh')
+            },
             onStageEnded: { stageName, stageConfig, result ->
               buildSummaryReport.setStageTimings(stageName, stageConfig.timingValues())
             }
@@ -61,7 +73,7 @@ pipeline {
 
             for (int i = 0; i < jsStage.JEST_NODE_COUNT; i++) {
               String index = i
-              extendedStage("Runner - Jest ${i}").hooks(postStageHandler).nodeRequirements(label: 'canvas-docker', podTemplate: jsStage.jestNodeRequirementsTemplate(index)).obeysAllowStages(false).timeout(10).queue(runnerStages) {
+              extendedStage("Runner - Jest ${i}").hooks(stageHooks).nodeRequirements(label: nodeLabel(), podTemplate: jsStage.jestNodeRequirementsTemplate(index)).obeysAllowStages(false).timeout(10).queue(runnerStages) {
                 def tests = [:]
 
                 callableWithDelegate(jsStage.queueJestDistribution(index))(tests)
@@ -70,7 +82,7 @@ pipeline {
               }
             }
 
-            extendedStage('Runner - Coffee').hooks(postStageHandler).nodeRequirements(label: 'canvas-docker', podTemplate: jsStage.coffeeNodeRequirementsTemplate()).obeysAllowStages(false).timeout(10).queue(runnerStages) {
+            extendedStage('Runner - Coffee').hooks(stageHooks).nodeRequirements(label: nodeLabel(), podTemplate: jsStage.coffeeNodeRequirementsTemplate()).obeysAllowStages(false).timeout(10).queue(runnerStages) {
               def tests = [:]
 
               callableWithDelegate(jsStage.queueCoffeeDistribution())(tests)
@@ -78,7 +90,7 @@ pipeline {
               parallel(tests)
             }
 
-            extendedStage('Runner - Karma').hooks(postStageHandler).nodeRequirements(label: 'canvas-docker', podTemplate: jsStage.karmaNodeRequirementsTemplate()).obeysAllowStages(false).timeout(10).queue(runnerStages) {
+            extendedStage('Runner - Karma').hooks(stageHooks).nodeRequirements(label: nodeLabel(), podTemplate: jsStage.karmaNodeRequirementsTemplate()).obeysAllowStages(false).timeout(10).queue(runnerStages) {
               def tests = [:]
 
               callableWithDelegate(jsStage.queueKarmaDistribution())(tests)
@@ -86,7 +98,7 @@ pipeline {
               parallel(tests)
             }
 
-            extendedStage('Runner - Packages').hooks(postStageHandler).nodeRequirements(label: 'canvas-docker', podTemplate: jsStage.packagesNodeRequirementsTemplate()).obeysAllowStages(false).timeout(10).queue(runnerStages) {
+            extendedStage('Runner - Packages').hooks(stageHooks).nodeRequirements(label: nodeLabel(), podTemplate: jsStage.packagesNodeRequirementsTemplate()).obeysAllowStages(false).timeout(10).queue(runnerStages) {
               def tests = [:]
 
               callableWithDelegate(jsStage.queuePackagesDistribution())(tests)

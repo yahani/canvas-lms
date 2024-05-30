@@ -17,8 +17,9 @@
  */
 
 import Backbone from '@canvas/backbone'
-import ExternalContentFileSubmissionView from 'ui/features/submit_assignment/backbone/views/ExternalContentFileSubmissionView.coffee'
+import ExternalContentFileSubmissionView from 'ui/features/submit_assignment/backbone/views/ExternalContentFileSubmissionView'
 import $ from 'jquery'
+import 'jquery-migrate'
 import fakeENV from 'helpers/fakeENV'
 import axios from '@canvas/axios'
 
@@ -27,7 +28,7 @@ const contentItem = {
   url: 'http://lti.example.com/content/launch/42',
   name: 'FileDude',
   comment: 'Foo all the bars!',
-  eula_agreement_timestamp: 1522419910
+  eula_agreement_timestamp: 1522419910,
 }
 
 let sandbox
@@ -41,20 +42,17 @@ QUnit.module('ExternalContentFileSubmissionView#uploadFileFromUrl', {
     window.ENV.COURSE_ID = 42
     window.ENV.current_user_id = 5
     window.ENV.SUBMIT_ASSIGNMENT = {
-      ID: 24
+      ID: 24,
     }
     model = new Backbone.Model(contentItem)
     view = new ExternalContentFileSubmissionView()
-    {
-    }
-    model
   },
 
   teardown() {
     fakeENV.teardown()
     $('#fixtures').empty()
     sandbox.restore()
-  }
+  },
 })
 
 test('hits the course url', () => {

@@ -109,8 +109,11 @@ module Qti
 
         selectors = ["itemBody > div", "itemBody > p"]
         type = @opts[:custom_type] || @migration_type || @type
-        unless %w[fill_in_multiple_blanks_question canvas_matching matching_question
-                  multiple_dropdowns_question respondus_matching].include?(type)
+        unless %w[fill_in_multiple_blanks_question
+                  canvas_matching
+                  matching_question
+                  multiple_dropdowns_question
+                  respondus_matching].include?(type)
           selectors << "itemBody choiceInteraction > prompt"
           selectors << "itemBody > extendedTextInteraction > prompt"
         end
@@ -148,7 +151,7 @@ module Qti
         if @migration_type && UNSUPPORTED_TYPES.member?(@migration_type)
           @question[:question_type] = @migration_type
           @question[:unsupported] = true
-        elsif !%w[text_only_question file_upload_question].include?(@migration_type)
+        elsif !["text_only_question", "file_upload_question", "Presentation Only"].include?(@migration_type)
           parse_question_data
         else
           get_feedback if @migration_type == "file_upload_question"
@@ -210,6 +213,8 @@ module Qti
             end
           when "Jumbled Sentence"
             @question[:question_type] = "multiple_dropdowns_question"
+          when "Presentation Only"
+            @question[:question_type] = "text_only_question"
           end
         elsif (type = get_node_att(meta, "instructureField[name=question_type]", "value"))
           @migration_type = case type
@@ -229,11 +234,11 @@ module Qti
     def get_or_generate_answer_id(response_identifier)
       if @flavor == Qti::Flavors::CANVAS
         id = if @original_answer_ids
-               @original_answer_ids.shift.to_i
+               @original_answer_ids.shift
              else
-               response_identifier.to_s.sub(/response_/i, "").to_i
+               response_identifier.to_s.sub(/response_/i, "")
              end
-        id == 0 ? unique_local_id : id
+        (id.to_i == 0 || id.match?(/[[:alpha:]]/)) ? unique_local_id : id.to_i
       else
         unique_local_id
       end
@@ -280,7 +285,7 @@ module Qti
       text, html = detect_html(node)
       hash[field] = text
       if html
-        hash["#{field}_html".to_sym] = html
+        hash[:"#{field}_html"] = html
       end
     end
 

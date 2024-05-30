@@ -16,18 +16,19 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import INST from 'browser-sniffer'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
 import '@canvas/content-locks/jquery/lock_reason'
-import '@canvas/datetime'/* datetimeString */
+import '@canvas/datetime/jquery' /* datetimeString */
 import 'jqueryui/dialog'
 
 const I18n = useI18nScope('content_locks')
 
-$(document).ready(function() {
-  $('.content_lock_icon').live('click', function(event) {
+if (!('INST' in window)) window.INST = {}
+
+$(document).ready(function () {
+  $(document).on('click', '.content_lock_icon', function (event) {
     if ($(this).data('lock_reason')) {
       event.preventDefault()
       const data = $(this).data('lock_reason')
@@ -47,12 +48,11 @@ $(document).ready(function() {
           $dialog.dialog('close')
         })
       }
-      $dialog
-        .find('.lock_reason_content')
-        .empty()
-        .append($reason)
+      $dialog.find('.lock_reason_content').empty().append($reason)
       $dialog.dialog({
-        title: I18n.t('titles.content_is_locked', 'Content Is Locked')
+        title: I18n.t('titles.content_is_locked', 'Content Is Locked'),
+        modal: true,
+        zIndex: 1000,
       })
     }
   })

@@ -31,7 +31,7 @@ Attachment.class_eval do
   # Marshal.dump, you can't have any singleton methods (which our
   # Rails 3 attachment_fu hacks do while saving)
   def marshal_dump
-    [attributes, instance_variable_get(:@new_record)]
+    [attributes, instance_variable_get(:@new_record), instance_variable_get(:@shard)]
   end
 
   def marshal_load(data)
@@ -39,6 +39,7 @@ Attachment.class_eval do
     instance_variable_set :@attributes, self.class.attributes_builder.build_from_database(data[0])
     instance_variable_set :@attributes_cache, {}
     instance_variable_set :@new_record, data[1]
+    instance_variable_set :@shard, data[2]
   end
 end
 
@@ -65,9 +66,9 @@ module Factories
     @attributes_res = {
       context: @context,
       size: 100,
-      folder: folder,
-      content_type: "application/loser",
-      filename: "unknown.loser"
+      folder:,
+      content_type: "application/unknown",
+      filename: "unknown.example"
     }
   end
 
@@ -75,8 +76,7 @@ module Factories
     $stub_file_counter ||= 0
     data ||= "ohai#{$stub_file_counter += 1}"
     sio = StringIO.new(data)
-    allow(sio).to receive(:original_filename).and_return(filename)
-    allow(sio).to receive(:content_type).and_return(content_type)
+    allow(sio).to receive_messages(original_filename: filename, content_type:)
     sio
   end
 

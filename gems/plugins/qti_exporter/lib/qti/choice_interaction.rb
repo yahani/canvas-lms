@@ -100,7 +100,7 @@ module Qti
       if correct_answers == 0
         @question[:import_error] = "The importer couldn't determine the correct answers for this question."
       end
-      @question[:question_type] ||= correct_answers == 1 ? "multiple_choice_question" : "multiple_answers_question"
+      @question[:question_type] ||= (correct_answers == 1) ? "multiple_choice_question" : "multiple_answers_question"
       @question[:question_type] = "multiple_choice_question" if @is_really_stupid_likert
     end
 
@@ -199,8 +199,12 @@ module Qti
           cond.css("responseIf > and > member").each do |m|
             migration_id = m.at_css("baseValue[baseType=identifier]").text.strip
             answer = answers_hash[migration_id]
+            answer ||= guess_answer_by_position(cond, migration_id, answers_hash)
+            next unless answer
+
             answer[:weight] = AssessmentItemConverter::DEFAULT_CORRECT_WEIGHT
             answer[:feedback_id] ||= get_feedback_id(cond)
+            # an import error will be logged later if there are no correct answers
           end
         else
           cond.css("responseIf, responseElseIf").each do |r_if|
@@ -304,6 +308,19 @@ module Qti
       else
         matches.map { |bad_id| actual_answer_ids[putative_answer_ids.index(bad_id)] }
       end
+    end
+
+    # in BB ultra, the answer hash contains UUIDs whereas the response conditions
+    # contain 128-bit hex numbers. I haven't been able to relate the two by an
+    # MD5 relationship, but the disjoint ID sets seem to appear in the same order
+    # in the file (although the IDs themselves are not ordered, unlike BB9)
+    # so match purely by position
+    def guess_answer_by_position(response_condition, response_id, answer_hash)
+      response_ids = response_condition.css("responseIf > and baseValue[baseType=identifier]").map { |v| v.text.strip }
+      return nil unless response_ids.size == answer_hash.size
+
+      pos = response_ids.index(response_id)
+      pos && answer_hash.values[pos]
     end
   end
 end

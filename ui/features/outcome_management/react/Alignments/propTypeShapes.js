@@ -19,17 +19,48 @@
 import PropTypes from 'prop-types'
 
 export const alignmentShape = PropTypes.shape({
-  id: PropTypes.string.isRequired,
-  type: PropTypes.oneOf(['Assignment', 'Rubric']).isRequired,
+  _id: PropTypes.string.isRequired,
+  contentType: PropTypes.oneOf(['Assignment', 'Rubric', 'AssessmentQuestionBank']).isRequired,
   title: PropTypes.string.isRequired,
   url: PropTypes.string.isRequired,
   moduleTitle: PropTypes.string,
-  moduleUrl: PropTypes.string
+  moduleUrl: PropTypes.string,
+  moduleWorkflowState: PropTypes.string,
+  assignmentContentType: PropTypes.oneOf(['assignment', 'discussion', 'quiz', 'new_quiz']),
+  assignmentWorkflowState: PropTypes.string,
+  quizItems: PropTypes.arrayOf(
+    PropTypes.shape({
+      _id: PropTypes.string.isRequired,
+      title: PropTypes.string.isRequired,
+    })
+  ),
+  alignmentsCount: PropTypes.number.isRequired,
 })
 
 export const outcomeWithAlignmentShape = PropTypes.shape({
-  id: PropTypes.string.isRequired,
+  _id: PropTypes.string.isRequired,
   title: PropTypes.string.isRequired,
   description: PropTypes.string,
-  alignments: PropTypes.arrayOf(alignmentShape)
+  alignments: PropTypes.arrayOf(alignmentShape),
+})
+
+export const groupDataShape = PropTypes.shape({
+  _id: PropTypes.string.isRequired,
+  outcomesCount: PropTypes.number.isRequired,
+  outcomes: PropTypes.shape({
+    pageInfo: PropTypes.shape({
+      hasNextPage: PropTypes.bool.isRequired,
+      endCursor: PropTypes.string,
+    }),
+    edges: PropTypes.arrayOf(
+      PropTypes.shape({
+        node: PropTypes.shape({
+          _id: PropTypes.string.isRequired,
+          title: PropTypes.string.isRequired,
+          description: PropTypes.string,
+          alignments: PropTypes.arrayOf(alignmentShape),
+        }),
+      })
+    ),
+  }),
 })

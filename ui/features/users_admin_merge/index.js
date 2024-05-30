@@ -16,30 +16,29 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import $ from 'jquery'
-
+import replaceTags from '@canvas/util/replaceTags'
+import 'jqueryui/menu'
 import 'jqueryui/autocomplete'
 
 const $select_name = $('#select_name')
 const $selected_name = $('#selected_name')
 $('#account_select')
-  .change(function() {
+  .change(function () {
     $('.account_search').hide()
     $(`#account_search_${$(this).val()}`).show()
   })
   .change()
 
-export default $('.account_search .user_name').each(function() {
+export default $('.account_search .user_name').each(function () {
   const $input = $(this)
   $input.autocomplete({
     minLength: 4,
-    source: $input.data('autocompleteSource')
+    source: $input.data('autocompleteSource'),
   })
   return $input.bind('autocompleteselect autocompletechange', (event, ui) => {
     if (ui.item) {
       $selected_name.text(ui.item.label)
-      $select_name
-        .show()
-        .attr('href', $.replaceTags($('#select_name').attr('rel'), 'id', ui.item.id))
+      $select_name.show().attr('href', replaceTags($('#select_name').attr('rel'), 'id', ui.item.id))
     } else {
       $select_name.hide()
     }

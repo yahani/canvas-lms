@@ -29,19 +29,15 @@ module MicrosoftSync::Matchers
     match do |actual|
       @is_public_error_matcher = be_a(MicrosoftSync::Errors::PublicError)
       if (@is_public_error = @is_public_error_matcher.matches?(actual))
-        # I wish I could figure out a different way of doing this "should receive" bit...
-        allow(I18n).to receive(:t).and_call_original
-        actual.class.public_message
-        @calls_i18n = have_received(:t).matches?(I18n)
-
-        orig_locale = I18n.locale
-        begin
-          I18n.locale = :en
-          serialized = MicrosoftSync::Errors.serialize(actual)
-          msg = MicrosoftSync::Errors.deserialize_and_localize(serialized)
-        ensure
-          I18n.locale = orig_locale
+        original = I18n.method(:t)
+        allow(I18n).to receive(:t) do |*args, **kwargs|
+          @calls_i18n = true
+          original.call(*args, **kwargs)
         end
+        actual.class.public_message
+
+        serialized = MicrosoftSync::Errors.serialize(actual)
+        msg = MicrosoftSync::Errors.deserialize_and_localize(serialized)
         @msg_equals_matcher = match(expected_matched_message)
         @msg_equals = @msg_equals_matcher.matches?(msg)
       end

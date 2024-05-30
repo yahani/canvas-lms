@@ -22,7 +22,7 @@ require_relative "../helpers/public_courses_context"
 require_relative "../helpers/files_common"
 require_relative "../helpers/wiki_and_tiny_common"
 require_relative "../rcs/pages/rce_next_page"
-require_relative "./pages/syllabus_page"
+require_relative "pages/syllabus_page"
 
 describe "course syllabus" do
   include_context "in-process server selenium tests"
@@ -35,7 +35,7 @@ describe "course syllabus" do
     # assignment data
     assignment = assignment_model({
                                     course: @course,
-                                    title: title,
+                                    title:,
                                     due_at: nil,
                                     points_possible: points,
                                     submission_types: "online_text_entry",
@@ -65,9 +65,6 @@ describe "course syllabus" do
     end
 
     it "edits the description", priority: "1" do
-      skip("weird issue where text does not show up on submit")
-      # skip_if_firefox('known issue with firefox https://bugzilla.mozilla.org/show_bug.cgi?id=1335085')
-
       new_description = "new syllabus description"
       wait_for_new_page_load { f(".edit_syllabus_link").click }
       edit_form = f("#edit_course_syllabus_form")
@@ -79,7 +76,7 @@ describe "course syllabus" do
       expect(f("#course_syllabus").text).to eq new_description
     end
 
-    it "inserts a file using RCE in the syllabus", priority: "1", custom_timeout: 30 do
+    it "inserts a file using RCE in the syllabus", custom_timeout: 30, priority: "1" do
       file = @course.attachments.create!(display_name: "text_file.txt", uploaded_data: default_uploaded_data)
       file.context = @course
       file.save!
@@ -97,12 +94,9 @@ describe "course syllabus" do
       expect(f(".mini_month .today")).to have_attribute("id", "mini_day_#{Time.zone.now.strftime("%Y_%m_%d")}")
     end
 
-    describe "Accessibility" do
-      it "sets focus to the Jump to Today link after clicking Edit the Description", priority: "2" do
-        skip("see CNVS-39931")
-        f(".edit_syllabus_link").click
-        check_element_has_focus(f(".jump_to_today_link"))
-      end
+    it "sets focus to the Jump to Today link after clicking Edit the Description", priority: "2" do
+      f(".edit_syllabus_link").click
+      check_element_has_focus(f(".jump_to_today_link"))
     end
   end
 

@@ -30,7 +30,7 @@ export default class PopoverMenuView extends View {
       focusin: 'cancelHide',
       focusout: 'hidePopover',
       outerclick: 'hidePopover',
-      keyup: 'checkEsc'
+      keyup: 'checkEsc',
     }
   }
 
@@ -59,7 +59,7 @@ export default class PopoverMenuView extends View {
         this.setWidth()
       }
       this.$el.position({
-        my: this.my || 'left+6 top-47',
+        my: this.my || 'right-22 top-47',
         at: this.at || 'right center',
         of: $target,
         collision: 'none',
@@ -67,7 +67,7 @@ export default class PopoverMenuView extends View {
           const content = this.$el.find('.popover-content')
           this.$el.css({top: coords.top, left: coords.left})
           return this.setPopoverContentHeight(this.$el, content, $('#content'))
-        }
+        },
       })
 
       if (focus) {
@@ -83,7 +83,7 @@ export default class PopoverMenuView extends View {
     const parentBound = parent.offset().top + parent.height()
     const popoverOffset = popover.offset().top
     const popoverHeader = popover.find('.popover-title').outerHeight()
-    const defaultHeight = parseInt(content.css('maxHeight'))
+    const defaultHeight = parseInt(content.css('maxHeight'), 10)
     const newHeight = parentBound - popoverOffset - popoverHeader
     return content.css({maxHeight: Math.min(defaultHeight, newHeight)})
   }

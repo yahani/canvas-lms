@@ -67,11 +67,11 @@ export default class EntryEditor extends EditorToggle {
       return this.view.model.save(
         {
           messageNotification: I18n.t('Saving...'),
-          message: this.content
+          message: this.content,
         },
         {
           success: this.onSaveSuccess.bind(this),
-          error: this.onSaveError.bind(this)
+          error: this.onSaveError.bind(this),
         }
       )
     } else {
@@ -80,20 +80,24 @@ export default class EntryEditor extends EditorToggle {
   }
 
   createCancelButton() {
-    return $('<a/>')
-      .text(I18n.t('Cancel'))
-      .css({marginLeft: '5px'})
-      .attr('href', 'javascript:')
-      .addClass('cancel_button')
-      .click(() => {
-        this.cancel()
-        this.display({cancel: true})
-      })
+    return (
+      $('<a/>')
+        .text(I18n.t('Cancel'))
+        .css({marginLeft: '5px'})
+        // eslint-disable-next-line no-script-url
+        .attr('href', 'javascript:')
+        .addClass('cancel_button')
+        .click(() => {
+          this.cancel()
+          this.display({cancel: true})
+        })
+    )
   }
 
   createDeleteAttachmentButton() {
     return (
       $('<a/>')
+        // eslint-disable-next-line no-script-url
         .attr('href', 'javascript:')
         .text('x')
         .addClass('cancel_button')
@@ -102,7 +106,7 @@ export default class EntryEditor extends EditorToggle {
         .css({
           float: 'none',
           marginLeft: '.5em',
-          fontSize: '1.25rem'
+          fontSize: '1.25rem',
         })
         .click(() => this.delAttachment())
     )
@@ -156,7 +160,7 @@ export default class EntryEditor extends EditorToggle {
   // @api private
   onSaveError() {
     this.view.model.set({
-      messageNotification: I18n.t('Failed to save, please try again later')
+      messageNotification: I18n.t('Failed to save, please try again later'),
     })
     return this.edit()
   }

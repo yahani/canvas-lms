@@ -20,8 +20,6 @@
 
 require "lti2_spec_helper"
 
-require_dependency "lti/tool_proxy_service"
-
 module Lti
   describe ToolProxyService do
     include_context "lti2_spec_helper"
@@ -247,7 +245,7 @@ module Lti
           rescue Lti::Errors::InvalidToolProxyError => e
             puts e.message
           end
-          expect(tool_proxy).to eq nil
+          expect(tool_proxy).to be_nil
         end
       end
 
@@ -401,22 +399,6 @@ module Lti
                                             "error" => "Invalid SecurityContract"
                                           })
         end
-      end
-    end
-
-    describe "#recreate_missing_subscriptions" do
-      it "recreates subscriptions directly on the tool" do
-        expect(tool_proxy).to receive(:manage_subscription)
-
-        ToolProxyService.recreate_missing_subscriptions(tool_proxy)
-      end
-    end
-
-    describe "#delete_subscriptions" do
-      it "deletes subscriptions directly on the tool" do
-        expect(tool_proxy).to receive(:delete_subscription)
-
-        ToolProxyService.delete_subscriptions(tool_proxy)
       end
     end
   end

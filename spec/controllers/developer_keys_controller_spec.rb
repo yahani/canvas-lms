@@ -21,9 +21,14 @@
 describe DeveloperKeysController do
   let(:test_domain_root_account) { Account.create! }
   let(:site_admin_key) { DeveloperKey.create!(name: "Site Admin Key", visible: false) }
+  let(:sub_account) { test_domain_root_account.sub_accounts.create!(parent_account: test_domain_root_account, root_account: test_domain_root_account) }
 
   let(:root_account_key) do
     DeveloperKey.create!(name: "Root Account Key", account: test_domain_root_account, visible: true)
+  end
+
+  let(:error_metric_name) do
+    "canvas.developer_keys_controller.request_error"
   end
 
   context "Site admin" do
@@ -67,14 +72,12 @@ describe DeveloperKeysController do
         end
 
         it "does not include non-siteadmin keys" do
-          Account.site_admin.enable_feature!(:site_admin_keys_only)
-
           site_admin_key = DeveloperKey.create!
           DeveloperKey.create!(account: Account.default)
 
           get "index", params: { account_id: Account.site_admin.id }, format: :json
 
-          expect(json_parse.map { |dk| dk["id"] }).to match_array [site_admin_key.global_id]
+          expect(json_parse.pluck("id")).to match_array [site_admin_key.global_id]
         end
 
         it "includes valid LTI scopes in js env" do
@@ -86,12 +89,12 @@ describe DeveloperKeysController do
           # enable conference placement
           Account.site_admin.enable_feature! :conference_selection_lti_placement
           get "index", params: { account_id: Account.site_admin.id }
-          expect(assigns.dig(:js_env, :validLtiPlacements)).to match_array Lti::ResourcePlacement::PLACEMENTS
+          expect(assigns.dig(:js_env, :validLtiPlacements)).to match_array Lti::ResourcePlacement.public_placements(Account.site_admin)
         end
 
         it 'includes the "includes parameter" release flag' do
           get "index", params: { account_id: Account.site_admin.id }
-          expect(assigns.dig(:js_env, :includesFeatureFlagEnabled)).to eq false
+          expect(assigns.dig(:js_env, :includesFeatureFlagEnabled)).to be false
         end
 
         describe "js bundles" do
@@ -176,25 +179,82 @@ describe DeveloperKeysController do
             end
           end
         end
+
+        context "when request fails" do
+          before do
+            allow(InstStatsd::Statsd).to receive(:increment)
+          end
+
+          it "reports error metric" do
+            get :index, params: { account_id: Account.last.id + 2, format: "json" }
+            expect(InstStatsd::Statsd).to have_received(:increment).with(error_metric_name, tags: { action: "index", code: 404 })
+            expect(response).to be_not_found
+          end
+        end
       end
     end
 
     describe "POST 'create'" do
-      it "returns the list of developer keys" do
-        user_session(@admin)
-        create_params = {
+      let(:create_params) do
+        {
           account_id: Account.site_admin.id,
           developer_key: {
             redirect_uri: "http://example.com/sdf"
           }
         }
+      end
 
+      before do
+        user_session(@admin)
+      end
+
+      it "returns the newly created key" do
         post "create", params: create_params
 
-        json_data = JSON.parse(response.body)
+        json_data = response.parsed_body
         expect(response).to be_successful
         key = DeveloperKey.find(json_data["id"])
-        expect(key.account).to be nil
+        expect(key.account).to be_nil
+      end
+
+      it "cannot create keys for a subaccount" do
+        post "create", params: create_params.merge(account_id: sub_account.id)
+        expect(response).to be_not_found
+      end
+
+      context "when request errors" do
+        before do
+          allow(InstStatsd::Statsd).to receive(:increment)
+        end
+
+        context "when request fails" do
+          before do
+            # kind of weird trying to find _something_ that could fail during a key creation or serialization
+            allow(DeveloperKey).to receive(:test_cluster_checks_enabled?).and_raise(ActiveRecord::StatementInvalid)
+          end
+
+          it "reports error metric with code 500" do
+            post :create, params: create_params
+            expect(InstStatsd::Statsd).to have_received(:increment).with(error_metric_name, tags: { action: "create", code: 500 })
+          end
+        end
+
+        context "when key validation fails" do
+          let(:create_params) do
+            {
+              account_id: Account.site_admin.id,
+              developer_key: {
+                redirect_uri: "http://example.com/sdf",
+                scopes: ["bad_scope"]
+              }
+            }
+          end
+
+          it "reports error metric with code 400" do
+            post :create, params: create_params
+            expect(InstStatsd::Statsd).to have_received(:increment).with(error_metric_name, tags: { action: "create", code: 400 })
+          end
+        end
       end
 
       describe "scopes" do
@@ -205,13 +265,9 @@ describe DeveloperKeysController do
         let(:invalid_scopes) { ["url:POST/banana", "url:POST/invalid/scope"] }
         let(:root_account) { account_model }
 
-        before do
-          user_session(@admin)
-        end
-
         it 'allows setting "allow_includes"' do
           post "create", params: { account_id: root_account.id, developer_key: { scopes: valid_scopes, allow_includes: true } }
-          expect(DeveloperKey.find(json_parse["id"]).allow_includes).to eq true
+          expect(DeveloperKey.find(json_parse["id"]).allow_includes).to be true
         end
 
         it "allows setting scopes" do
@@ -233,23 +289,56 @@ describe DeveloperKeysController do
     end
 
     describe "PUT 'update'" do
-      it "deactivates a key" do
-        user_session(@admin)
+      let(:dk) { DeveloperKey.create! }
 
-        dk = DeveloperKey.create!
+      before do
+        user_session(@admin)
+      end
+
+      it "deactivates a key" do
         put "update", params: { id: dk.id, developer_key: { event: :deactivate }, account_id: Account.site_admin.id }
         expect(response).to be_successful
         expect(dk.reload.state).to eq :inactive
       end
 
       it "reactivates a key" do
-        user_session(@admin)
-
-        dk = DeveloperKey.create!
         dk.deactivate!
         put "update", params: { id: dk.id, developer_key: { event: :activate }, account_id: Account.site_admin.id }
         expect(response).to be_successful
         expect(dk.reload.state).to eq :active
+      end
+
+      context "when request errors" do
+        before do
+          allow(InstStatsd::Statsd).to receive(:increment)
+        end
+
+        context "when key is not found" do
+          it "reports error metric with code 404" do
+            put :update, params: { id: dk.id + 1, developer_key: { name: "update key" }, account_id: Account.site_admin.id }
+            expect(response).to be_not_found
+            expect(InstStatsd::Statsd).to have_received(:increment).with(error_metric_name, tags: { action: "update", code: 404 })
+          end
+        end
+
+        context "when request fails" do
+          before do
+            # kind of weird trying to find _something_ that could fail during a key update or serialization
+            allow(DeveloperKey).to receive(:test_cluster_checks_enabled?).and_raise(ActiveRecord::StatementInvalid)
+          end
+
+          it "reports error metric with code 500" do
+            put :update, params: { id: dk.id, developer_key: { name: "update key" }, account_id: Account.site_admin.id }
+            expect(InstStatsd::Statsd).to have_received(:increment).with(error_metric_name, tags: { action: "update", code: 500 })
+          end
+        end
+
+        context "when key validation fails" do
+          it "reports error metric with code 400" do
+            put :update, params: { id: dk.id, developer_key: { scopes: ["bad_scope"] }, account_id: Account.site_admin.id }
+            expect(InstStatsd::Statsd).to have_received(:increment).with(error_metric_name, tags: { action: "update", code: 400 })
+          end
+        end
       end
 
       describe "scopes" do
@@ -268,7 +357,7 @@ describe DeveloperKeysController do
 
         it 'allows setting "allow_includes"' do
           put "update", params: { id: developer_key.id, developer_key: { scopes: valid_scopes, allow_includes: false } }
-          expect(developer_key.reload.allow_includes).to eq false
+          expect(developer_key.reload.allow_includes).to be false
         end
 
         it "allows setting scopes for site admin keys" do
@@ -293,26 +382,54 @@ describe DeveloperKeysController do
 
         it "sets the scopes to empty if the scopes parameter is an empty string" do
           put "update", params: { id: developer_key.id, developer_key: { scopes: "" } }
-          expect(developer_key.reload.scopes).to match_array []
+          expect(developer_key.reload.scopes).to be_empty
         end
       end
     end
 
     describe "DELETE 'destroy'" do
-      it "softs delete a key" do
-        user_session(@admin)
+      let(:dk) { DeveloperKey.create! }
 
-        dk = DeveloperKey.create!
-        delete "destroy", params: { id: dk.id, account_id: Account.site_admin.id }
+      before do
+        user_session(@admin)
+      end
+
+      it "softs delete a key" do
+        delete :destroy, params: { id: dk.id, account_id: Account.site_admin.id }
         expect(response).to be_successful
         expect(dk.reload.state).to eq :deleted
+      end
+
+      context "when request errors" do
+        before do
+          allow(InstStatsd::Statsd).to receive(:increment)
+        end
+
+        context "when key is not found" do
+          it "reports error metric with code 404" do
+            delete :destroy, params: { id: dk.id + 1, account_id: Account.site_admin.id }
+            expect(response).to be_not_found
+            expect(InstStatsd::Statsd).to have_received(:increment).with(error_metric_name, tags: { action: "destroy", code: 404 })
+          end
+        end
+
+        context "when request fails" do
+          before do
+            # kind of weird trying to find _something_ that could fail during a key deletion or serialization
+            allow(DeveloperKey).to receive(:test_cluster_checks_enabled?).and_raise(ActiveRecord::StatementInvalid)
+          end
+
+          it "reports error metric with code 500" do
+            delete :destroy, params: { id: dk.id, account_id: Account.site_admin.id }
+            expect(InstStatsd::Statsd).to have_received(:increment).with(error_metric_name, tags: { action: "destroy", code: 500 })
+          end
+        end
       end
     end
   end
 
   context "Account admin (not site admin)" do
     let(:test_domain_root_account_admin) { account_admin_user(account: test_domain_root_account) }
-    let(:sub_account) { test_domain_root_account.sub_accounts.create!(parent_account: test_domain_root_account, root_account: test_domain_root_account) }
 
     before do
       user_session(test_domain_root_account_admin)
@@ -328,7 +445,7 @@ describe DeveloperKeysController do
         allow_any_instance_of(Account).to receive(:feature_enabled?).and_return(false)
       end
 
-      it "responds with not found if the account is a sub account" do
+      it "responds with not found if the account is a subaccount" do
         allow(controller).to receive(:require_context_with_permission).and_return nil
         get "index", params: { account_id: sub_account.id }
         expect(response).to be_not_found
@@ -426,15 +543,16 @@ describe DeveloperKeysController do
 
       it "is dev keys plus 1 key" do
         post "create", params: create_params
-        expect(test_domain_root_account.developer_keys.all.count).to be 1
+        expect(test_domain_root_account.developer_keys.count).to be 1
       end
     end
 
     it "is allowed update a dev key" do
       dk = test_domain_root_account.developer_keys.create!(redirect_uri: "http://asd.com/")
-      put "update", params: { id: dk.id, developer_key: {
-        redirect_uri: "http://example.com/sdf"
-      } }
+      put "update", params: { id: dk.id,
+                              developer_key: {
+                                redirect_uri: "http://example.com/sdf"
+                              } }
       expect(response).to be_successful
       dk.reload
       expect(dk.redirect_uri).to eq("http://example.com/sdf")

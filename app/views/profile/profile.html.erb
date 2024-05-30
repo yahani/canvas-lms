@@ -60,7 +60,6 @@
 <% if service_enabled?(:avatars) %>
   <% if @user_data[:can_edit_avatar] %>
     <%= avatar(@user, url: '#', edit: true, class: "profile_pic_link #{@user.avatar_state}",
-        title: t('titles.click_to_change_profile_pic', "Click to change profile pic"),
         sr_content: t('Click to change profile picture for %{display_name}', :display_name => @user.short_name)) %>
   <% else %>
     <%= avatar(@user, url: nil, edit: false, class: "profile_pic") %>
@@ -355,40 +354,6 @@ TEXT
               </tr><tr>
                 <td colspan="2">
                   <button type="submit" class="btn btn-primary"><%= t('buttons.save_skype_name', "Save Skype Name") %></button>
-                </td>
-              </tr>
-            </table>
-            <% end %>
-          </div>
-        </div>
-      </li>
-      <li id="unregistered_service_delicious" class="service" style="<%= hidden if services.include?("delicious") || !service_enabled?(:delicious) %>">
-        <a href="#" class="btn btn-small"><%= image_tag "delicious_icon.png", :alt => '' %> <%= t('links.delicious', "Delicious") %></a>
-        <div style="display: none; text-align: <%= direction('left') %>;" class="content" title="<%= t('titles.delicious_login', "Delicious Login") %>" id="unregistered_service_delicious_dialog">
-          <div>
-            <%= image_tag "delicious.png", :style => "float: #{direction('left')}; padding-#{ direction('right') }: 5px;", :alt => '' %>
-            <div style="font-size: 1.2em; font-weight: bold;"><%= t('headers.delicious_login', "Delicious Login") %></div>
-            <%= t(:delicious_description, <<~TEXT)
-            Delicious is a tool that lets you store and share your bookmarks with others.
-            Canvas's rich content editor will let you search your Delicious tags
-            to easily link from within Canvas to other resources you find useful.
-            TEXT
-            %>
-            <div class="clear"></div>
-          </div>
-          <div style="font-size: 1.0em; margin-top: 10px;">
-            <%= form_for :user_service, :url => profile_create_user_service_url, :html => {:class => "create_user_service_form"}, :namespace => "delicious" do |f| %>
-            <%= f.hidden_field :service, :value => "delicious" %>
-            <table role="presentation" class="formtable">
-              <tr>
-                <td><%= f.blabel :user_name, :en => "User Name" %></td>
-                <td><%= f.text_field :user_name, :style => "width: 150px;" %></td>
-              </tr><tr>
-                <td><%= f.blabel :password, :en => "Password" %></td>
-                <td><%= f.password_field :password, :style => "width: 150px;" %></td>
-              </tr><tr>
-                <td colspan="2">
-                  <button type="submit" class="btn btn-primary"><%= t('buttons.save_login', "Save Login") %></button>
                 </td>
               </tr>
             </table>

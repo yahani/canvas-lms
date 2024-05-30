@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2022 - present Instructure, Inc.
  *
@@ -33,7 +34,7 @@ const defaultProps = {
   compression: 0,
   setStartDate: () => {},
   compressDates: jest.fn(),
-  uncompressDates: jest.fn()
+  uncompressDates: jest.fn(),
 }
 
 afterEach(() => {

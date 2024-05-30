@@ -30,13 +30,15 @@
             <% else %>
               <%= t :no_due_date, 'No Due Date' %>
             <% end %>
-          </span>
-        </span>
+          </span><!--
+        --></span>
   </li>
-  <li>
-    <span class='title'><%= t :points, 'Points' %></span>
-    <span class='value'><%= n(round_if_whole(@assignment.points_possible)) || t(:no_points, 'None') %></span>
-  </li>
+  <% if !@assignment.restrict_quantitative_data?(@current_user) %>
+    <li>
+      <span class='title'><%= t :points, 'Points' %></span>
+      <span class='value'><%= n(round_if_whole(@assignment.points_possible)) || t(:no_points, 'None') %></span>
+    </li>
+  <%end%>
   <% if @assignment.expects_submission? || @assignment.expects_external_submission? %>
     <% turnitin_text = turnitin_active? ? ' ' + t(:turnitin_enabled_short, '(Turnitin enabled)') : '' %>
     <% vericite_text = vericite_active? ? ' ' + t(:vericite_enabled_short, '(VeriCite enabled)') : '' %>

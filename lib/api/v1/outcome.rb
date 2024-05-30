@@ -72,7 +72,7 @@ module Api::V1::Outcome
       hash["has_updateable_rubrics"] = outcome.updateable_rubrics?
       unless opts[:outcome_style] == :abbrev
         hash["description"] = outcome.description
-        hash["friendly_description"] = opts.dig(:friendly_descriptions, outcome.id)
+        hash["friendly_description"] = opts.dig(:friendly_descriptions, outcome.id.to_s)
         context = opts[:context]
         mastery_scale_opts = mastery_scale_opts(context)
         if mastery_scale_opts.any?
@@ -81,9 +81,13 @@ module Api::V1::Outcome
           hash["points_possible"] = outcome.rubric_criterion[:points_possible]
           hash["mastery_points"] = outcome.rubric_criterion[:mastery_points]
           hash["ratings"] = outcome.rubric_criterion[:ratings]&.clone
+          if defined?(params) && params[:add_defaults] == "true"
+            # add mastery level and color defaults to rubric_criterion
+            outcome.find_or_set_rating_defaults(hash["ratings"], hash["mastery_points"])
+          end
           # existing outcomes that have a nil calculation method should be handled as highest
           hash["calculation_method"] = outcome.calculation_method || "highest"
-          if ["decaying_average", "n_mastery"].include? outcome.calculation_method
+          if %w[decaying_average n_mastery standard_decaying_average weighted_average].include? outcome.calculation_method
             hash["calculation_int"] = outcome.calculation_int
           end
         end

@@ -51,10 +51,10 @@ module Api::V1::StreamItem
         hash["message"] = api_user_content(data.message, context)
         if stream_item.data.instance_of?(DiscussionTopic)
           hash["discussion_topic_id"] = stream_item.asset_id
-          hash["html_url"] = send("#{context_type}_discussion_topic_url", context_id, stream_item.asset_id)
+          hash["html_url"] = send(:"#{context_type}_discussion_topic_url", context_id, stream_item.asset_id)
         else
           hash["announcement_id"] = stream_item.asset_id
-          hash["html_url"] = send("#{context_type}_announcement_url", context_id, stream_item.asset_id)
+          hash["html_url"] = send(:"#{context_type}_announcement_url", context_id, stream_item.asset_id)
         end
         hash["total_root_discussion_entries"] = data.total_root_discussion_entries
         hash["require_initial_post"] = data.require_initial_post
@@ -77,6 +77,7 @@ module Api::V1::StreamItem
         hash["participant_count"] = data.participant_count
         hash["html_url"] = conversation_url(stream_item.asset_id)
         hash["latest_messages"] = data.latest_messages_from_stream_item if data.latest_messages_from_stream_item.present?
+        hash["read_state"] = stream_item.data.conversation_participants.find_by(user_id: current_user)&.read?
       when "Message"
         hash["message_id"] = stream_item.asset_id
         # this type encompasses a huge number of different types of messages,
@@ -101,13 +102,13 @@ module Api::V1::StreamItem
         hash["web_conference_id"] = stream_item.asset_id
         hash["type"] = "WebConference"
         hash["message"] = data.description
-        hash["html_url"] = send("#{context_type}_conference_url", context_id, stream_item.asset_id) if context_type
+        hash["html_url"] = send(:"#{context_type}_conference_url", context_id, stream_item.asset_id) if context_type
       when /Collaboration/
         hash["collaboration_id"] = stream_item.asset_id
         # TODO: this type isn't even shown on the web activity stream yet
         hash["message"] = data.description
         hash["type"] = "Collaboration"
-        hash["html_url"] = send("#{context_type}_collaboration_url", context_id, stream_item.asset_id) if context_type
+        hash["html_url"] = send(:"#{context_type}_collaboration_url", context_id, stream_item.asset_id) if context_type
       when /AssessmentRequest/
         assessment_request = stream_item.data
         assignment = assessment_request.asset.assignment
@@ -150,7 +151,7 @@ module Api::V1::StreamItem
     stream_item_preloads(items.map(&:stream_item))
     json = items.map { |i| stream_item_json(i, i.stream_item, @current_user, session) }
     json.select! { |hash| hash["submission_comments"].present? } if opts[:asset_type] == "Submission"
-    render json: json
+    render json:
   end
 
   def filtered_stream_item_ids(opts)
@@ -171,14 +172,15 @@ module Api::V1::StreamItem
     filtered_ids
   end
 
-  def api_render_stream_summary(contexts = nil)
+  def api_render_stream_summary(opts)
     items = []
 
     GuardRail.activate(:secondary) do
       @current_user.shard.activate do
-        base_scope = @current_user.visible_stream_item_instances(contexts: contexts).joins(:stream_item)
+        base_scope = @current_user.visible_stream_item_instances(opts).joins(:stream_item)
 
-        full_counts = base_scope.except(:order).group("stream_items.asset_type", "stream_items.notification_category",
+        full_counts = base_scope.except(:order).group("stream_items.asset_type",
+                                                      "stream_items.notification_category",
                                                       "stream_item_instances.workflow_state").count
         # as far as I can tell, the 'type' column previously extracted by stream_item_json is identical to asset_type
         # oh wait, except for Announcements -_-
@@ -205,7 +207,7 @@ module Api::V1::StreamItem
           total_counts[new_key] += count
         end
 
-        cross_shard_totals, cross_shard_unreads = cross_shard_stream_item_counts(contexts)
+        cross_shard_totals, cross_shard_unreads = cross_shard_stream_item_counts(opts)
         cross_shard_totals.each do |k, v|
           total_counts[k] ||= 0
           total_counts[k] += v
@@ -217,8 +219,10 @@ module Api::V1::StreamItem
 
         total_counts.each do |key, count|
           type, category = key
-          items << { type: type, notification_category: category,
-                     count: count, unread_count: unread_counts[key] || 0 }
+          items << { type:,
+                     notification_category: category,
+                     count:,
+                     unread_count: unread_counts[key] || 0 }
         end
         items.sort_by! { |i| i[:type] }
       end
@@ -226,14 +230,14 @@ module Api::V1::StreamItem
     render json: items
   end
 
-  def cross_shard_stream_item_counts(contexts)
+  def cross_shard_stream_item_counts(opts)
     total_counts = {}
     unread_counts = {}
     # handle cross-shard stream items -________-
-    stream_item_ids = @current_user.visible_stream_item_instances(contexts: contexts)
+    stream_item_ids = @current_user.visible_stream_item_instances(opts)
                                    .where("stream_item_id > ?", Shard::IDS_PER_SHARD).pluck(:stream_item_id)
     if stream_item_ids.any?
-      unread_stream_item_ids = @current_user.visible_stream_item_instances(contexts: contexts)
+      unread_stream_item_ids = @current_user.visible_stream_item_instances(opts)
                                             .where("stream_item_id > ?", Shard::IDS_PER_SHARD)
                                             .where(workflow_state: "unread").pluck(:stream_item_id)
 

@@ -37,11 +37,7 @@ module CoursesHelper
 
     # because this happens in a sidebar, the context may be wrong. check and fix
     # it if that's the case.
-    context = if context.instance_of?(recent_event.class) && context.id == recent_event.context_id
-                context
-              else
-                recent_event.context
-              end
+    context = recent_event.context unless context.instance_of?(recent_event.class) && context.id == recent_event.context_id
 
     icon_data = [nil] + event_type
 
@@ -59,10 +55,10 @@ module CoursesHelper
                     [t("#courses.recent_event.no_submissions", "no submissions")] + event_type
                   # all received submissions graded (but not all turned in)
                   elsif recent_event.submitted_count < context.students.size &&
-                        !current_user.assignments_needing_grading(contexts: contexts).include?(recent_event)
+                        !current_user.assignments_needing_grading(contexts:).include?(recent_event)
                     [t("#courses.recent_event.no_new_submissions", "no new submissions")] + event_type
                   # all submissions turned in and graded
-                  elsif !current_user.assignments_needing_grading(contexts: contexts).include?(recent_event)
+                  elsif !current_user.assignments_needing_grading(contexts:).include?(recent_event)
                     [t("#courses.recent_event.all_graded", "all graded")] + event_type
                   # assignments need grading
                   else
@@ -91,7 +87,7 @@ module CoursesHelper
   #
   # Returns a text string.
   def user_count(count)
-    count == 0 ? t("#courses.settings.none", "None") : count
+    (count == 0) ? t("#courses.settings.none", "None") : count
   end
 
   # Public: check for permission on a new course
@@ -104,7 +100,7 @@ module CoursesHelper
   def course_permission_to?(perm_name, account = nil)
     account ||= @domain_root_account.manually_created_courses_account
     course = Course.new(account_id: account.id)
-    TeacherEnrollment.new(user: @current_user, course: course)
+    TeacherEnrollment.new(user: @current_user, course:)
     account.grants_right?(@current_user, perm_name.to_sym)
   end
 
@@ -126,7 +122,7 @@ module CoursesHelper
   end
 
   def user_type(course, user, enrollments = nil)
-    enrollment = enrollments ? enrollments[user.id] : course.enrollments.find_by(user: user)
+    enrollment = enrollments ? enrollments[user.id] : course.enrollments.find_by(user:)
 
     if enrollment.nil?
       return course.account_membership_allows(user) ? "admin" : nil
@@ -150,6 +146,34 @@ module CoursesHelper
       I18n.t("Cannot have a blueprint course with observers")
     else
       nil
+    end
+  end
+
+  def tab_is?(tab, const_name)
+    Api::V1::Tab.tab_is?(tab, @context, const_name)
+  end
+
+  def sortable_tabs
+    tabs =
+      @context.tabs_available(
+        @current_user,
+        for_reordering: true,
+        root_account: @domain_root_account,
+        course_subject_tabs: @context.try(:elementary_subject_course?)
+      )
+    tabs.select do |tab|
+      if tab_is?(tab, :TAB_COLLABORATIONS)
+        Collaboration.any_collaborations_configured?(@context) &&
+          !@context.feature_enabled?(:new_collaborations)
+      elsif Lti::ExternalToolTab.tool_for_tab(tab)&.quiz_lti?
+        new_quizzes_navigation_placements_enabled?(@context)
+      elsif tab_is?(tab, :TAB_COLLABORATIONS_NEW)
+        @context.feature_enabled?(:new_collaborations)
+      elsif tab_is?(tab, :TAB_CONFERENCES)
+        feature_enabled?(:web_conferences)
+      else
+        !tab_is?(tab, :TAB_SETTINGS)
+      end
     end
   end
 end

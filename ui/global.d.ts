@@ -16,32 +16,130 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+import {sendMessageStudentsWho} from './shared/grading/messageStudentsWhoHelper'
+import type {GlobalEnv} from '@canvas/global/env/GlobalEnv.d'
+import {GlobalInst} from '@canvas/global/inst/GlobalInst'
+import {GlobalRemotes} from '@canvas/global/remotes/GlobalRemotes'
+
 declare global {
   interface Global {
-    readonly ENV?: any
+    /**
+     * Global environment variables provided by the server.
+     */
+    readonly ENV?: GlobalEnv
+
+    /**
+     * Utility global for various values and utility functions, some provided by the server,
+     * some by client code.
+     */
+    readonly INST?: GlobalInst
+
+    /**
+     * Remote locations for various pure front-end functionality.
+     */
+    readonly REMOTES?: GlobalRemotes
   }
 
   interface Window {
-    readonly ENV?: any
-    external_tool_redirect: any
+    /**
+     * Global environment variables provided by the server.
+     *
+     * Note: should be readonly, but some tests overwrite.
+     */
+    ENV: GlobalEnv
+
+    /**
+     * Utility global for various values and utility functions, some provided by the server,
+     * some by client code.
+     *
+     * Should be readonly, but tests overwrite
+     */
+    INST: GlobalInst
+
     webkitSpeechRecognition: any
-    jsonData: any
+    messageStudents: (options: ReturnType<typeof sendMessageStudentsWho>) => void
+    updateGrades: () => void
+
+    bundles: string[]
+    deferredBundles: string[]
+    canvasReadyState?: 'loading' | 'complete'
   }
 
-  const ENV: any
+  /**
+   * Global environment variables provided by the server.
+   */
+  const ENV: GlobalEnv
+
+  /**
+   * Utility global for various values and utility functions, some provided by the server,
+   * some by client code.
+   */
+  const INST: GlobalInst
+
+  /**
+   * Remote locations for various pure front-end functionality.
+   */
+  const REMOTES: GlobalRemotes
+
+  type ShowIf = {
+    (bool?: boolean): JQuery<HTMLElement>
+    /**
+     * @deprecated use a boolean parameter instead
+     * @param num
+     * @returns
+     */
+    (num?: number): JQuery<HTMLElement>
+  }
 
   declare interface JQuery {
+    scrollTo: (y: number, x?: number) => void
+    change: any
     confirmDelete: any
-    fillWindowWithMe: (options?: {onResize: () => void}) => void
+    datetime_field: () => JQuery<HTMLInputElement>
+    disableWhileLoading: any
+    fileSize: (size: number) => string
+    fillTemplateData: any
+    fillWindowWithMe: (options?: {onResize: () => void}) => JQuery<HTMLElement>
     fixDialogButtons: () => void
+    errorBox: (
+      message: string,
+      scroll?: boolean,
+      override_position?: string | number
+    ) => JQuery<HTMLElement>
+    getFormData: <T>(obj?: Record<string, unknown>) => T
     live: any
+    loadDocPreview: (options: {
+      attachment_id: string
+      attachment_preview_processing: boolean
+      attachment_view_inline_ping_url: string | null
+      height: string
+      id: string
+      mimeType: string
+      submission_id: string
+      crocodoc_session_url?: string
+    }) => void
     mediaComment: any
-    showIf: (boolean) => void
+    mediaCommentThumbnail: (size?: 'normal' | 'small') => void
+    raw: (str: string) => string
+    showIf: ShowIf
+    underscore: (str: string) => string
+    formSubmit: (options: {
+      object_name?: string
+      formErrors?: boolean
+      disableWhileLoading?: boolean
+      required: string[]
+      success: (data: any) => void
+      beforeSubmit?: (data: any) => void
+      error: (response: JQuery.JQueryXHR) => void
+    }) => void
+    formErrors: (errors: Record<string, string>) => void
+    getTemplateData: (options: {textValues: string[]}) => Record<string, unknown>
+    fancyPlaceholder: () => void
+    loadingImage: (str?: string) => void
   }
 
   declare interface JQueryStatic {
-    flashError: (any, number?) => void
-    subscribe: any
+    subscribe: (topic: string, callback: (...args: any[]) => void) => void
     ajaxJSON: (
       url: string,
       submit_type?: string,
@@ -50,15 +148,12 @@ declare global {
       error?: any,
       options?: any
     ) => JQuery.JQueryXHR
-    flashWarning: any
-    flashMessage: any
     replaceTags: (string, string, string?) => string
-    raw: any
+    raw: (str: string) => string
     getScrollbarWidth: any
     datetimeString: any
     ajaxJSONFiles: any
     isPreviewable: any
-    toSentence: any
   }
 
   declare interface Array<T> {

@@ -54,9 +54,9 @@ describe Types::LearningOutcomeGroupType do
     expect(outcome_group_type.resolve("vendorGuid")).to eq @outcome_group.vendor_guid
     expect(outcome_group_type.resolve("childGroupsCount")).to eq 2
     expect(outcome_group_type.resolve("outcomesCount")).to be_a Integer
-    expect(outcome_group_type.resolve("notImportedOutcomesCount")).to eq nil
+    expect(outcome_group_type.resolve("notImportedOutcomesCount")).to be_nil
     expect(outcome_group_type.resolve("parentOutcomeGroup { _id }")).to eq @parent_group.id.to_s
-    expect(outcome_group_type.resolve("canEdit")).to eq true
+    expect(outcome_group_type.resolve("canEdit")).to be true
     expect(outcome_group_type.resolve("childGroups { nodes { _id } }"))
       .to match_array([@child_group.id.to_s, @child_group3.id.to_s])
   end
@@ -73,23 +73,29 @@ describe Types::LearningOutcomeGroupType do
                                                                                                                                       ])
   end
 
-  it "accepts filter in outcomes" do
-    course = Course.create!
-    course.account.enable_feature!(:outcome_alignment_summary)
-    @outcome2.align(assignment_model, course)
-    expect(outcome_group_type.resolve("outcomes(filter: \"WITH_ALIGNMENTS\") { nodes { ... on LearningOutcome { _id } } }")).to match_array([
-                                                                                                                                              @outcome2.id.to_s
-                                                                                                                                            ])
-  end
+  describe "within course context" do
+    before do
+      @course1 = Course.create!
+      @course_outcome1 = outcome_model(context: @course1, short_description: "CCC")
+      @course_outcome2 = outcome_model(context: @course1, short_description: "DDD")
+      @course_outcome2.align(assignment_model, @course1)
+      @course1.account.enable_feature!(:improved_outcomes_management)
+    end
 
-  it "accepts both search_query and filter in outcomes" do
-    course = Course.create!
-    course.account.enable_feature!(:outcome_alignment_summary)
-    @outcome1.align(assignment_model, course)
-    @outcome2.align(assignment_model, course)
-    expect(outcome_group_type.resolve("outcomes(filter: \"WITH_ALIGNMENTS\", searchQuery: \"BBBB\") { nodes { ... on LearningOutcome { _id } } }")).to match_array([
-                                                                                                                                                                     @outcome1.id.to_s
-                                                                                                                                                                   ])
+    let(:course_outcome_group_type) { GraphQLTypeTester.new(@course1.root_outcome_group, current_user: @admin) }
+
+    it "accepts filter in outcomes" do
+      expect(course_outcome_group_type.resolve("outcomes(filter: \"WITH_ALIGNMENTS\") { nodes { ... on LearningOutcome { _id } } }")).to match_array([
+                                                                                                                                                       @course_outcome2.id.to_s
+                                                                                                                                                     ])
+    end
+
+    it "accepts both search_query and filter in outcomes" do
+      @course_outcome1.align(assignment_model, @course1)
+      expect(course_outcome_group_type.resolve("outcomes(filter: \"WITH_ALIGNMENTS\", searchQuery: \"CCC\") { nodes { ... on LearningOutcome { _id } } }")).to match_array([
+                                                                                                                                                                             @course_outcome1.id.to_s
+                                                                                                                                                                           ])
+    end
   end
 
   it "returns isImported for a given context" do
@@ -123,7 +129,7 @@ describe Types::LearningOutcomeGroupType do
     end
 
     it "returns false for canEdit" do
-      expect(outcome_group_type.resolve("canEdit")).to eq false
+      expect(outcome_group_type.resolve("canEdit")).to be false
     end
 
     it "returns false for canUnlink on the outcome edge" do
@@ -204,7 +210,7 @@ describe Types::LearningOutcomeGroupType do
     end
 
     it "returns nil if no targetGroupId provided" do
-      expect(outcome_group_type.resolve("notImportedOutcomesCount")).to eq nil
+      expect(outcome_group_type.resolve("notImportedOutcomesCount")).to be_nil
     end
   end
 

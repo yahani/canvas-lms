@@ -22,7 +22,7 @@ describe GradeSummaryPresenter do
     describe "all on one shard" do
       let(:course) { Course.create! }
       let(:presenter) { GradeSummaryPresenter.new(course, @user, nil) }
-      let(:assignment) { assignment_model(course: course) }
+      let(:assignment) { assignment_model(course:) }
       let(:enrollment) { course.enroll_student(@user, enrollment_state: "active") }
 
       before do
@@ -76,7 +76,7 @@ describe GradeSummaryPresenter do
           user = User.create!
           account = Account.create!
           course = account.courses.create!
-          enrollment = StudentEnrollment.create!(course: course, user: user)
+          enrollment = StudentEnrollment.create!(course:, user:)
           enrollment.update_attribute(:workflow_state, "active")
           course.update_attribute(:workflow_state, "available")
         end
@@ -94,7 +94,7 @@ describe GradeSummaryPresenter do
         @shard2.activate do
           account = Account.create!
           course = account.courses.create!
-          enrollment = StudentEnrollment.create!(course: course, user: user)
+          enrollment = StudentEnrollment.create!(course:, user:)
           enrollment.update_attribute(:workflow_state, "active")
           course.update_attribute(:workflow_state, "available")
         end
@@ -144,7 +144,7 @@ describe GradeSummaryPresenter do
       @student = User.create!
       @teacher = User.create!
       @course.enroll_teacher(@teacher, active_all: true)
-      @course.enroll_student(@student, active_all: true)
+      @student_enrollment1 = @course.enroll_student(@student, active_all: true)
     end
 
     it "returns all of the observed students, if there are multiple" do
@@ -156,6 +156,16 @@ describe GradeSummaryPresenter do
 
       presenter = GradeSummaryPresenter.new(@course, @observer, @student.id)
       expect(presenter.students.map(&:id)).to match_array [@student.id, student_two.id]
+    end
+
+    it "returns the observed student that has the enrollment manually concluded" do
+      @observer = User.create!
+      @observer_enrollment1 = @course.observer_enrollments.create!(user_id: @observer, associated_user_id: @student)
+
+      @student_enrollment1.update_attribute(:workflow_state, "completed")
+      @observer_enrollment1.update_attribute(:workflow_state, "completed")
+      presenter = GradeSummaryPresenter.new(@course, @observer, @student.id)
+      expect(presenter.students.map(&:id)).to match_array [@student.id]
     end
 
     it "returns an array with a single student if there is only one student" do
@@ -193,6 +203,9 @@ describe GradeSummaryPresenter do
       expect(assignment_stats.maximum.to_f).to eq 10
       expect(assignment_stats.minimum.to_f).to eq 0
       expect(assignment_stats.mean.to_f).to eq 5
+      expect(assignment_stats.median.to_f).to eq 5
+      expect(assignment_stats.lower_q.to_f).to eq 2.5
+      expect(assignment_stats.upper_q.to_f).to eq 7.5
     end
 
     it "filters out test students and inactive enrollments" do
@@ -332,6 +345,19 @@ describe GradeSummaryPresenter do
       p = GradeSummaryPresenter.new(@course, @teacher, @student.id)
       expect(p.submissions.map(&:assignment_id)).to eq [assign.id]
     end
+
+    it "doesn't error on unread submission feedback" do
+      assignment = @course.assignments.create!(points_possible: 10)
+      submission_to_comment = assignment.grade_student(@student, grade: 10, grader: @teacher).first
+      comment_1 = submission_to_comment.add_comment(comment: "a student comment", author: @teacher)
+      comment_1.mark_read!(@student)
+      submission_to_comment.add_comment(comment: "another comment", author: @teacher)
+      p = GradeSummaryPresenter.new(@course, @teacher, @student.id)
+      submission = p.submissions.find { |s| s[:assignment_id] == assignment.id }
+      expect(submission.submission_comments.length).to eq 2
+      expect(submission.submission_comments[0].read?(@student)).to be true
+      expect(submission.submission_comments[1].read?(@student)).to be false
+    end
   end
 
   describe "#assignments" do
@@ -361,6 +387,20 @@ describe GradeSummaryPresenter do
       @course.enrollments.find_by(user: @student).deactivate
       presenter = GradeSummaryPresenter.new(@course, @teacher, @student.id)
       expect(presenter.assignments).to include published_assignment
+    end
+
+    it "filters out hidden zero point quizzes when hide_zero_point_quizzes_option FF is enabled" do
+      Account.site_admin.enable_feature!(:hide_zero_point_quizzes_option)
+      @practice_quiz = @course.assignments.create!(name: "Practice Quiz", points_possible: 0, submission_types: ["external_tool"], omit_from_final_grade: true, hide_in_gradebook: true)
+      presenter = GradeSummaryPresenter.new(@course, @teacher, @student.id)
+      expect(presenter.assignments).not_to include @practice_quiz
+    end
+
+    it "does not filter out hidden zero point quizzes when hide_zero_point_quizzes_option FF is disabled" do
+      Account.site_admin.disable_feature!(:hide_zero_point_quizzes_option)
+      @practice_quiz = @course.assignments.create!(name: "Practice Quiz", points_possible: 0, submission_types: ["external_tool"], omit_from_final_grade: true, hide_in_gradebook: true)
+      presenter = GradeSummaryPresenter.new(@course, @teacher, @student.id)
+      expect(presenter.assignments).to include @practice_quiz
     end
   end
 
@@ -551,11 +591,8 @@ describe GradeSummaryPresenter do
 
           let(:assignment_owning_discussion_topic) do
             assignment = @course.assignments.create!(submission_types: "discussion_topic")
-            discussion = @course.discussion_topics.create!
-            assignment.discussion_topic = discussion
-            assignment.save!
             discussion_context_module_tag =
-              discussion.context_module_tags.build(context: @course, position: 5, tag_type: "context_module")
+              assignment.discussion_topic.context_module_tags.build(context: @course, position: 5, tag_type: "context_module")
             discussion_context_module_tag.context_module = first_context_module
             discussion_context_module_tag.save!
             assignment
@@ -573,8 +610,11 @@ describe GradeSummaryPresenter do
 
           it "handles comparing discussions, quizzes, and assignments to each other" do
             expected_id_order = [
-              assignment3.id, assignment2.id, assignment_owning_quiz.id,
-              assignment_owning_discussion_topic.id, assignment1.id
+              assignment3.id,
+              assignment2.id,
+              assignment_owning_quiz.id,
+              assignment_owning_discussion_topic.id,
+              assignment1.id
             ]
             expect(ordered_assignment_ids).to eq(expected_id_order)
           end

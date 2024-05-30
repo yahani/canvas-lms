@@ -24,7 +24,8 @@ class SplitUsers
     { table: "asset_user_accesses",
       scope: -> { where(context_type: "Course") } }.freeze,
     { table: "asset_user_accesses",
-      scope: -> { joins(:context_group).where(groups: { context_type: "Course" }) }, context_id: "groups.context_id" }.freeze,
+      scope: -> { joins(:context_group).where(groups: { context_type: "Course" }) },
+      context_id: "groups.context_id" }.freeze,
     { table: "calendar_events",
       scope: -> { where(context_type: "Course") } }.freeze,
     { table: "calendar_events",
@@ -44,10 +45,12 @@ class SplitUsers
     { table: "discussion_entries",
       scope: -> { joins({ discussion_topic: :group }).where(groups: { context_type: "Course" }) },
       context_id: "groups.context_id" }.freeze,
-    { table: "discussion_entries", foreign_key: :editor_id,
+    { table: "discussion_entries",
+      foreign_key: :editor_id,
       scope: -> { joins(:discussion_topic).where(discussion_topics: { context_type: "Course" }) },
       context_id: "discussion_topics.context_id" }.freeze,
-    { table: "discussion_entries", foreign_key: :editor_id,
+    { table: "discussion_entries",
+      foreign_key: :editor_id,
       scope: -> { joins({ discussion_topic: :group }).where(groups: { context_type: "Course" }) },
       context_id: "groups.context_id" }.freeze,
     { table: "discussion_topics",
@@ -55,9 +58,11 @@ class SplitUsers
     { table: "discussion_topics",
       scope: -> { joins(:group).where(groups: { context_type: "Course" }) },
       context_id: "groups.context_id" }.freeze,
-    { table: "discussion_topics", foreign_key: :editor_id,
+    { table: "discussion_topics",
+      foreign_key: :editor_id,
       scope: -> { where(context_type: "Course") } }.freeze,
-    { table: "discussion_topics", foreign_key: :editor_id,
+    { table: "discussion_topics",
+      foreign_key: :editor_id,
       scope: -> { joins(:group).where(groups: { context_type: "Course" }) },
       context_id: "groups.context_id" }.freeze,
     { table: "page_views",
@@ -65,7 +70,8 @@ class SplitUsers
     { table: "rubric_assessments",
       scope: -> { joins({ submission: :assignment }) },
       context_id: "assignments.context_id" }.freeze,
-    { table: "rubric_assessments", foreign_key: :assessor_id,
+    { table: "rubric_assessments",
+      foreign_key: :assessor_id,
       scope: -> { joins({ submission: :assignment }) },
       context_id: "assignments.context_id" }.freeze,
     { table: "submission_comments", foreign_key: :author_id }.freeze,
@@ -98,7 +104,7 @@ class SplitUsers
       users = new(user, merge_data).split_users
     else
       users = []
-      UserMergeData.active.splitable.where(user_id: user).shard(user).find_each do |data|
+      UserMergeData.active.splitable.where(user_id: user).shard(user).order(created_at: :desc).uniq(&:from_user_id).each do |data|
         splitters = new(user, data).split_users
         users = splitters | users
       end
@@ -115,6 +121,7 @@ class SplitUsers
         records = check_and_update_local_ids(records) if merge_data.from_user_id > Shard::IDS_PER_SHARD
         records = records.preload(:context)
         restore_merge_items
+        undo_move_lti_ids
         move_records_to_old_user(records, pseudonyms)
         # update account associations for each split out user
         users = [restored_user, source_user]
@@ -148,6 +155,27 @@ class SplitUsers
     end
   end
 
+  def undo_move_lti_ids
+    old_lti_id = merge_data.items.where(item_type: "lti_id").pick(:item)
+    old_uuid = merge_data.items.where(item_type: "uuid").pick(:item)
+    if old_lti_id && old_uuid
+      # if these merge items are here, we moved LTI IDs as part of the merge
+      # and we need to move them back now
+      UserMerge.from(source_user).move_lti_ids_to(restored_user)
+      # ask for a real sub-transaction to avoid rolling back the parent transaction
+      User.transaction(requires_new: true) do
+        source_user.override_lti_id_lock = true
+        source_user.update!(lti_id: old_lti_id, uuid: old_uuid)
+      end
+    end
+  rescue ActiveRecord::RecordNotUnique
+    # if we get a unique constraint failure, track via a statsd counter
+    # and move on. this is a rare case, but it can happen if we swap source user lti/uuid
+    # values (to the restored/target user) that match the merge data items we're trying to restore
+    # to the source user.
+    InstStatsd::Statsd.increment("split_users.undo_move_lti_ids.unique_constraint_failure")
+  end
+
   def check_and_update_local_ids(records)
     # if both users have the same local id, this isn't a safe guess to make
     return records if source_user.local_id == restored_user.local_id
@@ -170,6 +198,8 @@ class SplitUsers
     Shard.partition_by_shard(pseudonyms) do |shard_pseudonyms|
       move_new_enrollments(enrollment_ids, shard_pseudonyms)
     end
+    recompute_due_dates
+
     account_users_ids = records.where(context_type: "AccountUser").pluck(:context_id)
 
     Shard.partition_by_shard(account_users_ids) do |shard_account_user_ids|
@@ -252,7 +282,9 @@ class SplitUsers
     # passing the array to update_all so we can get postgres to add the position for us.
     unless scope.empty?
       scope.update_all(["user_id=?, position=position+?, root_account_ids='{?}'",
-                        restored_user.id, max_position, restored_user.root_account_ids])
+                        restored_user.id,
+                        max_position,
+                        restored_user.root_account_ids])
     end
 
     cc_records.where.not(previous_workflow_state: "non existent").each do |cr|
@@ -340,9 +372,9 @@ class SplitUsers
         relation = relation.instance_exec(&update[:scope]) if update[:scope]
 
         relation
-          .where((update[:context_id] || :context_id) => shard_course,
-                 (update[:foreign_key] || :user_id) => source_user_id)
-          .update_all((update[:foreign_key] || :user_id) => target_user_id)
+          .where(update[:context_id] || :context_id => shard_course,
+                 update[:foreign_key] || :user_id => source_user_id)
+          .update_all(update[:foreign_key] || :user_id => target_user_id)
       end
     end
   end
@@ -352,22 +384,31 @@ class SplitUsers
   # Also work that has happened since the merge event should moved if the
   # enrollment is moved.
   def move_submissions(enrollments)
-    # there should be no conflicts here because this is only called for
-    # enrollments that were updated which already excluded conflicts, but we
-    # will add the scope to protect against a FK violation.
-    source_user.submissions.where(assignment_id: Assignment.where(context_id: enrollments.map(&:course_id)))
-               .where.not(assignment_id: restored_user.all_submissions.select(:assignment_id)).shard(source_user)
-               .update_all(user_id: restored_user.id)
-    source_user.quiz_submissions.where(quiz_id: Quizzes::Quiz.where(context_id: enrollments.map(&:course_id)))
-               .where.not(quiz_id: restored_user.quiz_submissions.select(:quiz_id)).shard(source_user)
+    # NOTE: this is called (indirectly) inside partition_by_shard, so it only needs to deal with Shard.current,
+    # which is the shard the enrollments and associated submissions are in.
+    source_user_submissions = source_user.submissions.shard(Shard.current).where(course_id: enrollments.map(&:course_id))
+    restored_user_submissions = restored_user.all_submissions.shard(Shard.current)
+
+    # move submissions to the restored user, swapping any conflicting deleted/unsubmitted submissions
+    # back to the source user to satisfy unique constraints and foreign keys
+    # and leaving other submissions alone
+    ids_to_swap = restored_user_submissions
+                  .where(assignment_id: source_user_submissions.select(:assignment_id),
+                         workflow_state: %w[deleted unsubmitted])
+                  .pluck(:id)
+    ids_to_move = source_user_submissions
+                  .where.not(assignment_id: restored_user_submissions.where.not(id: ids_to_swap).select(:assignment_id))
+                  .pluck(:id)
+    swap_records(Submission, ids_to_move, ids_to_swap)
+
+    # since unsubmitted quiz submissions aren't a thing, just move over everything that doesn't clash
+    source_user.quiz_submissions.shard(Shard.current).where(quiz_id: Quizzes::Quiz.where(context_id: enrollments.map(&:course_id)))
+               .where.not(quiz_id: restored_user.quiz_submissions.shard(Shard.current).select(:quiz_id))
                .update_all(user_id: restored_user.id)
   end
 
   def handle_submissions(records)
-    [[:submissions, "fk_rails_8d85741475"],
-     [:"quizzes/quiz_submissions", "fk_rails_04850db4b4"]].each do |table, foreign_key|
-      model = table.to_s.classify.constantize
-
+    [Submission, Quizzes::QuizSubmission].each do |model|
       ids_by_shard = records.where(context_type: model.to_s, previous_user_id: restored_user).pluck(:context_id).group_by { |id| Shard.shard_for(id) }
       other_ids_by_shard = records.where(context_type: model.to_s, previous_user_id: source_user).pluck(:context_id).group_by { |id| Shard.shard_for(id) }
 
@@ -375,21 +416,44 @@ class SplitUsers
         ids = ids_by_shard[shard] || []
         other_ids = other_ids_by_shard[shard] || []
         shard.activate do
-          model.transaction do
-            # there is a unique index on assignment_id and user_id or quiz_id
-            # and user_id. Unique indexes are checked after every row during
-            # an update statement to get around this and to allow us to swap
-            # we are setting the user_id to the negative user_id and then back
-            # to the user_id after the conflicting rows have been updated.
-            model.connection.execute("SET CONSTRAINTS #{model.connection.quote_table_name(foreign_key)} DEFERRED")
-            model.where(id: ids).update_all(user_id: -restored_user.id)
-            model.where(id: other_ids).update_all(user_id: source_user.id)
-            model.where(id: ids).update_all(user_id: restored_user.id)
+          if model == Submission
+            # also swap restored user's deleted/unsubmitted submissions that need to be moved out of the way
+            other_ids += model.where(user_id: restored_user,
+                                     workflow_state: %w[deleted unsubmitted],
+                                     assignment_id: model.where(id: ids).select(:assignment_id))
+                              .where.not(id: other_ids)
+                              .pluck(:id)
+            # Delete existing source_user unsubmitted/deleted submissions that would otherwise
+            # clash with the restored_user submission user_id swap to the source_user.
+            # Exclude known submission ids present in the user merge data records.
+            conflicting_submissions = model.where(user_id: source_user,
+                                                  workflow_state: %w[deleted unsubmitted],
+                                                  assignment_id: model.where(id: other_ids).select(:assignment_id))
+                                           .where.not(id: ids)
+            conflicting_submissions.delete_all if conflicting_submissions.exists?
           end
-          Enrollment.delay.recompute_due_dates_and_scores(source_user.id)
-          Enrollment.delay.recompute_due_dates_and_scores(restored_user.id)
+          swap_records(model, ids, other_ids)
         end
       end
+    end
+  end
+
+  def swap_records(model, ids_to_restored_user, ids_to_source_user)
+    if ids_to_source_user.any?
+      foreign_key = case model.to_s
+                    when "Submission" then "fk_rails_8d85741475"
+                    when "Quizzes::QuizSubmission" then "fk_rails_04850db4b4"
+                    end
+      model.transaction(requires_new: true) do
+        # defer foreign key checks so we can swap the user_ids (which are themselves subject to unique constraint)
+        model.connection.execute("SET CONSTRAINTS #{model.connection.quote_table_name(foreign_key)} DEFERRED") if foreign_key
+        model.where(id: ids_to_restored_user).update_all(user_id: -restored_user.id)
+        model.where(id: ids_to_source_user).update_all(user_id: source_user.id)
+        model.where(id: ids_to_restored_user).update_all(user_id: restored_user.id)
+      end
+    else
+      # don't go through the swap rigamarole if we don't have to
+      model.where(id: ids_to_restored_user).update_all(user_id: restored_user.id)
     end
   end
 
@@ -402,5 +466,10 @@ class SplitUsers
       c.file_state = r.previous_workflow_state if c.instance_of?(Attachment)
       c.save! if c.changed? && c.valid?
     end
+  end
+
+  def recompute_due_dates
+    Enrollment.delay.recompute_due_dates_and_scores(source_user.id)
+    Enrollment.delay.recompute_due_dates_and_scores(restored_user.id)
   end
 end

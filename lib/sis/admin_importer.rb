@@ -42,7 +42,8 @@ module SIS
     end
 
     class Work
-      attr_accessor :success_count, :roll_back_data,
+      attr_accessor :success_count,
+                    :roll_back_data,
                     :account_users_to_update_associations,
                     :account_users_to_set_batch_id
 
@@ -87,16 +88,17 @@ module SIS
         end
 
         create_or_find_admin(user, state)
+        user.clear_adminable_accounts_cache!
         @success_count += 1
       end
 
       def create_or_find_admin(user, state)
         case state
         when "active"
-          admin = @account.account_users.where(user: user, role: @role).first_or_initialize
+          admin = @account.account_users.where(user:, role: @role).first_or_initialize
           admin.workflow_state = state
         when "deleted"
-          admin = @account.account_users.where(user: user, role: @role).where.not(sis_batch_id: nil).take
+          admin = @account.account_users.where(user:, role: @role).where.not(sis_batch_id: nil).take
           return unless admin
 
           admin.workflow_state = state

@@ -1,3 +1,4 @@
+/* eslint-disable import/no-unresolved */
 /*
  * Copyright (C) 2015 - present Instructure, Inc.
  *
@@ -22,22 +23,15 @@
 // template in an AMD module, giving it dependencies on handlebars, it's scoped
 // i18n object if it needs one.
 const Handlebars = require('handlebars')
-const {pick} = require('lodash')
 const {EmberHandlebars} = require('ember-template-compiler')
-const ScopedHbsExtractor = require('i18nliner-canvas/js/scoped_hbs_extractor')
-const PreProcessor = require('@instructure/i18nliner-handlebars/dist/lib/pre_processor').default
+const ScopedHbsExtractor = require('@instructure/i18nliner-canvas/scoped_hbs_extractor')
+const ScopedHbsPreProcessor = require('@instructure/i18nliner-canvas/scoped_hbs_pre_processor')
+const {readI18nScopeFromJSONFile} = require('@instructure/i18nliner-canvas/scoped_hbs_resolver')
 const nodePath = require('path')
 const loaderUtils = require('loader-utils')
-const { canvasDir } = require('#params')
-const { contriveId, config: brandableCSSConfig } = requireBrandableCSS()
-require('i18nliner-canvas/js/scoped_hbs_pre_processor')
+const {canvasDir} = require('../params')
 
-// In this main file, we do a bunch of stuff to monkey-patch the default behavior of
-// i18nliner's HbsProcessor (specifically, we set the the `directories` and define a
-// `normalizePath` function so that translation keys stay relative to canvas root dir).
-// By requiring it here the code here will use that monkeypatched behavior.
-require('i18nliner-canvas/js/main')
-
+const {contriveId, config: brandableCSSConfig} = requireBrandableCSS()
 
 const compileHandlebars = data => {
   const path = data.path
@@ -45,10 +39,9 @@ const compileHandlebars = data => {
   try {
     let translationCount = 0
     const ast = Handlebars.parse(source)
-    const extractor = new ScopedHbsExtractor(ast, {path})
-    const scope = extractor.scope
-    PreProcessor.scope = scope
-    PreProcessor.process(ast)
+    const scope = readI18nScopeFromJSONFile(path)
+    const extractor = new ScopedHbsExtractor(ast, {path, scope})
+    ScopedHbsPreProcessor.processWithScope(scope, ast)
     extractor.forEach(() => translationCount++)
 
     const precompiler = data.ember ? EmberHandlebars : Handlebars
@@ -60,15 +53,16 @@ const compileHandlebars = data => {
   }
 }
 
-const emitTemplate = (path, name, result, dependencies, cssRegistration, partialRegistration) => {
+const emitTemplate = ({name, template, dependencies, cssRegistration, partialRegistration}) => {
   return `
     import _Handlebars from 'handlebars/runtime';
+
     var Handlebars = _Handlebars.default;
     ${dependencies.map(d => `import ${JSON.stringify(d)};`).join('\n')}
 
     var template = Handlebars.template, templates = Handlebars.templates = Handlebars.templates || {};
     var name = '${name}';
-    templates[name] = template(${result.template});
+    templates[name] = template(${template});
     ${partialRegistration};
     ${cssRegistration};
     export default templates[name];
@@ -81,22 +75,15 @@ const resourceName = path =>
     .replace(/\.handlebars$/, '')
     .replace(/_/g, '-')
 
-// given an object, returns a new object with just the 'combinedChecksum' property of each item
-const getCombinedChecksums = obj =>
-  Object.keys(obj).reduce((accumulator, key) => {
-    accumulator[key] = pick(obj[key], 'combinedChecksum')
-    return accumulator
-  }, {})
-
 // inject the template with the css file specified in the "brandableCSSBundle"
 // property of the accompanying .json metadata file, if any
-const buildCssReference = (path, name) => {
+const buildCssReference = (path, _name) => {
   let bundle
 
   try {
+    // eslint-disable-next-line import/no-dynamic-require
     bundle = require(`${path}.json`).brandableCSSBundle
-  }
-  catch (_) {
+  } catch (_) {
     bundle = null
   }
 
@@ -147,11 +134,8 @@ function i18nLinerHandlebarsLoader(source) {
 
   const partialRegistration = emitPartialRegistration(this.resourcePath, name)
 
-  const cssRegistration = options.injectBrandableStylesheet !== false ?
-    buildCssReference(this.resourcePath, name) :
-    ''
-  ;
-
+  const cssRegistration =
+    options.injectBrandableStylesheet !== false ? buildCssReference(this.resourcePath, name) : ''
   const partials = findReferencedPartials(source)
   const partialRequirements = partials.map(x => nodePath.resolve(canvasDir, x))
   partialRequirements.forEach(requirement => dependencies.push(requirement))
@@ -167,21 +151,19 @@ function i18nLinerHandlebarsLoader(source) {
   }
 
   // make sure the template has access to all our handlebars helpers
-  dependencies.push('@canvas/handlebars-helpers/index.coffee')
+  dependencies.push('@canvas/handlebars-helpers/index.js')
 
-  const compiledTemplate = emitTemplate(
-    this.resourcePath,
+  return emitTemplate({
     name,
-    result,
+    template: result.template,
     dependencies,
     cssRegistration,
-    partialRegistration
-  )
-  return compiledTemplate
+    partialRegistration,
+  })
 }
 
 function requireBrandableCSS() {
-  const { cwd, chdir } = require('process')
+  const {cwd} = require('process')
   const oldCWD = cwd()
 
   // it looks for "config/brandable_css.yml" from cwd
@@ -189,8 +171,7 @@ function requireBrandableCSS() {
 
   try {
     return require('@instructure/brandable_css')
-  }
-  finally {
+  } finally {
     process.chdir(oldCWD)
   }
 }
@@ -201,7 +182,7 @@ module.exports.compile = (source, path, query) => {
   const context = {
     cacheable: () => {},
     resourcePath: path,
-    query
+    query,
   }
   return i18nLinerHandlebarsLoader.call(context, source)
 }

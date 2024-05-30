@@ -17,10 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-# modules included into ActiveRecord can't be reloaded, so use a vanilla require,
-# and not a child of a reloadable constant
-require "active_record/cache_register"
-
 module Canvas
   module CacheRegister
     # this is an attempt to separate out more granular timestamps that we can use in cache keys
@@ -33,12 +29,21 @@ module Canvas
     # (which is far less often than the many times per day users are currently being touched)
 
     ALLOWED_TYPES = {
-      "Account" => %w[account_chain role_overrides global_navigation feature_flags brand_config default_locale
-                      resolved_outcome_proficiency resolved_outcome_calculation_method],
+      "Account" => %w[account_chain
+                      role_overrides
+                      global_navigation
+                      feature_flags
+                      brand_config
+                      default_locale
+                      resolved_outcome_proficiency
+                      resolved_outcome_calculation_method],
       "Course" => %w[account_associations conditional_release],
-      "User" => %w[enrollments groups account_users todo_list submissions user_services k5_user],
+      "User" => %w[enrollments groups account_users todo_list submissions user_services k5_user potential_unread_submission_ids],
+      "AbstractAssignment" => %w[availability conditional_release needs_grading],
       "Assignment" => %w[availability conditional_release needs_grading],
-      "Quizzes::Quiz" => %w[availability]
+      "Quizzes::Quiz" => %w[availability],
+      "DiscussionTopic" => %w[availability],
+      "WikiPage" => %w[availability]
     }.freeze
 
     PREFER_MULTI_CACHE_TYPES = {

@@ -1,3 +1,4 @@
+// @ts-nocheck
 //
 // Copyright (C) 2016 - present Instructure, Inc.
 //
@@ -15,16 +16,20 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
-import $ from 'jquery'
-import _ from 'underscore'
 import axios from '@canvas/axios'
-
 import '@canvas/jquery/jquery.instructure_misc_helpers'
-// @ts-ignore
 import {useScope as useI18nScope} from '@canvas/i18n'
 import DateHelper from '@canvas/datetime/dateHelper'
 import NaiveRequestDispatch from '@canvas/network/NaiveRequestDispatch/index'
 import gradingPeriodsApi from './gradingPeriodsApi'
+import type {CamelizedGradingPeriodSet} from '../grading.d'
+import type {GradingPeriodSet, GradingPeriodSetGroup} from 'api.d'
+import {EnvGradingStandardsCommon} from '@canvas/global/env/EnvGradingStandards'
+import type {GlobalEnv} from '@canvas/global/env/GlobalEnv.d'
+import replaceTags from '@canvas/util/replaceTags'
+
+// Allow unchecked access to ENV variables that should exist in this context
+declare const ENV: GlobalEnv & EnvGradingStandardsCommon
 
 const I18n = useI18nScope('gradingPeriodSetsApi')
 
@@ -32,21 +37,21 @@ const listUrl = () => ENV.GRADING_PERIOD_SETS_URL
 
 const createUrl = () => ENV.GRADING_PERIOD_SETS_URL
 
-const updateUrl = id => $.replaceTags(ENV.GRADING_PERIOD_SET_UPDATE_URL, 'id', id)
+const updateUrl = id => replaceTags(ENV.GRADING_PERIOD_SET_UPDATE_URL, 'id', id)
 
-const serializeSet = set => {
+const serializeSet = (set: CamelizedGradingPeriodSet) => {
   const gradingPeriodSetAttrs = {
     title: set.title,
     weighted: set.weighted,
-    display_totals_for_all_grading_periods: set.displayTotalsForAllGradingPeriods
+    display_totals_for_all_grading_periods: set.displayTotalsForAllGradingPeriods,
   }
   return {
     grading_period_set: gradingPeriodSetAttrs,
-    enrollment_term_ids: set.enrollmentTermIDs
+    enrollment_term_ids: set.enrollmentTermIDs,
   }
 }
 
-const baseDeserializeSet = set => ({
+const baseDeserializeSet = (set: GradingPeriodSet): CamelizedGradingPeriodSet => ({
   id: set.id.toString(),
   title: gradingPeriodSetTitle(set),
   weighted: !!set.weighted,
@@ -54,7 +59,7 @@ const baseDeserializeSet = set => ({
   gradingPeriods: gradingPeriodsApi.deserializePeriods(set.grading_periods),
   permissions: set.permissions,
   createdAt: new Date(set.created_at),
-  enrollmentTermIDs: undefined
+  enrollmentTermIDs: undefined,
 })
 
 const gradingPeriodSetTitle = set => {
@@ -66,16 +71,14 @@ const gradingPeriodSetTitle = set => {
   }
 }
 
-const deserializeSet = function (set) {
+const deserializeSet = function (set: GradingPeriodSet): CamelizedGradingPeriodSet {
   const newSet = baseDeserializeSet(set)
   newSet.enrollmentTermIDs = set.enrollment_term_ids
   return newSet
 }
 
-const deserializeSets = setGroups =>
-  _.flatten(
-    _.map(setGroups, group => _.map(group.grading_period_sets, set => baseDeserializeSet(set)))
-  )
+const deserializeSets = (setGroups: GradingPeriodSetGroup[]): CamelizedGradingPeriodSet[] =>
+  setGroups.flatMap(group => group.grading_period_sets.map(set => baseDeserializeSet(set)))
 
 export default {
   deserializeSet,
@@ -100,5 +103,5 @@ export default {
 
   update(set) {
     return axios.patch(updateUrl(set.id), serializeSet(set)).then(_response => set)
-  }
+  },
 }

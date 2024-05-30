@@ -19,14 +19,14 @@
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import ready from '@instructure/ready'
-import DateShiftView from '@canvas/content-migrations/backbone/views/DateShiftView.coffee'
-import DaySubstitutionView from '@canvas/day-substitution/backbone/views/DaySubstitutionView.coffee'
-import ImportQuizzesNextView from '@canvas/content-migrations/backbone/views/ImportQuizzesNextView.coffee'
-import DaySubstitutionCollection from '@canvas/day-substitution/backbone/collections/DaySubstitutionCollection.coffee'
+import DateShiftView from '@canvas/content-migrations/backbone/views/DateShiftView'
+import DaySubstitutionView from '@canvas/day-substitution/backbone/views/DaySubstitutionView'
+import ImportQuizzesNextView from '@canvas/content-migrations/backbone/views/ImportQuizzesNextView'
+import DaySubstitutionCollection from '@canvas/day-substitution/backbone/collections/DaySubstitutionCollection'
 import CollectionView from '@canvas/backbone-collection-view'
 import template from '@canvas/day-substitution/jst/DaySubstitutionCollection.handlebars'
-import ContentMigration from '@canvas/content-migrations/backbone/models/ContentMigration.coffee'
-import '@canvas/datetime'
+import ContentMigration from '@canvas/content-migrations/backbone/models/ContentMigration'
+import '@canvas/datetime/jquery'
 
 const I18n = useI18nScope('content_migrations')
 
@@ -38,7 +38,7 @@ ready(() => {
     collection: daySubCollection,
     emptyMessage: () => I18n.t('no_day_substitutions', 'No Day Substitutions Added'),
     itemView: DaySubstitutionView,
-    template
+    template,
   })
 
   const content_migration = new ContentMigration()
@@ -49,14 +49,14 @@ ready(() => {
     daySubstitution: daySubCollectionView,
     oldStartDate: ENV.OLD_START_DATE,
     oldEndDate: ENV.OLD_END_DATE,
-    addHiddenInput: true
+    addHiddenInput: true,
   })
 
   const importQuizzesNextView = new ImportQuizzesNextView({
     model: content_migration,
     quizzesNextEnabled: ENV.QUIZZES_NEXT_ENABLED,
     migrationDefault: ENV.NEW_QUIZZES_MIGRATION_DEFAULT,
-    questionBank: null
+    questionBank: null,
   })
   $('#new_quizzes_migrate').html(importQuizzesNextView.render().el)
   $('#importQuizzesNext').attr('name', 'settings[import_quizzes_next]')
@@ -73,10 +73,10 @@ ready(() => {
     const endAt = $end.data('unfudged-date')
 
     if (startAt && endAt && endAt < startAt) {
-      $('button[type=submit]').attr('disabled', true)
+      $('button[type=submit]').prop('disabled', true)
       return $end.errorBox(I18n.t('End date cannot be before start date'))
     }
-    $('button[type=submit]').attr('disabled', false)
+    $('button[type=submit]').prop('disabled', false)
     return $('#copy_course_form').hideErrors()
   }
 
@@ -89,4 +89,11 @@ ready(() => {
     dateShiftView.$newEndDate.val($(this).val()).trigger('change')
     validateDates()
   })
+
+  if (document.querySelector('.import-blueprint-settings')) {
+    $('[name="selective_import"]').change(function () {
+      const ibs = document.querySelector('.import-blueprint-settings')
+      ibs.style.display = this.value === 'true' ? 'none' : 'block'
+    })
+  }
 })

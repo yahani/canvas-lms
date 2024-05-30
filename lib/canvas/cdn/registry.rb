@@ -17,8 +17,8 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_dependency "canvas/cdn/registry/gulp"
-require_dependency "canvas/cdn/registry/webpack"
+require "canvas/cdn/registry/gulp"
+require "canvas/cdn/registry/webpack"
 
 module Canvas
   module Cdn
@@ -69,6 +69,7 @@ module Canvas
       # @return [Array.<String>]
       #  Real paths to the JS files that make up the specified bundle
       delegate :scripts_for, to: :bundler
+      delegate :entries, to: :bundler
 
       # @return [String]
       #  Real path to the asset.

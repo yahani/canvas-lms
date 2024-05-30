@@ -9,12 +9,12 @@ services:
       - .:/usr/src/app
       - brandable_css_brands:/usr/src/app/stylesheets/brandable_css_brands
       - public_dist:/usr/src/app/public/dist
-      - i18nliner_node_modules:/usr/src/app/gems/canvas_i18nliner/node_modules
       - log:/usr/src/app/log
       - node_modules:/usr/src/app/node_modules
       - tmp:/usr/src/app/tmp
       - yarn-cache:/home/docker/.cache/yarn
     environment:
+      JSPEC_PATH: ${JSPEC_PATH:-}
       NODE_ENV: CI
     command: yarn run test:karma:watch:headless
 volumes:

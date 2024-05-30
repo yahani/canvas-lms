@@ -26,7 +26,7 @@ function convertManageableCoursesToApi(courses) {
 }
 
 export function isSearchableTerm(value) {
-  if (ENV?.current_user_roles?.includes('admin')) {
+  if (ENV.current_user_is_admin) {
     return value.length >= MINIMUM_SEARCH_LENGTH
   } else {
     return value.length === 0 || value.length >= MINIMUM_SEARCH_LENGTH
@@ -46,6 +46,6 @@ export default function useManagedCourseSearchApi(fetchApiOpts = {}) {
     path: `/users/self/manageable_courses`,
     convert: convertManageableCoursesToApi,
     forceResult,
-    ...fetchApiOpts
+    ...fetchApiOpts,
   })
 }

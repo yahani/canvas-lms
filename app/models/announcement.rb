@@ -29,7 +29,7 @@ class Announcement < DiscussionTopic
 
   before_save :infer_content
   before_save :respect_context_lock_rules
-  after_save :create_alert
+  after_save :create_observer_alerts_job
   validates :context_id, presence: true
   validates :context_type, presence: true
   validates :message, presence: true
@@ -97,7 +97,10 @@ class Announcement < DiscussionTopic
 
   set_policy do
     given { |user| self.user.present? && self.user == user }
-    can :update and can :reply and can :read
+    can :update and can :read
+
+    given { |user| self.user.present? && self.user == user && !comments_disabled? }
+    can :reply
 
     given { |user| self.user.present? && self.user == user && discussion_entries.active.empty? }
     can :delete
@@ -115,14 +118,17 @@ class Announcement < DiscussionTopic
     given { |user, session| context.grants_right?(user, session, :read_announcements) && visible_for?(user) }
     can :read
 
-    given { |user, session| context.grants_right?(user, session, :post_to_forum) && !locked? }
+    given { |user, session| context.grants_right?(user, session, :post_to_forum) && !locked? && !comments_disabled? }
     can :reply
 
     given { |user, session| context.is_a?(Group) && context.grants_right?(user, session, :create_forum) }
     can :create
 
-    given { |user, session| context.grants_all_rights?(user, session, :read_announcements, :moderate_forum) } # admins.include?(user) }
-    can :update and can :read_as_admin and can :delete and can :reply and can :create and can :read and can :attach
+    given { |user, session| context.grants_all_rights?(user, session, :read_announcements, :moderate_forum) }
+    can :update and can :read_as_admin and can :delete and can :create and can :read and can :attach
+
+    given { |user, session| context.grants_all_rights?(user, session, :read_announcements, :moderate_forum) && !comments_disabled? }
+    can :reply
 
     given do |user, session|
       allow_rating && (!only_graders_can_rate ||
@@ -148,7 +154,7 @@ class Announcement < DiscussionTopic
     :topic_is_announcement
   end
 
-  def can_unpublish?(**)
+  def can_unpublish?(*)
     false
   end
 
@@ -160,25 +166,33 @@ class Announcement < DiscussionTopic
     nil
   end
 
-  def create_alert
+  def create_observer_alerts_job
     return if !saved_changes.key?("workflow_state") || saved_changes["workflow_state"][1] != "active"
     return if context_type != "Course"
 
-    observer_enrollments = course.enrollments.active.of_observer_type.where.not(associated_user_id: nil)
-    observer_enrollments.each do |enrollment|
+    create_observer_alerts if course.enrollments.active.of_observer_type.where.not(associated_user_id: nil).exists?
+  end
+
+  def create_observer_alerts
+    course.enrollments.active.of_observer_type.where.not(associated_user_id: nil).find_each do |enrollment|
       observer = enrollment.user
       student = enrollment.associated_user
       next unless visible_for?(student)
 
-      threshold = ObserverAlertThreshold.where(observer: observer, alert_type: "course_announcement", student: student).first
+      threshold = ObserverAlertThreshold.where(observer:, alert_type: "course_announcement", student:).first
       next unless threshold
 
-      ObserverAlert.create!(observer: observer, student: student, observer_alert_threshold: threshold,
-                            context: self, alert_type: "course_announcement", action_date: updated_at,
+      ObserverAlert.create!(observer:,
+                            student:,
+                            observer_alert_threshold: threshold,
+                            context: self,
+                            alert_type: "course_announcement",
+                            action_date: updated_at,
                             title: I18n.t("Course announcement: \"%{title}\" in %{course_code}", {
                                             title: self.title,
                                             course_code: course.course_code
                                           }))
     end
   end
+  handle_asynchronously :create_observer_alerts, priority: Delayed::LOW_PRIORITY, max_attempts: 1
 end

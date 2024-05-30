@@ -23,10 +23,12 @@ IMS::LTI::Models::ContentItems::ContentItem.add_attribute :canvas_url, json_key:
 
 class ExternalContentController < ApplicationController
   include Lti::Concerns::Oembed
+  include Lti::Concerns::ParentFrame
 
   protect_from_forgery except: [:selection_test, :success], with: :exception
 
   before_action :require_user, only: :oembed_retrieve
+  before_action :check_disable_oembed_retrieve_feature_flag, only: :oembed_retrieve
   before_action :validate_oembed_token!, only: :oembed_retrieve
 
   rescue_from Lti::Concerns::Oembed::OembedAuthorizationError do |error|
@@ -53,7 +55,7 @@ class ExternalContentController < ApplicationController
       get_context
       @retrieved_data = content_items_for_canvas
     elsif params[:service] == "external_tool_redirect"
-      @hide_message = true if params[:service] == "external_tool_redirect"
+      @hide_message = true
       params[:return_type] = nil unless %w[oembed lti_launch_url url image_url iframe file].include?(params[:return_type])
       @retrieved_data = params
       if @retrieved_data[:url] && ["oembed", "lti_launch_url"].include?(params[:return_type])
@@ -78,8 +80,8 @@ class ExternalContentController < ApplicationController
     @headers = false
 
     js_env({
-             retrieved_data: (@retrieved_data || {}),
-             lti_response_messages: lti_response_messages,
+             retrieved_data: @retrieved_data || {},
+             lti_response_messages:,
              service: params[:service],
              service_id: params[:id],
              message: param_if_set(:lti_msg),
@@ -87,6 +89,10 @@ class ExternalContentController < ApplicationController
              error_message: param_if_set(:lti_errormsg),
              error_log: param_if_set(:lti_errorlog)
            })
+    if parent_frame_origin
+      js_env({ DEEP_LINKING_POST_MESSAGE_ORIGIN: parent_frame_origin }, true)
+      set_extra_csp_frame_ancestor!
+    end
   end
 
   def normalize_deprecated_data!
@@ -94,6 +100,12 @@ class ExternalContentController < ApplicationController
 
     return_types = { "basic_lti" => "lti_launch_url", "link" => "url", "image" => "image_url" }
     params[:return_type] = return_types[params[:return_type]] if return_types.key? params[:return_type]
+  end
+
+  def check_disable_oembed_retrieve_feature_flag
+    if @domain_root_account.feature_enabled?(:disable_oembed_retrieve)
+      render json: { message: "This endpoint is no longer supported." }, status: :gone
+    end
   end
 
   def oembed_retrieve

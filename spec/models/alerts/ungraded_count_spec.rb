@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_dependency "alerts/ungraded_count"
-
 module Alerts
   describe UngradedCount do
     describe "#should_not_receive_message?" do
@@ -41,7 +39,7 @@ module Alerts
         @assignment.submit_homework(@user, @opts)
 
         ungraded_count = Alerts::UngradedCount.new(@course, [@student.id])
-        expect(ungraded_count.should_not_receive_message?(@student.id, 2)).to eq true
+        expect(ungraded_count.should_not_receive_message?(@student.id, 2)).to be true
       end
 
       it "returns false when the student submissions are above or equal to the threshold" do
@@ -53,12 +51,12 @@ module Alerts
         second_assignment.submit_homework(@user, @opts)
 
         ungraded_count = Alerts::UngradedCount.new(@course, [@student.id])
-        expect(ungraded_count.should_not_receive_message?(@student.id, 2)).to eq false
+        expect(ungraded_count.should_not_receive_message?(@student.id, 2)).to be false
       end
 
       it "returns true when the student has no submissions" do
         ungraded_count = Alerts::UngradedCount.new(@course, [@student.id])
-        expect(ungraded_count.should_not_receive_message?(@student.id, 2)).to eq true
+        expect(ungraded_count.should_not_receive_message?(@student.id, 2)).to be true
       end
 
       it "handles submissions from multiple students" do
@@ -69,7 +67,7 @@ module Alerts
         @assignment.submit_homework(student_2, @opts)
 
         ungraded_count = Alerts::UngradedCount.new(@course, [student_1.id, student_2.id])
-        expect(ungraded_count.should_not_receive_message?(student_1.id, 2)).to eq true
+        expect(ungraded_count.should_not_receive_message?(student_1.id, 2)).to be true
       end
     end
   end

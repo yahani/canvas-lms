@@ -25,7 +25,7 @@ describe Types::CourseOutcomeAlignmentStatsType do
   before :once do
     account_admin_user
     outcome_alignment_stats_model
-    @course.account.enable_feature!(:outcome_alignment_summary)
+    @course.account.enable_feature!(:improved_outcomes_management)
   end
 
   let(:graphql_context) { { current_user: @admin } }
@@ -53,13 +53,19 @@ describe Types::CourseOutcomeAlignmentStatsType do
     it "total_artifacts" do
       expect(
         course_type.resolve("outcomeAlignmentStats { totalArtifacts }")
-      ).to eq 5
+      ).to eq 4
     end
 
     it "aligned_artifacts" do
       expect(
         course_type.resolve("outcomeAlignmentStats { alignedArtifacts }")
-      ).to eq 3
+      ).to eq 2
+    end
+
+    it "artifact_alignments" do
+      expect(
+        course_type.resolve("outcomeAlignmentStats { artifactAlignments }")
+      ).to eq 2
     end
   end
 end

@@ -21,13 +21,19 @@ module Canvas
     class FallbackMemoryCache < ActiveSupport::Cache::MemoryStore
       include FallbackExpirationCache
 
-      def clear(force: false)
+      def read_entry(key, **opts)
         super
+      rescue TypeError => e
+        if Rails.env.development? && e.message.include?("can't be referred to")
+          Rails.logger.error("[LOCAL_CACHE] failed to deserialize value for key #{key}; deleting entry")
+          delete_entry(key)
+          return nil
+        end
+        raise
       end
 
-      def write_set(hash, ttl: nil)
-        opts = { expires_in: ttl }
-        hash.each { |k, v| write(k, v, opts) }
+      def clear(force: false)
+        super
       end
 
       # lock is unique to this implementation, it's not a standard part of

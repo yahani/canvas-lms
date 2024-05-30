@@ -20,11 +20,12 @@ import {
   isPostable,
   isHideable,
   extractSimilarityInfo,
-  similarityIcon
+  similarityIcon,
 } from '@canvas/grading/SubmissionHelper'
 
 QUnit.module('SubmissionHelper', suiteHooks => {
   let submission
+  let snakeCasedSubmission
 
   suiteHooks.beforeEach(() => {
     submission = {
@@ -33,7 +34,16 @@ QUnit.module('SubmissionHelper', suiteHooks => {
       score: null,
       submissionComments: [],
       workflowState: 'unsubmitted',
-      postedAt: null
+      postedAt: null,
+    }
+
+    snakeCasedSubmission = {
+      excused: false,
+      has_postable_comments: false,
+      score: null,
+      submission_comments: [],
+      workflow_state: 'unsubmitted',
+      posted_at: null,
     }
   })
 
@@ -70,6 +80,12 @@ QUnit.module('SubmissionHelper', suiteHooks => {
         strictEqual(isPostable(submission), false)
       })
     })
+
+    test('handles snake_cased submission keys', () => {
+      snakeCasedSubmission.score = 1
+      snakeCasedSubmission.workflow_state = 'graded'
+      strictEqual(isPostable(snakeCasedSubmission), true)
+    })
   })
 
   QUnit.module('.isHideable', () => {
@@ -81,6 +97,11 @@ QUnit.module('SubmissionHelper', suiteHooks => {
     test('is false when submission is not posted', () => {
       strictEqual(isHideable(submission), false)
     })
+
+    test('handles snake_cased submission keys', () => {
+      snakeCasedSubmission.posted_at = '2020-10-20T15:24:26Z'
+      strictEqual(isHideable(snakeCasedSubmission), true)
+    })
   })
 
   QUnit.module('.extractSimilarityInfo', () => {
@@ -91,8 +112,8 @@ QUnit.module('SubmissionHelper', suiteHooks => {
           id: '1001',
           submission_type: 'online_text_entry',
           turnitinData: {
-            submission_1001: {state: 'scored', similarity_score: 50.0}
-          }
+            submission_1001: {state: 'scored', similarity_score: 50.0},
+          },
         }
 
         strictEqual(extractSimilarityInfo(originalityReportSubmission).type, 'originality_report')
@@ -103,8 +124,8 @@ QUnit.module('SubmissionHelper', suiteHooks => {
           id: '1001',
           submission_type: 'online_text_entry',
           turnitin_data: {
-            submission_1001: {state: 'scored', similarity_score: 50.0}
-          }
+            submission_1001: {state: 'scored', similarity_score: 50.0},
+          },
         }
         strictEqual(extractSimilarityInfo(turnitinSubmission).type, 'turnitin')
       })
@@ -115,8 +136,8 @@ QUnit.module('SubmissionHelper', suiteHooks => {
           submission_type: 'online_text_entry',
           vericite_data: {
             provider: 'vericite',
-            submission_1001: {state: 'scored', similarity_score: 50.0}
-          }
+            submission_1001: {state: 'scored', similarity_score: 50.0},
+          },
         }
         strictEqual(extractSimilarityInfo(vericiteSubmission).type, 'vericite')
       })
@@ -136,8 +157,8 @@ QUnit.module('SubmissionHelper', suiteHooks => {
               attachment_2001: {status: 'scored', similarity_score: 25},
               attachment_2002: {status: 'scored', similarity_score: 75},
               attachment_2003: {status: 'pending'},
-              attachment_2004: {status: 'error'}
-            }
+              attachment_2004: {status: 'error'},
+            },
           }
 
           submissionWithNestedAttachment = {
@@ -145,8 +166,8 @@ QUnit.module('SubmissionHelper', suiteHooks => {
             id: '1001',
             submission_type: 'online_upload',
             turnitin_data: {
-              attachment_3001: {status: 'scored', similarity_score: 40}
-            }
+              attachment_3001: {status: 'scored', similarity_score: 40},
+            },
           }
         })
 
@@ -193,8 +214,8 @@ QUnit.module('SubmissionHelper', suiteHooks => {
             id: '1001',
             submission_type: 'online_text_entry',
             turnitinData: {
-              submission_1001: {status: 'error'}
-            }
+              submission_1001: {status: 'error'},
+            },
           }
 
           versionKey = 'submission_1001_1997-10-01T11:22:00Z'
@@ -203,12 +224,12 @@ QUnit.module('SubmissionHelper', suiteHooks => {
             submission_type: 'online_text_entry',
             submitted_at: '01 October 1997 11:22 UTC',
             turnitinData: {
-              submission_1001: {status: 'pending'}
-            }
+              submission_1001: {status: 'pending'},
+            },
           }
           versionedSubmission.turnitinData[versionKey] = {
             status: 'scored',
-            similarity_score: 50.0
+            similarity_score: 50.0,
           }
         })
 
@@ -240,7 +261,7 @@ QUnit.module('SubmissionHelper', suiteHooks => {
 
     test('returns null if the submission has no turnitinData or vericiteData', () => {
       const submissionWithNoPlagiarismInfo = {
-        id: '1001'
+        id: '1001',
       }
       strictEqual(extractSimilarityInfo(submissionWithNoPlagiarismInfo), null)
     })
@@ -251,8 +272,8 @@ QUnit.module('SubmissionHelper', suiteHooks => {
         id: '1001',
         submission_type: 'online_upload',
         turnitin_data: {
-          attachment_9999: {status: 'error'}
-        }
+          attachment_9999: {status: 'error'},
+        },
       }
       strictEqual(extractSimilarityInfo(submissionWithImmaterialPlagiarismInfo), null)
     })
@@ -263,7 +284,7 @@ QUnit.module('SubmissionHelper', suiteHooks => {
         id: '1001',
         submission_type: 'online_text_entry',
         submitted_at: '01 October 1997 11:22 UTC',
-        turnitinData: {}
+        turnitinData: {},
       }
       submissionWithOldVersionInfo.turnitinData[otherVersionKey] = {status: 'error'}
       strictEqual(extractSimilarityInfo(submissionWithOldVersionInfo), null)
@@ -274,8 +295,8 @@ QUnit.module('SubmissionHelper', suiteHooks => {
         id: '1001',
         submission_type: 'on_paper',
         turnitin_data: {
-          submission_1001: {status: 'error'}
-        }
+          submission_1001: {status: 'error'},
+        },
       }
       strictEqual(extractSimilarityInfo(submissionWithNoSubmissions), null)
     })
@@ -307,14 +328,14 @@ QUnit.module('SubmissionHelper', suiteHooks => {
     test('returns a solid half-oval icon if the passed item is scored betwen 20 and 60', () => {
       deepEqual(iconClasses({status: 'scored', similarity_score: 40}), [
         'icon-oval-half',
-        'icon-Solid'
+        'icon-Solid',
       ])
     })
 
     test('returns a solid and certified icon if the passed item is scored up to 20', () => {
       deepEqual(iconClasses({status: 'scored', similarity_score: 20}), [
         'icon-certified',
-        'icon-Solid'
+        'icon-Solid',
       ])
     })
   })

@@ -49,13 +49,13 @@ export function multipleTypesDrafted(submission) {
     submissionDraft?.meetsBasicLtiLaunchCriteria,
     submissionDraft?.meetsTextEntryCriteria,
     submissionDraft?.meetsUploadCriteria,
-    submissionDraft?.meetsUrlCriteria
+    submissionDraft?.meetsUrlCriteria,
   ].filter(criteria => criteria === true)
 
   return matchingCriteria.length > 1
 }
 
-export function totalAllowedAttempts({assignment, submission}) {
+export function totalAllowedAttempts(assignment, submission) {
   return assignment.allowedAttempts != null
     ? assignment.allowedAttempts + (submission?.extraAttempts || 0)
     : null

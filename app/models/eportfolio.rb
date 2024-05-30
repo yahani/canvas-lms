@@ -37,7 +37,8 @@ class Eportfolio < ActiveRecord::Base
   # marked_as_safe => an admin has manually marked this as safe.
   # marked_as_spam => an admin has manually marked this as spam.
   validates :spam_status,
-            inclusion: ["flagged_as_possible_spam", *SPAM_MODERATIONS], allow_nil: true
+            inclusion: ["flagged_as_possible_spam", *SPAM_MODERATIONS],
+            allow_nil: true
 
   workflow do
     state :active
@@ -102,12 +103,13 @@ class Eportfolio < ActiveRecord::Base
     can :read
 
     # The eportfolio is private and the user has access to the private link
-    # (we know this by way of the session having the eportfolio id) and the
-    # eportfolio hasn't been flagged or marked as spam.
+    # (we know this by way of the session having the eportfolio id), the
+    # eportfolio hasn't been flagged or marked as spam, and eportfolios are
+    # enabled for the author in the context.
     given do |_, session|
       active? && session && session[:eportfolio_ids] &&
         session[:eportfolio_ids].include?(id) &&
-        !spam?
+        !spam? && self.user.eportfolios_enabled?
     end
     can :read
 
@@ -152,12 +154,12 @@ class Eportfolio < ActiveRecord::Base
 
   def self.spam_criteria_regexp(type: :title)
     setting_name =
-      type == :title ? "eportfolio_title_spam_keywords" : "eportfolio_content_spam_keywords"
+      (type == :title) ? "eportfolio_title_spam_keywords" : "eportfolio_content_spam_keywords"
     spam_keywords = Setting.get(setting_name, "").split(",").map(&:strip).reject(&:empty?)
     return nil if spam_keywords.blank?
 
     escaped_keywords = spam_keywords.map { |token| Regexp.escape(token) }
-    /\b(#{escaped_keywords.join('|')})\b/i
+    /\b(#{escaped_keywords.join("|")})\b/i
   end
 
   private

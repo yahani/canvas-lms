@@ -25,22 +25,22 @@ export const GRADING_PERIODS = [
     title: 'Spring 2020',
     start_date: '2020-01-01T07:00:00Z',
     end_date: '2020-07-01T06:59:59Z',
-    workflow_state: 'active'
+    workflow_state: 'active',
   },
   {
     id: '2',
     title: 'Fall 2020',
     start_date: '2020-07-01T07:00:00Z',
     end_date: '2021-01-01T06:59:59Z',
-    workflow_state: 'active'
+    workflow_state: 'active',
   },
   {
     id: '3',
     title: 'Fall 2019',
     start_date: '2019-07-01T07:00:00Z',
     end_date: '2020-01-01T06:59:59Z',
-    workflow_state: 'deleted'
-  }
+    workflow_state: 'deleted',
+  },
 ]
 
 export const MOCK_ASSIGNMENTS = [
@@ -56,8 +56,8 @@ export const MOCK_ASSIGNMENTS = [
     type: 'assignment',
     assignment: {
       due_at: '2021-07-02T13:59:59Z', // 7:59am MT, 7:44pm Kathmandu
-      submission_types: ['online_text_entry', 'online_url', 'media_recording', 'online_upload']
-    }
+      submission_types: ['online_text_entry', 'online_url', 'media_recording', 'online_upload'],
+    },
   },
   {
     context_code: 'course_3',
@@ -71,8 +71,8 @@ export const MOCK_ASSIGNMENTS = [
     type: 'assignment',
     assignment: {
       due_at: '2021-07-04T11:30:00Z', // 5:30am MT, 5:15pm Kathmandu
-      submission_types: ['discussion_topic']
-    }
+      submission_types: ['discussion_topic'],
+    },
   },
   {
     context_code: 'course_3',
@@ -86,9 +86,9 @@ export const MOCK_ASSIGNMENTS = [
     type: 'assignment',
     assignment: {
       due_at: '2021-07-04T22:00:00Z', // 4pm MT, 3:45am Jul 5 Kathmandu
-      submission_types: ['online_quiz']
-    }
-  }
+      submission_types: ['online_quiz'],
+    },
+  },
 ]
 
 export const MOCK_OBSERVEE_ASSIGNMENTS = [
@@ -104,8 +104,8 @@ export const MOCK_OBSERVEE_ASSIGNMENTS = [
     type: 'assignment',
     assignment: {
       due_at: '2021-10-02T13:59:59Z', // 7:59am MT, 7:44pm Kathmandu
-      submission_types: ['online_text_entry', 'online_url', 'media_recording', 'online_upload']
-    }
+      submission_types: ['online_text_entry', 'online_url', 'media_recording', 'online_upload'],
+    },
   },
   {
     context_code: 'course_32',
@@ -119,9 +119,9 @@ export const MOCK_OBSERVEE_ASSIGNMENTS = [
     type: 'assignment',
     assignment: {
       due_at: '2021-10-04T11:30:00Z', // 5:30am MT, 5:15pm Kathmandu
-      submission_types: ['online_quiz']
-    }
-  }
+      submission_types: ['online_quiz'],
+    },
+  },
 ]
 
 export const MOCK_CARDS = [
@@ -138,7 +138,7 @@ export const MOCK_CARDS = [
     isK5Subject: true,
     canManage: true,
     canReadAnnouncements: true,
-    published: true
+    published: true,
   },
   {
     id: '2',
@@ -153,7 +153,7 @@ export const MOCK_CARDS = [
     isK5Subject: false,
     canManage: true,
     canReadAnnouncements: true,
-    published: false
+    published: false,
   },
   {
     id: '3',
@@ -168,8 +168,8 @@ export const MOCK_CARDS = [
     isK5Subject: true,
     canManage: true,
     canReadAnnouncements: true,
-    published: true
-  }
+    published: true,
+  },
 ]
 
 export const MOCK_CARDS_2 = [
@@ -185,8 +185,8 @@ export const MOCK_CARDS_2 = [
     isHomeroom: false,
     isK5Subject: true,
     canManage: true,
-    published: true
-  }
+    published: true,
+  },
 ]
 
 export const MOCK_EVENTS = [
@@ -198,9 +198,20 @@ export const MOCK_EVENTS = [
     important_dates: true,
     start_at: '2021-06-30T07:00:00Z', // 1am MT, 12:45pm Kathmandu
     title: 'Morning Yoga',
-    type: 'event'
-  }
+    type: 'event',
+  },
 ]
+
+export const MOCK_ACCOUNT_CALENDAR_EVENT = {
+  context_color: null,
+  context_name: 'CSU',
+  html_url: 'http://localhost:3000/calendar?event_id=45&include_contexts=account_1',
+  id: '45',
+  important_dates: true,
+  start_at: '2021-06-29T07:00:00Z',
+  title: 'Football Game',
+  type: 'event',
+}
 
 export const MOCK_OBSERVEE_EVENTS = [
   {
@@ -211,8 +222,8 @@ export const MOCK_OBSERVEE_EVENTS = [
     important_dates: true,
     start_at: '2021-10-30T07:00:00Z', // 1am MT, 12:45pm Kathmandu
     title: 'First Quiz',
-    type: 'event'
-  }
+    type: 'event',
+  },
 ]
 
 export const MOCK_PLANNER_ITEM = [
@@ -228,7 +239,7 @@ export const MOCK_PLANNER_ITEM = [
       id: '15',
       points_possible: 10,
       title: 'Assignment 15',
-      updated_at: '2021-03-16T17:31:52Z'
+      updated_at: '2021-03-16T17:31:52Z',
     },
     plannable_date: moment()?.toISOString(),
     plannable_id: '15',
@@ -242,7 +253,13 @@ export const MOCK_PLANNER_ITEM = [
       missing: true,
       needs_grading: false,
       redo_request: false,
-      submitted: false
-    }
-  }
+      submitted: false,
+    },
+  },
+]
+
+export const IMPORTANT_DATES_CONTEXTS = [
+  {assetString: 'course_1', name: 'Economics 101', color: 'yellow'},
+  {assetString: 'course_2', name: 'Home Room', color: 'blue'},
+  {assetString: 'course_3', name: 'The Maths', color: 'red'},
 ]

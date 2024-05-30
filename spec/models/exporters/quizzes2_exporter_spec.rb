@@ -44,16 +44,16 @@ describe "Quizzes2 Exporter" do
     end
 
     it "creates a Quizzes2 assignment group if it doesn't exist" do
-      expect(@course.assignment_groups.where(name: Exporters::Quizzes2Exporter::GROUP_NAME).exists?).to eq false
+      expect(@course.assignment_groups.where(name: Exporters::Quizzes2Exporter::GROUP_NAME).exists?).to be false
       @quizzes2.export
-      expect(@course.assignment_groups.where(name: Exporters::Quizzes2Exporter::GROUP_NAME).exists?).to eq true
+      expect(@course.assignment_groups.where(name: Exporters::Quizzes2Exporter::GROUP_NAME).exists?).to be true
     end
 
     it "creates a Quizzes2 assignment group if it was previously deleted" do
       old_group = @course.assignment_groups.create(name: Exporters::Quizzes2Exporter::GROUP_NAME)
       old_group.destroy
       @quizzes2.export
-      expect(@course.assignment_groups.where(name: Exporters::Quizzes2Exporter::GROUP_NAME).exists?).to eq true
+      expect(@course.assignment_groups.where(name: Exporters::Quizzes2Exporter::GROUP_NAME).exists?).to be true
     end
 
     it "does not create a new Quizzes2 assignment group if one exists" do
@@ -89,6 +89,23 @@ describe "Quizzes2 Exporter" do
       expect { exporter.export }.to change { @course.assignments.count }.by(1)
     end
 
+    it "builds assignment payload" do
+      @quizzes2.export
+      assignment = @course.assignments.where.not(id: @quiz.assignment.id).first
+      expect(@quizzes2.build_assignment_payload).to eq(
+        {
+          assignment: {
+            resource_link_id: assignment.lti_resource_link_id,
+            assignment_id: assignment.global_id,
+            title: @quiz.title,
+            context_title: @quiz.context.name,
+            course_uuid: @quiz.course.uuid,
+            points_possible: assignment.points_possible
+          }
+        }
+      )
+    end
+
     context "when newquizzes_on_quiz_page is enabled" do
       before do
         @course.root_account.enable_feature!(:newquizzes_on_quiz_page)
@@ -105,7 +122,7 @@ describe "Quizzes2 Exporter" do
         let(:failed_assignment) do
           @course.assignments.create!(
             position: 777,
-            assignment_group: assignment_group
+            assignment_group:
           )
         end
 

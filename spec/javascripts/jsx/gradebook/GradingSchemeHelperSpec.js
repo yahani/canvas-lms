@@ -28,7 +28,7 @@ QUnit.module('GradingSchemeHelper', () => {
         ['B', 0.8],
         ['C', 0.7],
         ['D', 0.6],
-        ['F', 0.5]
+        ['F', 0.5],
       ]
     })
 
@@ -50,7 +50,7 @@ QUnit.module('GradingSchemeHelper', () => {
       strictEqual(GradingSchemeHelper.gradeToScoreUpperBound('B', gradingScheme), 89.9)
     })
 
-    test('returns 0.01% below the next highest scheme value when higher by less than .1%', function() {
+    test('returns 0.01% below the next highest scheme value when higher by less than .1%', function () {
       gradingScheme[0][1] = 0.9059
       gradingScheme[1][1] = 0.9051
       strictEqual(GradingSchemeHelper.gradeToScoreUpperBound('B', gradingScheme), 90.58)
@@ -77,7 +77,7 @@ QUnit.module('GradingSchemeHelper', () => {
         ['3.5', 0.8],
         ['3.0', 0.7],
         ['2.5', 0.6],
-        ['2.0', 0.5]
+        ['2.0', 0.5],
       ]
       strictEqual(GradingSchemeHelper.gradeToScoreUpperBound('2.5', gradingScheme), 69)
     })
@@ -88,7 +88,7 @@ QUnit.module('GradingSchemeHelper', () => {
         ['-*', 0.8],
         ['å +', 0.7],
         ['+4', 0.6],
-        ['!^', 0.5]
+        ['!^', 0.5],
       ]
       strictEqual(GradingSchemeHelper.gradeToScoreUpperBound('å +', gradingScheme), 79)
     })
@@ -99,7 +99,7 @@ QUnit.module('GradingSchemeHelper', () => {
         ['-*', 0.8],
         ['å +', 0.7],
         ['+4', 0.6],
-        ['!^', 0.5]
+        ['!^', 0.5],
       ]
       strictEqual(GradingSchemeHelper.gradeToScoreUpperBound('   !^   ', gradingScheme), 59)
     })
@@ -110,7 +110,7 @@ QUnit.module('GradingSchemeHelper', () => {
         ['🙂', 0.8],
         ['😐', 0.7],
         ['😢', 0.6],
-        ['💩', 0]
+        ['💩', 0],
       ]
       strictEqual(GradingSchemeHelper.gradeToScoreUpperBound('😐', gradingScheme), 79)
     })
@@ -129,7 +129,7 @@ QUnit.module('GradingSchemeHelper', () => {
         ['B', 0.8],
         ['C', 0.7],
         ['D', 0.6],
-        ['F', 0.5]
+        ['F', 0.5],
       ]
     })
 
@@ -153,7 +153,7 @@ QUnit.module('GradingSchemeHelper', () => {
         ['3.5', 0.8],
         ['3.0', 0.7],
         ['2.5', 0.6],
-        ['2.0', 0.5]
+        ['2.0', 0.5],
       ]
       strictEqual(GradingSchemeHelper.gradeToScoreLowerBound('2.5', gradingScheme), 60)
     })
@@ -164,7 +164,7 @@ QUnit.module('GradingSchemeHelper', () => {
         ['-*', 0.8],
         ['å +', 0.7],
         ['+4', 0.6],
-        ['!^', 0.5]
+        ['!^', 0.5],
       ]
       strictEqual(GradingSchemeHelper.gradeToScoreLowerBound('å +', gradingScheme), 70)
     })
@@ -175,9 +175,29 @@ QUnit.module('GradingSchemeHelper', () => {
         ['-*', 0.8],
         ['å +', 0.7],
         ['+4', 0.6],
-        ['!^', 0.5]
+        ['!^', 0.5],
       ]
       strictEqual(GradingSchemeHelper.gradeToScoreLowerBound('   !^   ', gradingScheme), 50)
+    })
+
+    test('matches grades with trailing en-dash to keys with trailing en-dash', () => {
+      gradingScheme = [
+        ['A', 0.95],
+        ['A-', 0.9],
+        ['B', 0.85],
+      ]
+      const enDash = '-'
+      strictEqual(GradingSchemeHelper.gradeToScoreLowerBound(`A${enDash}`, gradingScheme), 90)
+    })
+
+    test('matches grades with trailing minus to keys with trailing en-dash', () => {
+      gradingScheme = [
+        ['A', 0.95],
+        ['A-', 0.9],
+        ['B', 0.85],
+      ]
+      const minus = '−'
+      strictEqual(GradingSchemeHelper.gradeToScoreLowerBound(`A${minus}`, gradingScheme), 90)
     })
 
     test('matches emoji scheme keys', () => {
@@ -186,60 +206,13 @@ QUnit.module('GradingSchemeHelper', () => {
         ['🙂', 0.8],
         ['😐', 0.7],
         ['😢', 0.6],
-        ['💩', 0]
+        ['💩', 0],
       ]
       strictEqual(GradingSchemeHelper.gradeToScoreLowerBound('😐', gradingScheme), 70)
     })
 
     test('returns null when the grade does not match a scheme key', () => {
       strictEqual(GradingSchemeHelper.gradeToScoreLowerBound('B+', gradingScheme), null)
-    })
-  })
-
-  QUnit.module('.scoreToGrade()', () => {
-    test('returns the lowest grade to below-scale scores', () => {
-      const gradingScheme = [
-        ['A', 0.9],
-        ['B', 0.8],
-        ['C', 0.7],
-        ['D', 0.6],
-        ['E', 0.5]
-      ]
-      equal(GradingSchemeHelper.scoreToGrade(40, gradingScheme), 'E')
-    })
-
-    test('accounts for floating-point rounding errors', () => {
-      // Keep this spec close to identical to the ruby GradeCalculator specs to ensure they both do the same thing.
-      const gradingScheme = [
-        ['A', 0.9],
-        ['B+', 0.886],
-        ['B', 0.8],
-        ['C', 0.695],
-        ['D', 0.555],
-        ['E', 0.545],
-        ['M', 0.0]
-      ]
-      equal(GradingSchemeHelper.scoreToGrade(1005, gradingScheme), 'A')
-      equal(GradingSchemeHelper.scoreToGrade(105, gradingScheme), 'A')
-      equal(GradingSchemeHelper.scoreToGrade(100, gradingScheme), 'A')
-      equal(GradingSchemeHelper.scoreToGrade(99, gradingScheme), 'A')
-      equal(GradingSchemeHelper.scoreToGrade(90, gradingScheme), 'A')
-      equal(GradingSchemeHelper.scoreToGrade(89.999, gradingScheme), 'B+')
-      equal(GradingSchemeHelper.scoreToGrade(88.601, gradingScheme), 'B+')
-      equal(GradingSchemeHelper.scoreToGrade(88.6, gradingScheme), 'B+')
-      equal(GradingSchemeHelper.scoreToGrade(88.599, gradingScheme), 'B')
-      equal(GradingSchemeHelper.scoreToGrade(80, gradingScheme), 'B')
-      equal(GradingSchemeHelper.scoreToGrade(79.999, gradingScheme), 'C')
-      equal(GradingSchemeHelper.scoreToGrade(79, gradingScheme), 'C')
-      equal(GradingSchemeHelper.scoreToGrade(69.501, gradingScheme), 'C')
-      equal(GradingSchemeHelper.scoreToGrade(69.5, gradingScheme), 'C')
-      equal(GradingSchemeHelper.scoreToGrade(69.499, gradingScheme), 'D')
-      equal(GradingSchemeHelper.scoreToGrade(60, gradingScheme), 'D')
-      equal(GradingSchemeHelper.scoreToGrade(55.5, gradingScheme), 'D')
-      equal(GradingSchemeHelper.scoreToGrade(54.5, gradingScheme), 'E')
-      equal(GradingSchemeHelper.scoreToGrade(50, gradingScheme), 'M')
-      equal(GradingSchemeHelper.scoreToGrade(0, gradingScheme), 'M')
-      equal(GradingSchemeHelper.scoreToGrade(-100, gradingScheme), 'M')
     })
   })
 })

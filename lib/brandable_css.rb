@@ -17,10 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require "pathname"
-require "yaml"
-require "open3"
-
 module BrandableCSS
   APP_ROOT = (defined?(Rails) && Rails.root) || Pathname.pwd
   CONFIG = YAML.load_file(APP_ROOT.join("config/brandable_css.yml")).freeze
@@ -224,7 +220,7 @@ module BrandableCSS
 
     def default(type, high_contrast = false)
       bc = high_contrast ? high_contrast_overrides : nil
-      send("all_brand_variable_values_as_#{type}", bc)
+      send(:"all_brand_variable_values_as_#{type}", bc)
     end
 
     def save_default!(type, high_contrast = false)
@@ -277,7 +273,7 @@ module BrandableCSS
           v.symbolize_keys.slice(:combinedChecksum, :includesNoVariables)
         end.freeze
       elsif defined?(Rails) && Rails.env.production?
-        raise "#{file.expand_path} does not exist. You need to run brandable_css before you can serve css."
+        raise "#{file.expand_path} does not exist. You need to run `yarn run build:css` before you can serve css."
       else
         # for dev/test there might be cases where you don't want it to raise an exception
         # if you haven't ran `brandable_css` and the manifest file doesn't exist yet.
@@ -298,10 +294,10 @@ module BrandableCSS
 
       file = APP_ROOT.join(CONFIG.dig("indices", "handlebars", "path"))
       unless file.exist?
-        raise "#{file.expand_path} does not exist. You need to run brandable_css before you can serve css."
+        raise "#{file.expand_path} does not exist. You need to run `yarn run build:css` before you can serve css."
       end
 
-      @handlebars_index_json = file.read
+      @handlebars_index_json = file.read.rstrip
     end
 
     # bundle path should be something like "bundles/speedgrader" or "plugins/analytics/something"

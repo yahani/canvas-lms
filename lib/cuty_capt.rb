@@ -38,9 +38,6 @@
 # to the given url with a query param of `url=` and the website to snapshot, and a header
 # X-API-Key with the given key.
 
-require "resolv"
-require "ipaddr"
-
 class CutyCapt
   CUTYCAPT_DEFAULTS = {
     delay: 3000,
@@ -164,25 +161,26 @@ class CutyCapt
     if success
       logger.info("Capture took #{Time.now.to_i - start.to_i} seconds")
     else
-      File.unlink(img_file) if File.exist?(img_file)
+      FileUtils.rm_f(img_file)
       return nil
     end
 
     if block_given?
       yield img_file
-      File.unlink(img_file) if File.exist?(img_file)
+      FileUtils.rm_f(img_file)
       return nil
     end
 
     img_file
   end
 
-  def self.snapshot_attachment_for_url(url)
+  def self.snapshot_attachment_for_url(url, **attachment_opts)
     attachment = nil
     snapshot_url(url) do |file_path|
       # this is a really odd way to get Attachment the data it needs, which
       # should probably be remedied at some point
-      attachment = Attachment.new(uploaded_data: Rack::Test::UploadedFile.new(file_path, "image/png"))
+      attachment = Attachment.create!(uploaded_data: Canvas::UploadedFile.new(file_path, "image/png"),
+                                      **attachment_opts)
     end
     attachment
   end

@@ -57,6 +57,14 @@ module CyoeHelper
     result.slice(:locked, :assignment_sets, :selected_set_id)
   end
 
+  def assignment_set_action_ids(rules, user)
+    ConditionalRelease::AssignmentSetAction
+      .active
+      .where(student_id: user)
+      .where(assignment_set_id: rules.map { |rule| rule[:assignment_sets].pluck(:id) }.flatten.uniq)
+      .pluck(:id)
+  end
+
   def conditional_release_json(content_tag, user, opts = {})
     result = conditional_release_rule_for_module_item(content_tag, opts)
     return if result.blank?
@@ -94,9 +102,9 @@ module CyoeHelper
     choose_url = modules_url + "/items/" + tag_id + "/choose"
     modules_disabled = @context.tabs_available(@current_user).select { |tabs| tabs[:label] == "Modules" }.blank?
     data.merge!({
-                  awaiting_choice: awaiting_choice,
-                  modules_url: modules_url,
-                  choose_url: choose_url,
+                  awaiting_choice:,
+                  modules_url:,
+                  choose_url:,
                   modules_tab_disabled: modules_disabled
                 })
   end

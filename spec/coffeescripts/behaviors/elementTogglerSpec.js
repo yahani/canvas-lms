@@ -17,7 +17,8 @@
  */
 
 import $ from 'jquery'
-import elementToggler from '../../../ui/boot/initializers/activateElementToggler.js'
+import 'jquery-migrate'
+import '../../../ui/boot/initializers/activateElementToggler'
 
 QUnit.module('elementToggler', {
   teardown() {
@@ -25,33 +26,33 @@ QUnit.module('elementToggler', {
       if (el) el.remove()
     })
     $('#fixtures').empty()
-  }
+  },
 })
 
-test('handles data-text-while-target-shown', function() {
-  this.$trigger = $(`
-    <a
-      href="#"
-      class="element_toggler"
-      role="button"
-      data-text-while-target-shown="Hide Thing"
-      aria-controls="thing"
-    >Show Thing</a>
-  `).appendTo('#fixtures')
+test('handles data-text-while-target-shown', function () {
+  this.$trigger = $('<a>', {
+    href: '#',
+    class: 'element_toggler',
+    role: 'button',
+    'data-text-while-target-shown': 'Hide Thing',
+    'aria-controls': 'thing',
+    text: 'Show Thing',
+  }).appendTo('#fixtures')
 
-  this.$otherTrigger = $(`
-    <a
-      class="element_toggler"
-      data-text-while-target-shown="while shown"
-      aria-controls="thing"
-    >while hidden</a>
-  `).appendTo('#fixtures')
+  this.$otherTrigger = $('<a>', {
+    class: 'element_toggler',
+    'data-text-while-target-shown': 'while shown',
+    'aria-controls': 'thing',
+    text: 'while hidden',
+  }).appendTo('#fixtures')
 
-  this.$target = $(`
-    <div id="thing" tabindex="-1" role="region" style="display:none">
-      Here is a bunch more info about "thing"
-    </div>
-  `).appendTo('#fixtures')
+  this.$target = $('<div>', {
+    id: 'thing',
+    tabindex: '-1',
+    role: 'region',
+    style: 'display:none',
+    text: 'Here is a bunch more info about "thing"',
+  }).appendTo('#fixtures')
 
   // click to show it
   this.$trigger.click()
@@ -69,37 +70,28 @@ test('handles data-text-while-target-shown', function() {
   equal(this.$otherTrigger.text(), 'while hidden', msg)
 })
 
-test('handles data-hide-while-target-shown', function() {
-  this.$trigger = $(`
-    <a
-      href="#"
-      class="element_toggler"
-      data-hide-while-target-shown="true"
-      aria-controls="thing"
-    >
-      Show Thing, then hide me
-    </a>`).appendTo('#fixtures')
+test('handles data-hide-while-target-shown', function () {
+  this.$trigger = $('<a>', {
+    href: '#',
+    class: 'element_toggler',
+    'data-hide-while-target-shown': true,
+    'aria-controls': 'thing',
+    text: 'Show Thing, then hide me',
+  }).appendTo('#fixtures')
 
-  this.$otherTrigger = $(`
-    <a
-      class="element_toggler"
-      data-hide-while-target-shown=true
-      aria-controls="thing"
-    >
-      also hide me
-    </a>
-  `).appendTo('#fixtures')
-
-  this.$target = $(`
-    <div
-      id="thing"
-      tabindex="-1"
-      role="region"
-      style="display:none"
-    >
-      blah
-    </div>
-  `).appendTo('#fixtures')
+  this.$otherTrigger = $('<a>', {
+    class: 'element_toggler',
+    'data-hide-while-target-shown': true,
+    'aria-controls': 'thing',
+    text: 'also hide me',
+  }).appendTo('#fixtures')
+  this.$target = $('<div>', {
+    id: 'thing',
+    tabindex: -1,
+    role: 'region',
+    style: 'display:none',
+    text: 'blah',
+  }).appendTo('#fixtures')
   this.$trigger.click()
   ok(this.$target.is('[aria-expanded=true]:visible'), 'target is shown')
   let msg = 'Does not change text unless `data-text-while-target-shown` is specified'
@@ -113,21 +105,54 @@ test('handles data-hide-while-target-shown', function() {
   ok(this.$otherTrigger.is(':visible'), msg)
 })
 
-test('handles dialogs', function() {
-  this.$trigger = $(`<button class="element_toggler" \
-aria-controls="thing">Show Thing Dialog</button>`).appendTo('#fixtures')
-  this.$target = $(`
-    <form id="thing" data-turn-into-dialog='{"width":450,"modal":true}' style="display:none">
-      This will pop up as a dilog when you click the button and pass along the
-      data-turn-into-dialog options.  then it will pass it through fixDialogButtons
-      to turn the buttons in your markup into proper dialog buttons
-      (look at fixDialogButtons to see what it does)
-      <div class="button-container">
-        <button type="submit">This will Submit the form</button>
-        <a class="btn dialog_closer">This will cause the dialog to close</a>
-      </div>
-    </form>
-  `).appendTo('#fixtures')
+test('handles dialogs', function () {
+  this.$trigger = $('<button>', {
+    class: 'element_toggler',
+    'aria-controls': 'thing',
+    text: 'Show Thing Dialog',
+  }).appendTo('#fixtures')
+
+  // Step 1: Create the form element
+  const $form = $('<form>', {
+    id: 'thing',
+    style: 'display:none',
+    'data-turn-into-dialog': '{"width":450,"modal":true}',
+  })
+  ok(true)
+
+  // Step 2: Add content to the form
+  $form.append(`
+  This will pop up as a dialog when you click the button and pass along the
+  data-turn-into-dialog options. Then it will pass it through fixDialogButtons
+  to turn the buttons in your markup into proper dialog buttons
+  (look at fixDialogButtons to see what it does)
+`)
+
+  // Step 3: Create a div with class "button-container"
+  const $buttonContainer = $('<div>', {
+    class: 'button-container',
+  })
+
+  // Step 4: Create the submit button
+  const $submitButton = $('<button>', {
+    type: 'submit',
+    text: 'This will Submit the form',
+  })
+
+  // Step 5: Create the anchor for closing the dialog
+  const $closeAnchor = $('<a>', {
+    class: 'btn dialog_closer',
+    text: 'This will cause the dialog to close',
+  })
+
+  // Step 6: Append the buttons to the button container
+  $buttonContainer.append($submitButton, $closeAnchor)
+
+  // Step 7: Append the button container to the form
+  $form.append($buttonContainer)
+
+  // Step 8: Append the form to the element with ID "fixtures"
+  this.$target = $form.appendTo('#fixtures')
   let msg = 'target pops up as a dialog'
   const spy = sandbox.spy($.fn, 'fixDialogButtons')
   this.$trigger.click()
@@ -143,9 +168,6 @@ aria-controls="thing">Show Thing Dialog</button>`).appendTo('#fixtures')
     submitWasCalled = true
     return false
   })
-  const $submitButton = this.$target
-    .dialog('widget')
-    .find('.ui-dialog-buttonpane .ui-button:contains("This will Submit the form")')
   $submitButton.click()
   ok(submitWasCalled, msg)
   equal(this.$target.dialog('isOpen'), true, 'doesnt cause dialog to hide')
@@ -161,7 +183,7 @@ aria-controls="thing">Show Thing Dialog</button>`).appendTo('#fixtures')
   equal(this.$target.dialog('isOpen'), false)
 })
 
-test('checkboxes can be used as trigger', function() {
+test('checkboxes can be used as trigger', function () {
   this.$trigger = $(
     '<input type="checkbox" class="element_toggler" aria-controls="thing">'
   ).appendTo('#fixtures')
@@ -172,7 +194,7 @@ test('checkboxes can be used as trigger', function() {
   ok(this.$target.is(':hidden'), 'target is hidden')
 })
 
-test('toggles multiple elements separated by spaces', function() {
+test('toggles multiple elements separated by spaces', function () {
   this.$trigger = $(
     '<input type="checkbox" class="element_toggler" aria-controls="one two" />'
   ).appendTo('#fixtures')
@@ -181,4 +203,14 @@ test('toggles multiple elements separated by spaces', function() {
   this.$trigger.prop('checked', true).trigger('change')
   ok(this.$target1.is(':visible'), 'first target is shown')
   ok(this.$target2.is(':visible'), 'second target is shown')
+})
+
+test('ignores attempts to trick jquery into creating HTML instead of selecting elements', function () {
+  this.$trigger = $(
+    '<a href="#" class="element_toggler" aria-controls="fake,.one">tricky</a>'
+  ).appendTo('#fixtures')
+  this.$target = $(`<div id="]<sneaky/>" class="one"/>`).appendTo('#fixtures')
+  const spy = sandbox.spy($.fn, 'init')
+  this.$trigger.click()
+  notOk(spy.calledWithMatch(/sneaky/), 'sneaky selectors are discarded')
 })

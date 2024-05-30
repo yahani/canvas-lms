@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "securerandom"
-
 class LoginController < ApplicationController
   include Login::Shared
 
@@ -58,13 +56,13 @@ class LoginController < ApplicationController
     # deprecated redirect; they should already know the correct type
     params[:authentication_provider] ||= params[:id]
 
-    if @domain_root_account.auth_discovery_url && !params[:authentication_provider]
-      auth_discovery_url = @domain_root_account.auth_discovery_url
+    if @domain_root_account.auth_discovery_url(request) && !params[:authentication_provider]
+      auth_discovery_url = @domain_root_account.auth_discovery_url(request)
       if flash[:delegated_message]
         auth_discovery_url << (URI.parse(auth_discovery_url).query ? "&" : "?")
-        auth_discovery_url << "message=#{URI.escape(flash[:delegated_message])}"
+        auth_discovery_url << "message=#{URI::DEFAULT_PARSER.escape(flash[:delegated_message])}"
       end
-      return redirect_to auth_discovery_url
+      return redirect_to auth_discovery_url, @domain_root_account.auth_discovery_url_options(request)
     end
 
     if params[:authentication_provider]
@@ -117,8 +115,9 @@ class LoginController < ApplicationController
   def logout_landing
     # logged in; ask them to log out
     return render :logout_confirm if @current_user
+
     # not logged in at all; send them to login
-    return redirect_to login_url unless flash[:logged_out]
+    redirect_to login_url unless flash[:logged_out]
     # just barely logged out. render a landing page asking them to log in again.
     # render :logout_landing
   end
@@ -136,6 +135,7 @@ class LoginController < ApplicationController
       return render json: { error: I18n.t("Invalid redirect URL") }, status: :bad_request
     end
     return render_unauthorized_action unless return_to.absolute?
+    return render_unauthorized_action unless return_to.scheme == request.scheme
 
     host = return_to.host
     return render_unauthorized_action unless host.casecmp?(request.host)
@@ -148,7 +148,10 @@ class LoginController < ApplicationController
     return_to.query = "" unless return_to.query
     return_to.query.concat("session_token=#{token}")
 
-    render json: { session_url: return_to.to_s }
+    render json: {
+      session_url: return_to.to_s,
+      requires_terms_acceptance: login_pseudonym.account.require_acceptance_of_terms?(@real_current_user || @current_user)
+    }
   end
 
   def clear_file_session

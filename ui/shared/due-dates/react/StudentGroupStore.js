@@ -16,8 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import _ from 'underscore'
-import createStore from '@canvas/util/createStore'
+import {filter, keyBy} from 'lodash'
+import createStore from '@canvas/backbone/createStore'
 import $ from 'jquery'
 import splitAssetString from '@canvas/util/splitAssetString'
 import parseLinkHeader from 'link-header-parsing/parseLinkHeaderFromXHR'
@@ -38,7 +38,7 @@ import parseLinkHeader from 'link-header-parsing/parseLinkHeaderFromXHR'
 const initialStoreState = {
   groups: {},
   fetchComplete: false,
-  selectedGroupSetId: null
+  selectedGroupSetId: null,
 }
 
 const StudentGroupStore = createStore($.extend(true, {}, initialStoreState))
@@ -47,14 +47,14 @@ const StudentGroupStore = createStore($.extend(true, {}, initialStoreState))
 //      Fetching
 // -------------------
 
-StudentGroupStore.fetchGroupsForCourse = function(url) {
+StudentGroupStore.fetchGroupsForCourse = function (url) {
   const courseId = splitAssetString(window.ENV.context_asset_string)[1]
   const getGroupsPath = url || '/api/v1/courses/' + courseId + '/groups'
 
   $.getJSON(getGroupsPath, {}, this.fetchGroupsCallback.bind(this))
 }
 
-StudentGroupStore.fetchGroupsCallback = function(data, status, xhr) {
+StudentGroupStore.fetchGroupsCallback = function (data, status, xhr) {
   const links = parseLinkHeader(xhr)
   const newGroups = data
   this.addGroups(newGroups)
@@ -70,41 +70,41 @@ StudentGroupStore.fetchGroupsCallback = function(data, status, xhr) {
 //   Set & Get State
 // -------------------
 
-StudentGroupStore.getGroups = function() {
+StudentGroupStore.getGroups = function () {
   return StudentGroupStore.getState().groups
 }
 
-StudentGroupStore.getSelectedGroupSetId = function() {
+StudentGroupStore.getSelectedGroupSetId = function () {
   return StudentGroupStore.getState().selectedGroupSetId
 }
 
-StudentGroupStore.addGroups = function(newlyFetchedGroups) {
-  const newGroupsHash = _.keyBy(newlyFetchedGroups, 'id')
-  const newGroupsState = _.extend(newGroupsHash, this.getState().groups)
+StudentGroupStore.addGroups = function (newlyFetchedGroups) {
+  const newGroupsHash = keyBy(newlyFetchedGroups, 'id')
+  const newGroupsState = {...newGroupsHash, ...this.getState().groups}
   this.setState({
-    groups: newGroupsState
+    groups: newGroupsState,
   })
 }
 
-StudentGroupStore.setSelectedGroupSet = function(setId) {
+StudentGroupStore.setSelectedGroupSet = function (setId) {
   this.setState({
-    selectedGroupSetId: setId
+    selectedGroupSetId: setId,
   })
 }
 
-StudentGroupStore.setGroupSetIfNone = function(setId) {
+StudentGroupStore.setGroupSetIfNone = function (setId) {
   if (!this.getSelectedGroupSetId()) {
     this.setSelectedGroupSet(setId)
   }
 }
 
-StudentGroupStore.markFetchComplete = function() {
+StudentGroupStore.markFetchComplete = function () {
   this.setState({
-    fetchComplete: true
+    fetchComplete: true,
   })
 }
 
-StudentGroupStore.fetchComplete = function() {
+StudentGroupStore.fetchComplete = function () {
   return this.getState().fetchComplete
 }
 
@@ -113,14 +113,14 @@ StudentGroupStore.fetchComplete = function() {
 // -------------------
 
 // test helper
-StudentGroupStore.reset = function() {
+StudentGroupStore.reset = function () {
   this.setState($.extend(true, {}, initialStoreState))
 }
 
-StudentGroupStore.groupsFilteredForSelectedSet = function() {
+StudentGroupStore.groupsFilteredForSelectedSet = function () {
   const groups = this.getState().groups
   const setId = this.getState().selectedGroupSetId
-  return _.filter(groups, (value, key) => value.group_category_id === setId)
+  return filter(groups, value => value.group_category_id === setId)
 }
 
 // -------------------

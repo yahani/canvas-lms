@@ -69,8 +69,7 @@ $.fn.loadingImg = function (options) {
       paddingTop = $obj.outerHeight() / 2 - image.height / 2
     } else {
       paddingTop = parseInt(options.vertical, 10)
-      // eslint-disable-next-line no-restricted-globals
-      if (isNaN(paddingTop)) {
+      if (Number.isNaN(Number(paddingTop))) {
         paddingTop = 0
       }
     }
@@ -88,8 +87,7 @@ $.fn.loadingImg = function (options) {
       paddingLeft = $obj.outerWidth() / 2 - image.width / 2
     } else {
       paddingLeft = parseInt(options.horizontal, 10)
-      // eslint-disable-next-line no-restricted-globals
-      if (isNaN(paddingLeft)) {
+      if (Number.isNaN(Number(paddingLeft))) {
         paddingLeft = 0
       }
     }
@@ -116,7 +114,7 @@ $.fn.loadingImg = function (options) {
       zIndex,
       position: 'absolute',
       top,
-      left
+      left,
     })
     $('body').append($imageHolder)
   } else {
@@ -124,7 +122,7 @@ $.fn.loadingImg = function (options) {
       zIndex,
       position: 'absolute',
       top: paddingTop,
-      left: paddingLeft
+      left: paddingLeft,
     })
     $obj.append($imageHolder)
   }
@@ -133,6 +131,6 @@ $.fn.loadingImg = function (options) {
 $.fn.loadingImg.defaults = {paddingTop: 0, image_size: 'normal', vertical: 0, horizontal: 0}
 $.fn.loadingImg.image_files = {
   normal: {url: '/images/ajax-loader.gif', width: 32, height: 32},
-  small: {url: '/images/ajax-loader-small.gif', width: 16, height: 16}
+  small: {url: '/images/ajax-loader-small.gif', width: 16, height: 16},
 }
 $.fn.loadingImage = $.fn.loadingImg

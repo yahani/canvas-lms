@@ -15,11 +15,13 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-import {arrayOf, bool, number, oneOf, shape, string} from 'prop-types'
+import {arrayOf, bool, number, oneOf, shape, string, object} from 'prop-types'
 import gql from 'graphql-tag'
 import {MediaObject} from './MediaObject'
 import {SubmissionDraft} from './SubmissionDraft'
 import {SubmissionFile} from './File'
+import {AssessmentRequest} from './AssessmentRequest'
+import {TurnitinData} from './TurnitinData'
 
 export const SubmissionInterface = {
   fragment: gql`
@@ -35,29 +37,44 @@ export const SubmissionInterface = {
       body
       deductedPoints
       enteredGrade
+      gradedAnonymously
+      hideGradeFromStudent
       extraAttempts
       grade
       gradeHidden
       gradingStatus
+      customGradeStatus
       latePolicyStatus
       mediaObject {
         ...MediaObject
       }
+      originalityData
+      proxySubmitter
       resourceLinkLookupUuid
+      score
       state
+      sticker
       submissionDraft {
         ...SubmissionDraft
       }
       submissionStatus
       submissionType
       submittedAt
+      turnitinData {
+        ...TurnitinData
+      }
       feedbackForCurrentAttempt
       unreadCommentCount
       url
+      assignedAssessments {
+        ...AssessmentRequest
+      }
     }
     ${MediaObject.fragment}
     ${SubmissionFile.fragment}
     ${SubmissionDraft.fragment}
+    ${AssessmentRequest.fragment}
+    ${TurnitinData.fragment}
   `,
 
   shape: shape({
@@ -65,24 +82,30 @@ export const SubmissionInterface = {
     attachments: arrayOf(SubmissionFile.shape),
     attempt: number.isRequired,
     body: string,
+    customGradeStatus: string,
     deductedPoints: number,
     enteredGrade: string,
     extraAttempts: number,
     grade: string,
     gradeHidden: bool.isRequired,
     gradingStatus: oneOf(['needs_grading', 'excused', 'needs_review', 'graded']),
+    gradedAnonymously: bool,
+    hideGradeFromStudent: bool,
     latePolicyStatus: string,
     mediaObject: MediaObject.shape,
+    originalityData: object.shape,
     resourceLinkLookupUuid: string,
     state: string.isRequired,
     submissionDraft: SubmissionDraft.shape,
     submissionStatus: string,
     submissionType: string,
     submittedAt: string,
+    turnitinData: arrayOf(TurnitinData.shape),
     feedbackForCurrentAttempt: bool.isRequired,
     unreadCommentCount: number.isRequired,
-    url: string
-  })
+    url: string,
+    assignedAssessments: arrayOf(AssessmentRequest.shape),
+  }),
 }
 
 export const DefaultMocks = {
@@ -97,16 +120,23 @@ export const DefaultMocks = {
     gradeHidden: false,
     grade: null,
     gradingStatus: null,
+    gradedAnonymously: false,
+    hideGradeFromStudent: false,
     latePolicyStatus: null,
     mediaObject: null,
+    originalityData: null,
     resourceLinkLookupUuid: null,
     state: 'unsubmitted',
+    customGradeStatus: null,
+    sticker: null,
     submissionDraft: null,
     submissionStatus: 'unsubmitted',
     submissionType: null,
     submittedAt: null,
+    turnitinData: null,
     feedbackForCurrentAttempt: false,
     unreadCommentCount: 0,
-    url: null
-  })
+    url: null,
+    assignedAssessments: () => [],
+  }),
 }

@@ -218,7 +218,7 @@ describe ContentMigration do
       run_course_copy
 
       q2 = @copy_to.quizzes.where(migration_id: mig_id(q)).first
-      expect(q2.quiz_data.size).to eql(2)
+      expect(q2.quiz_data.size).to be(2)
       ans_count = 0
       q2.quiz_data.each do |qd|
         qd["answers"].each do |ans|
@@ -226,7 +226,7 @@ describe ContentMigration do
           ans_count += 1
         end
       end
-      expect(ans_count).to eql(4)
+      expect(ans_count).to be(4)
     end
 
     it "makes true-false question answers consistent" do
@@ -247,8 +247,8 @@ describe ContentMigration do
       run_course_copy
 
       q2 = @copy_to.quizzes.where(migration_id: mig_id(q)).first
-      expect(q2.quiz_data.first["answers"].map { |a| a["text"] }).to eq ["True", "False"]
-      expect(q2.quiz_data.first["answers"].map { |a| a["weight"] }).to eq [100, 0]
+      expect(q2.quiz_data.first["answers"].pluck("text")).to eq ["True", "False"]
+      expect(q2.quiz_data.first["answers"].pluck("weight")).to eq [100, 0]
     end
 
     it "imports invalid true-false questions as multiple choice" do
@@ -270,7 +270,7 @@ describe ContentMigration do
 
       q2 = @copy_to.quizzes.where(migration_id: mig_id(q)).first
       expect(q2.quiz_data.first["question_type"]).to eq "multiple_choice_question"
-      expect(q2.quiz_data.first["answers"].map { |a| a["text"] }).to eq ["foo", "tr00"]
+      expect(q2.quiz_data.first["answers"].pluck("text")).to eq ["foo", "tr00"]
     end
 
     it "escapes html characters in text answers" do
@@ -291,7 +291,7 @@ describe ContentMigration do
       run_course_copy
 
       q2 = @copy_to.quizzes.where(migration_id: mig_id(q)).first
-      expect(q2.quiz_data.first["answers"].map { |a| a["text"] }).to eq ["<p>foo</p>", "<div/>tr00"]
+      expect(q2.quiz_data.first["answers"].pluck("text")).to eq ["<p>foo</p>", "<div/>tr00"]
     end
 
     it "copies quizzes as published if they were published before" do
@@ -347,7 +347,7 @@ describe ContentMigration do
       g = q.quiz_groups[1]
       expect(g.assessment_question_bank_id).to eq bank2.id
       g = q.quiz_groups[2]
-      expect(g.assessment_question_bank_id).to eq nil
+      expect(g.assessment_question_bank_id).to be_nil
     end
 
     it "omits deleted questions in banks" do
@@ -383,14 +383,31 @@ describe ContentMigration do
       expect(bank_to.assessment_questions.active.count).to eq 1
     end
 
+    it "avoids duplicates due to alphanumeric ids" do
+      bank1 = @copy_from.assessment_question_banks.create!(title: "bank")
+      bank1.assessment_questions.create!(question_data: {
+                                           "question_type" => "multiple_choice_question",
+                                           "name" => "test question",
+                                           "answers" => [
+                                             { "id" => "1aB", "text" => "Correct", "weight" => 100 },
+                                             { "id" => "1y3", "text" => "Incorrect", "weight" => 0 }
+                                           ],
+                                         })
+      run_course_copy
+      expect(@copy_to.assessment_questions.first.question_data[:answers].pluck(:id).uniq.count).to eq(2)
+    end
+
     it "does not copy plain text question comments as html" do
       bank1 = @copy_from.assessment_question_banks.create!(title: "bank")
       bank1.assessment_questions.create!(question_data: {
-                                           "question_type" => "multiple_choice_question", "name" => "test question",
+                                           "question_type" => "multiple_choice_question",
+                                           "name" => "test question",
                                            "answers" => [{ "id" => 1, "text" => "Correct", "weight" => 100, "comments" => "another comment" },
                                                          { "id" => 2, "text" => "inorrect", "weight" => 0 }],
-                                           "correct_comments" => "Correct answer comment", "incorrect_comments" => "Incorrect answer comment",
-                                           "neutral_comments" => "General Comment", "more_comments" => "even more comments"
+                                           "correct_comments" => "Correct answer comment",
+                                           "incorrect_comments" => "Incorrect answer comment",
+                                           "neutral_comments" => "General Comment",
+                                           "more_comments" => "even more comments"
                                          })
 
       run_course_copy
@@ -478,7 +495,6 @@ describe ContentMigration do
       data = { "question_type" => "text_only_question", "name" => "Hi", "question_text" => <<~HTML.strip }
         File ref:<img src="/courses/#{@copy_from.id}/files/#{@attachment.id}/download">
         different file ref: <img src="/courses/#{@copy_from.id}/file_contents/course%20files/unfiled/test.jpg">
-        media object: <a id="media_comment_0_l4l5n0wt" class="instructure_inline_media_comment video_comment" href="/media_objects/0_l4l5n0wt">this is a media comment</a>
         equation: <img class="equation_image" title="Log_216" src="/equation_images/Log_216" alt="Log_216">
         link to some other course: <a href="/courses/#{@copy_from.id + @copy_to.id}">Cool Course</a>
         canvas image: <img style="max-width: 723px;" src="/images/preview.png" alt="">
@@ -495,19 +511,42 @@ describe ContentMigration do
       expect(aq.question_data["question_text"]).to match_ignoring_whitespace(@question.question_data["question_text"])
     end
 
+    it "changes old media file references in AQ context on copy" do
+      @bank = @copy_from.assessment_question_banks.create!(title: "Test Bank")
+      @attachment = attachment_with_context(@copy_from, media_entry_id: "0_l4l5n0wt")
+      data = { "question_type" => "text_only_question", "name" => "Hi", "question_text" => <<~HTML.strip }
+        media comment: <a id="media_comment_0_l4l5n0wt" class="instructure_inline_media_comment video_comment" href="/media_objects/0_l4l5n0wt">this is a media comment</a>
+        media object: <iframe style="width: 400px; height: 225px; display: inline-block;" title="this is a media comment" data-media-type="video" src="/media_objects_iframe/0_l4l5n0wt?type=video" allowfullscreen="allowfullscreen" allow="fullscreen" data-media-id="0_l4l5n0wt"></iframe>
+      HTML
+      @question = @bank.assessment_questions.create!(question_data: data)
+
+      run_course_copy
+
+      bank = @copy_to.assessment_question_banks.first
+      expect(bank.assessment_questions.count).to eq 1
+      aq = bank.assessment_questions.first
+      # TODO: fix media attachments not being copied to assessment question context like other attachments
+      new_att = @copy_to.attachments.take
+      translated_body = <<~HTML.strip
+        media comment: <iframe id="media_comment_0_l4l5n0wt" class="instructure_inline_media_comment video_comment" style="width: 320px; height: 240px; display: inline-block;" title="this is a media comment" data-media-type="video" src="/media_attachments_iframe/#{new_att.id}?embedded=true&amp;type=video" allowfullscreen="allowfullscreen" allow="fullscreen" data-media-id="0_l4l5n0wt"></iframe>
+        media object: <iframe style="width: 400px; height: 225px; display: inline-block;" title="this is a media comment" data-media-type="video" allowfullscreen="allowfullscreen" allow="fullscreen" data-media-id="0_l4l5n0wt" src="/media_attachments_iframe/#{new_att.id}?embedded=true&amp;type=video"></iframe>
+      HTML
+
+      expect(aq.question_data["question_text"]).to match_ignoring_whitespace(translated_body)
+    end
+
     it "copies quiz question html file references correctly" do
       root = Folder.root_folders(@copy_from).first
       folder = root.sub_folders.create!(context: @copy_from, name: "folder 1")
       att = Attachment.create!(filename: "first.jpg", display_name: "first.jpg", uploaded_data: StringIO.new("first"), folder: root, context: @copy_from)
       att2 = Attachment.create!(filename: "test.jpg", display_name: "test.jpg", uploaded_data: StringIO.new("second"), folder: root, context: @copy_from)
       att3 = Attachment.create!(filename: "testing.jpg", display_name: "testing.jpg", uploaded_data: StringIO.new("test this"), folder: root, context: @copy_from)
-      att4 = Attachment.create!(filename: "sub_test.jpg", display_name: "sub_test.jpg", uploaded_data: StringIO.new("sub_folder"), folder: folder, context: @copy_from)
+      att4 = Attachment.create!(filename: "sub_test.jpg", display_name: "sub_test.jpg", uploaded_data: StringIO.new("sub_folder"), folder:, context: @copy_from)
       qtext = <<~HTML.strip
         sad file ref: <img src="%s">
         File ref:<img src="/courses/%s/files/%s/download">
         different file ref: <img src="/courses/%s/%s">
         subfolder file ref: <img src="/courses/%s/%s">
-        media object: <a id="media_comment_0_l4l5n0wt" class="instructure_inline_media_comment video_comment" href="/media_objects/0_l4l5n0wt">this is a media comment</a>
         equation: <img class="equation_image" title="Log_216" src="/equation_images/Log_216" alt="Log_216">
       HTML
 
@@ -535,6 +574,31 @@ describe ContentMigration do
       qq_to = q_to.active_quiz_questions.first
       expect(qq_to.question_data[:question_text]).to match_ignoring_whitespace(qtext % ["/courses/#{@copy_to.id}/files/#{att_2.id}/preview", @copy_to.id, att_2.id, @copy_to.id, "files/#{att2_2.id}/preview", @copy_to.id, "files/#{att4_2.id}/preview"])
       expect(qq_to.question_data[:answers][0][:html]).to match_ignoring_whitespace(%(File ref:<img src="/courses/#{@copy_to.id}/files/#{att3_2.id}/download">))
+    end
+
+    it "updates quiz question media file references to new style" do
+      root = Folder.root_folders(@copy_from).first
+      root.sub_folders.create!(context: @copy_from, name: "folder 1")
+      attachment_with_context(@copy_from, media_entry_id: "0_l4l5n0wt")
+      data = { "question_type" => "text_only_question", "name" => "Hi", "question_text" => <<~HTML.strip }
+        media comment: <a id="media_comment_0_l4l5n0wt" class="instructure_inline_media_comment video_comment" href="/media_objects/0_l4l5n0wt">this is a media comment</a>
+        media object: <iframe style="width: 400px; height: 225px; display: inline-block;" title="this is a media comment" data-media-type="video" src="/media_objects_iframe/0_l4l5n0wt?type=video" allowfullscreen="allowfullscreen" allow="fullscreen" data-media-id="0_l4l5n0wt"></iframe>
+      HTML
+      q1 = @copy_from.quizzes.create!(title: "quiz1")
+      q1.quiz_questions.create!(question_data: data)
+
+      run_course_copy
+
+      quiz = @copy_to.quizzes.first
+      expect(quiz.quiz_questions.count).to eq 1
+      question = quiz.quiz_questions.first
+      new_att = @copy_to.attachments.take
+      translated_body = <<~HTML.strip
+        media comment: <iframe id="media_comment_0_l4l5n0wt" class="instructure_inline_media_comment video_comment" style="width: 320px; height: 240px; display: inline-block;" title="this is a media comment" data-media-type="video" src="/media_attachments_iframe/#{new_att.id}?embedded=true&amp;type=video" allowfullscreen="allowfullscreen" allow="fullscreen" data-media-id="0_l4l5n0wt"></iframe>
+        media object: <iframe style="width: 400px; height: 225px; display: inline-block;" title="this is a media comment" data-media-type="video" allowfullscreen="allowfullscreen" allow="fullscreen" data-media-id="0_l4l5n0wt" src="/media_attachments_iframe/#{new_att.id}?embedded=true&amp;type=video"></iframe>
+      HTML
+
+      expect(question.question_data["question_text"]).to match_ignoring_whitespace(translated_body)
     end
 
     it "copies quiz question mathml equation image references correctly" do
@@ -828,9 +892,11 @@ describe ContentMigration do
       data = { question_type: "numerical_question",
                question_text: "how many problems does QTI cause?",
                answers: [{
-                 text: "answer_text", weight: 100,
+                 text: "answer_text",
+                 weight: 100,
                  numerical_answer_type: "precision_answer",
-                 answer_approximate: 99_000_000, answer_precision: 2
+                 answer_approximate: 99_000_000,
+                 answer_precision: 2
                }] }.with_indifferent_access
       q.quiz_questions.create!(question_data: data)
 
@@ -1027,7 +1093,8 @@ describe ContentMigration do
       html = "<a href=\"/courses/%s/quizzes/%s\">linky</a>"
 
       bank = @copy_from.assessment_question_banks.create!(title: "bank")
-      data = { "question_name" => "test question", "question_type" => "essay_question",
+      data = { "question_name" => "test question",
+               "question_type" => "essay_question",
                "question_text" => (html % [@copy_from.id, link_quiz.id]) }
       aq = bank.assessment_questions.create!(question_data: data)
 
@@ -1059,7 +1126,8 @@ describe ContentMigration do
       html = "<a href=\"/courses/%s/quizzes/%s\">linky</a>"
 
       bank = @copy_from.assessment_question_banks.create!(title: "bank")
-      data = { "question_name" => "test question", "question_type" => "essay_question",
+      data = { "question_name" => "test question",
+               "question_type" => "essay_question",
                "question_text" => (html % [@copy_from.id, link_quiz.id]) }
       bank.assessment_questions.create!(question_data: data)
 
@@ -1089,7 +1157,8 @@ describe ContentMigration do
       bank1 = @copy_from.assessment_question_banks.create!(title: "bank")
       text = "&lt;braaackets&gt;"
       bank1.assessment_questions.create!(question_data: {
-                                           "question_type" => "multiple_choice_question", "name" => "test question",
+                                           "question_type" => "multiple_choice_question",
+                                           "name" => "test question",
                                            "answers" => [{ "id" => 1, "text" => "Correct", "weight" => 100, "comments_html" => text },
                                                          { "id" => 2, "text" => "inorrect", "weight" => 0 }],
                                            "correct_comments_html" => text
@@ -1124,11 +1193,12 @@ describe ContentMigration do
       end
 
       it "copies only noop overrides" do
-        @course.conditional_release = true
-        @course.save!
+        account = Account.default
+        account.settings[:conditional_release] = { value: true }
+        account.save!
         due_at = 1.hour.from_now.round
         assignment_override_model(quiz: @quiz_plain, set_type: "Noop", set_id: 1, title: "Tag 3")
-        assignment_override_model(quiz: @quiz_assigned, set_type: "Noop", set_id: 1, title: "Tag 4", due_at: due_at)
+        assignment_override_model(quiz: @quiz_assigned, set_type: "Noop", set_id: 1, title: "Tag 4", due_at:)
         run_course_copy
         to_quiz_plain = @copy_to.quizzes.where(migration_id: mig_id(@quiz_plain)).first
         to_quiz_assigned = @copy_to.quizzes.where(migration_id: mig_id(@quiz_assigned)).first
@@ -1148,16 +1218,17 @@ describe ContentMigration do
         to_quiz_plain = @copy_to.quizzes.where(migration_id: mig_id(@quiz_plain)).first
         to_quiz_assigned = @copy_to.quizzes.where(migration_id: mig_id(@quiz_assigned)).first
         expect(to_quiz_assigned.assignment_overrides.count).to eq 0
-        expect(to_quiz_assigned.only_visible_to_overrides).to eq false
+        expect(to_quiz_assigned.only_visible_to_overrides).to be false
         expect(to_quiz_plain.assignment_overrides.count).to eq 1
-        expect(to_quiz_plain.only_visible_to_overrides).to eq true
+        expect(to_quiz_plain.only_visible_to_overrides).to be true
       end
     end
 
     it "does not destroy assessment questions when copying twice" do
       bank1 = @copy_from.assessment_question_banks.create!(title: "bank")
       data = {
-        "question_type" => "multiple_choice_question", "name" => "test question",
+        "question_type" => "multiple_choice_question",
+        "name" => "test question",
         "answers" => [{ "id" => 1, "text" => "Correct", "weight" => 100 },
                       { "id" => 2, "text" => "inorrect", "weight" => 0 }],
       }
@@ -1174,7 +1245,8 @@ describe ContentMigration do
     it "does not remove outer tags with style tags from questions" do
       html = "<p style=\"text-align: center;\">This is aligned to the center</p>"
       q = @copy_from.quizzes.create!(title: "q")
-      data = { "question_name" => "test question", "question_type" => "essay_question",
+      data = { "question_name" => "test question",
+               "question_type" => "essay_question",
                "question_text" => html }
       q.quiz_questions.create!(question_data: data)
 

@@ -136,6 +136,8 @@ class CollaborationsController < ApplicationController
   include Api::V1::User
   include K5Mode
 
+  class NoCompatibleTool < StandardError; end
+
   def index
     return unless authorized_action(@context, @current_user, :read) &&
                   tab_enabled?(@context.class::TAB_COLLABORATIONS)
@@ -176,8 +178,10 @@ class CollaborationsController < ApplicationController
   #
   # @returns [Collaboration]
   def api_index
-    return unless authorized_action(@context, @current_user, :read) &&
-                  (tab_enabled?(@context.class::TAB_COLLABORATIONS) || tab_enabled?(@context.class::TAB_COLLABORATIONS_NEW))
+    return unless authorized_action(@context, @current_user, :read)
+    unless tab_enabled?(@context.class::TAB_COLLABORATIONS, no_render: true) || tab_enabled?(@context.class::TAB_COLLABORATIONS_NEW, no_render: true)
+      return render_tab_disabled
+    end
 
     log_api_asset_access(["collaborations", @context], "collaborations", "other")
 
@@ -214,13 +218,20 @@ class CollaborationsController < ApplicationController
     if authorized_action(@collaboration, @current_user, :read)
       @collaboration.touch
       begin
+        # error out when user tries to open a collaboration while masquerading
+        raise GoogleDrive::MasqueradingException, "cannot show collaboration when masquerading" if logged_in_user != @current_user
+
         if @collaboration.valid_user?(@current_user)
           @collaboration.authorize_user(@current_user)
           log_asset_access(@collaboration, "collaborations", "other", "participate")
           url = if @collaboration.is_a? ExternalToolCollaboration
+                  tool = ContextExternalTool.find_external_tool(@collaboration.url, @context)
+                  @collaboration.migrate_to_1_3_if_needed!(tool)
+                  resource_link_lookup_uuid = @collaboration.resource_link_lookup_uuid if tool.use_1_3?
+
                   external_tool_launch_url(
                     @collaboration.url,
-                    @collaboration.resource_link_lookup_uuid
+                    resource_link_lookup_uuid
                   )
                 else
                   @collaboration.url
@@ -233,6 +244,10 @@ class CollaborationsController < ApplicationController
           flash[:error] = t "errors.cannot_load_collaboration", "Cannot load collaboration"
           redirect_to named_context_url(@context, :context_collaborations_url)
         end
+      rescue GoogleDrive::MasqueradingException => e
+        Canvas::Errors.capture(e, {}, :warn)
+        flash[:error] = t "errors.no_masquerading_on_collaboration", "Viewing a collaboration while acting as another user is not permitted."
+        redirect_to named_context_url(@context, :context_collaborations_url)
       rescue GoogleDrive::ConnectionException => e
         Canvas::Errors.capture(e, {}, :warn)
         flash[:error] = t "errors.cannot_load_collaboration", "Cannot load collaboration"
@@ -243,7 +258,7 @@ class CollaborationsController < ApplicationController
 
   def lti_index
     return unless authorized_action(@context, @current_user, :read) &&
-                  tab_enabled?(@context.class::TAB_COLLABORATIONS)
+                  tab_enabled?(@context.class::TAB_COLLABORATIONS_NEW)
 
     @page_title = t("lti_collaborations", "External Collaborations")
     @body_classes << "full-width padless-content"
@@ -273,11 +288,17 @@ class CollaborationsController < ApplicationController
     if content_item
       @collaboration = collaboration_from_content_item(content_item)
       users, group_ids = content_item_visibility(content_item)
+      # if user is masquerading, since masquerador will be the author, masqueradee will be automatic invitee
+      users << @current_user if logged_in_user != @current_user
     else
-      users     = User.where(id: Array(params[:user])).to_a
+      users = User.where(id: Array(params[:user])).to_a
+      # if user is masquerading, since masquerador will be the author, masqueradee will be automatic invitee
+      users << @current_user if logged_in_user != @current_user
       group_ids = Array(params[:group])
       collaboration_params = params.require(:collaboration).permit(:title, :description, :url)
-      collaboration_params[:user] = @current_user
+
+      # if creator is masquerading, set collaboration owner to masquerader, not masqueradee
+      collaboration_params[:user] = logged_in_user
       @collaboration = Collaboration.typed_collaboration_instance(params[:collaboration].delete(:collaboration_type))
       collaboration_params.delete(:url) unless @collaboration.is_a?(ExternalToolCollaboration)
       @collaboration.attributes = collaboration_params
@@ -289,7 +310,7 @@ class CollaborationsController < ApplicationController
         # After saved, update the members
         @collaboration.update_members(users, group_ids)
         format.html { redirect_to @collaboration.url }
-        format.json { render json: @collaboration.as_json(methods: [:collaborator_ids], permissions: { user: @current_user, session: session }) }
+        format.json { render json: @collaboration.as_json(methods: [:collaborator_ids], permissions: { user: @current_user, session: }) }
       else
         Lti::ContentItemUtil.new(content_item).failure_callback if content_item
         flash[:error] = t "errors.create_failed", "Collaboration creation failed"
@@ -297,7 +318,7 @@ class CollaborationsController < ApplicationController
         format.json { render json: @collaboration.errors, status: :bad_request }
       end
     end
-  rescue Collaboration::InvalidCollaborationType
+  rescue Collaboration::InvalidCollaborationType, NoCompatibleTool
     head :bad_request
   end
 
@@ -306,46 +327,46 @@ class CollaborationsController < ApplicationController
     return unless authorized_action(@collaboration, @current_user, :update)
 
     content_item = params["contentItems"] ? JSON.parse(params["contentItems"]).first : nil
-    begin
-      if content_item
-        @collaboration = collaboration_from_content_item(content_item, @collaboration)
-        users, group_ids = content_item_visibility(content_item)
-      else
-        users     = User.where(id: Array(params[:user])).to_a
-        group_ids = Array(params[:group])
-        @collaboration.attributes = params.require(:collaboration).permit(:title, :description, :url)
-      end
-      @collaboration.update_members(users, group_ids)
-      respond_to do |format|
-        if @collaboration.save
-          Lti::ContentItemUtil.new(content_item).success_callback if content_item
-          format.html { redirect_to named_context_url(@context, :context_collaborations_url) }
-          format.json do
-            render json: @collaboration.as_json(
-              methods: [:collaborator_ids],
-              permissions: {
-                user: @current_user,
-                session: session
-              }
-            )
-          end
-        else
-          Lti::ContentItemUtil.new(content_item).failure_callback if content_item
-          flash[:error] = t "errors.update_failed", "Collaboration update failed"
-          format.html { redirect_to named_context_url(@context, :context_collaborations_url) }
-          format.json { render json: @collaboration.errors, status: :bad_request }
-        end
-      end
-    rescue GoogleDrive::ConnectionException => e
-      Rails.logger.warn e
-      flash[:error] = t "errors.update_failed", "Collaboration update failed" # generic failure message
-      if e.message.include?("File not found")
-        flash[:error] = t "google_drive.file_not_found", "Collaboration file not found"
-      end
-      raise e unless e.message.include?("File not found")
-
-      redirect_to named_context_url(@context, :context_collaborations_url)
+    if content_item
+      @collaboration = collaboration_from_content_item(content_item, @collaboration)
+      users, group_ids = content_item_visibility(content_item)
+    else
+      users     = User.where(id: Array(params[:user])).to_a
+      group_ids = Array(params[:group])
+      @collaboration.attributes = params.require(:collaboration).permit(:title, :description, :url)
     end
+    @collaboration.update_members(users, group_ids)
+    respond_to do |format|
+      if @collaboration.save
+        Lti::ContentItemUtil.new(content_item).success_callback if content_item
+        format.html { redirect_to named_context_url(@context, :context_collaborations_url) }
+        format.json do
+          render json: @collaboration.as_json(
+            methods: [:collaborator_ids],
+            permissions: {
+              user: @current_user,
+              session:
+            }
+          )
+        end
+      else
+        Lti::ContentItemUtil.new(content_item).failure_callback if content_item
+        flash[:error] = t "errors.update_failed", "Collaboration update failed"
+        format.html { redirect_to named_context_url(@context, :context_collaborations_url) }
+        format.json { render json: @collaboration.errors, status: :bad_request }
+      end
+    end
+  rescue GoogleDrive::ConnectionException => e
+    Rails.logger.warn e
+    flash[:error] = t "errors.update_failed", "Collaboration update failed" # generic failure message
+    if e.message.include?("File not found")
+      flash[:error] = t "google_drive.file_not_found", "Collaboration file not found"
+    end
+    raise e unless e.message.include?("File not found")
+
+    redirect_to named_context_url(@context, :context_collaborations_url)
+  rescue NoCompatibleTool
+    head :bad_request
   end
 
   def destroy
@@ -431,18 +452,40 @@ class CollaborationsController < ApplicationController
     collaboration.attributes = {
       title: content_item["title"],
       description: content_item["text"],
-      user: @current_user
+      # if user is masquerading, set collaboration author to masquerador, not masqueradee
+      user: logged_in_user
     }
     collaboration.data = content_item
     collaboration.url = content_item["url"]
-    collaboration.resource_link_lookup_uuid = content_item["lookup_uuid"]
+
+    if (tool_id = params[:tool_id]).present?
+      # Make sure we are using a tool compatible with this URL and that the user can access
+      tool = ContextExternalTool.find_external_tool(collaboration.url, @context, tool_id, only_1_3: true)
+      raise NoCompatibleTool unless tool
+
+      if collaboration.resource_link_lookup_uuid
+        resource_link = Lti::ResourceLink.find_by(lookup_uuid: collaboration.resource_link_lookup_uuid)
+
+        resource_link_updates = {
+          url: content_item["url"],
+          custom: Lti::DeepLinkingUtil.validate_custom_params(content_item["custom"])
+        }.compact
+        resource_link.update!(resource_link_updates)
+      else
+        resource_link = Lti::ResourceLink.create_with(
+          context, tool, content_item["custom"], content_item["url"]
+        )
+        collaboration.resource_link_lookup_uuid = resource_link.lookup_uuid
+      end
+    end
+
     collaboration
   end
 
   def external_tool_launch_url(url, resource_link_lookup_uuid)
     polymorphic_url(
       [:retrieve, @context, :external_tools],
-      url: url,
+      url:,
       display: "borderless",
       resource_link_lookup_id: resource_link_lookup_uuid
     )

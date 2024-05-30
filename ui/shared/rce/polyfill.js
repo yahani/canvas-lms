@@ -16,6 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+import $ from 'jquery'
+
 const editorExtensions = {
   call(methodName, ...args) {
     // since exists? has a ? and cant be a regular function (yet we want
@@ -32,7 +34,7 @@ const editorExtensions = {
       const editor = tinymce.get(this.getTextarea().id)
       editor && editor.focus(true)
     }
-  }
+  },
 }
 
 const sidebarExtensions = {
@@ -44,7 +46,7 @@ const sidebarExtensions = {
   hide() {
     // TODO generalize/adapt this once in service
     $('#editor_tabs').hide()
-  }
+  },
 }
 
 const polyfill = {
@@ -56,7 +58,7 @@ const polyfill = {
   wrapSidebar(sidebar) {
     const extensions = {...sidebarExtensions, ...sidebar}
     return Object.assign(sidebar, extensions)
-  }
+  },
 }
 
 export default polyfill

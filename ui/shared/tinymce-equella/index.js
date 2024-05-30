@@ -1,3 +1,4 @@
+/* eslint-disable no-alert */
 /*
  * Copyright (C) 2015 - present Instructure, Inc.
  *
@@ -18,8 +19,9 @@
 
 import $ from 'jquery'
 import 'jqueryui/dialog'
+import {raw} from '@instructure/html-escape'
 
-export default function(ed) {
+export default function (ed) {
   let $box = $('#equella_dialog')
   const url = $('#equella_endpoint_url').attr('href')
   const action = $.trim($('#equella_action').text() || '') || 'selectOrAdd'
@@ -35,14 +37,12 @@ export default function(ed) {
   if (!$box.length) {
     const boxHtml = '<div id="equella_dialog" style="padding: 0; overflow-y: hidden;"/>'
     const teaserAndIframeHtml =
-      $.raw(
-        "<div class='teaser' style='width: 800px; margin-bottom: 10px; display: none;'></div>"
-      ) +
-      $.raw(
+      raw("<div class='teaser' style='width: 800px; margin-bottom: 10px; display: none;'></div>") +
+      raw(
         "<iframe style='background: url(/images/ajax-loader-medium-444.gif) no-repeat left top; width: 800px; height: "
       ) +
-      $.raw(frameHeight) +
-      $.raw("px; border: 0;' src='about:blank' borderstyle='0'/>")
+      raw(frameHeight) +
+      raw("px; border: 0;' src='about:blank' borderstyle='0'/>")
     $box = $(boxHtml)
       .hide()
       .html(teaserAndIframeHtml)
@@ -54,14 +54,14 @@ export default function(ed) {
         resizeStart() {
           $(this)
             .find('iframe')
-            .each(function() {
+            .each(function () {
               $('<div class="fix_for_resizing_over_iframe" style="background: #fff;"></div>')
                 .css({
                   width: this.offsetWidth + 'px',
                   height: this.offsetHeight + 'px',
                   position: 'absolute',
                   opacity: '0.001',
-                  zIndex: 10000000
+                  zIndex: 10000000,
                 })
                 .css($(this).offset())
                 .appendTo('body')
@@ -80,17 +80,18 @@ export default function(ed) {
         close() {
           $box.find('iframe').attr('src', 'about:blank')
         },
-        title: 'Embed content from Equella'
+        title: 'Embed content from Equella',
+        modal: true,
+        zIndex: 1000,
       })
       .bind('equella_ready', (event, data) => {
-        const clickedEditor = $box.data('editor') || ed
         const selectedContent = ed.selection.getContent()
         if (selectedContent) {
           // selected content
           ed.execCommand('mceInsertLink', false, {
             title: data.name,
             href: data.url,
-            class: 'equella_content_link'
+            class: 'equella_content_link',
           })
         } else {
           // no selected content
@@ -109,10 +110,7 @@ export default function(ed) {
   const teaserHtml = $('#equella_teaser').html()
   $box.find('.teaser').hide()
   if (teaserHtml) {
-    $box
-      .find('.teaser')
-      .html(teaserHtml)
-      .show()
+    $box.find('.teaser').html(teaserHtml).show()
   }
   let full_url = url
   full_url = full_url + '?method=lms&returnprefix=eq_&action=' + action

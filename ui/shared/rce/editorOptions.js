@@ -17,19 +17,20 @@
  */
 
 import EditorConfig from './tinymce.config'
-import INST from 'browser-sniffer'
 import mergeConfig from './util/mergeConfig'
 
+if (!('INST' in window)) window.INST = {}
+
 function editorOptions(width, id, tinyMCEInitOptions, enableBookmarkingOverride, tinymce) {
-  const editorConfig = new EditorConfig(tinymce, INST, width, id)
+  const editorConfig = new EditorConfig(tinymce, window.INST, width, id)
 
   const config = {
-    ...editorConfig.defaultConfig()
+    ...editorConfig.defaultConfig(),
   }
 
   return {
     ...config,
-    ...mergeConfig(tinyMCEInitOptions.optionsToMerge || [], config, tinyMCEInitOptions.tinyOptions)
+    ...mergeConfig(tinyMCEInitOptions.optionsToMerge || [], config, tinyMCEInitOptions.tinyOptions),
   }
 }
 

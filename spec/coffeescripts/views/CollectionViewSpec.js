@@ -17,6 +17,7 @@
  */
 
 import $ from 'jquery'
+import 'jquery-migrate'
 import Backbone from '@canvas/backbone'
 import CollectionView from '@canvas/backbone-collection-view'
 import fakeENV from 'helpers/fakeENV'
@@ -61,13 +62,16 @@ ItemView.initClass()
 QUnit.module('CollectionView', {
   setup() {
     fakeENV.setup()
-    collection = new Collection([{name: 'Jon', id: 24}, {name: 'Ryan', id: 56}])
+    collection = new Collection([
+      {name: 'Jon', id: 24},
+      {name: 'Ryan', id: 56},
+    ])
     view = new CollectionView({
       collection,
       emptyMessage() {
         return 'No Results'
       },
-      itemView: ItemView
+      itemView: ItemView,
     })
     view.$el.appendTo($('#fixtures'))
     view.render()
@@ -76,7 +80,7 @@ QUnit.module('CollectionView', {
     fakeENV.teardown()
     ItemView['testing removed'] = 0
     view.remove()
-  }
+  },
 })
 
 // asserts match and order of rendered items

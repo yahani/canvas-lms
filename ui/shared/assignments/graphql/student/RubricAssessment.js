@@ -30,6 +30,7 @@ export const RubricAssessment = {
       assessor {
         _id
         name
+        shortName
         enrollments(courseId: $courseID) {
           type
         }
@@ -52,12 +53,35 @@ export const RubricAssessment = {
     assessment_type: string,
     assessor: shape({
       _id: string.isRequired,
-      name: string
+      name: string,
+      shortName: string,
     }),
     data: arrayOf(RubricAssessmentRating.shape),
     rubricAssociation: RubricAssociation.shape,
-    score: number
-  })
+    score: number,
+  }),
+
+  mock: ({
+    _id = '1',
+    artifactAttempt = 1,
+    assessment_type = 'grading',
+    assessor = {
+      _id: '1',
+      name: 'Assessor Name',
+      shortName: 'Assessor Display Name',
+    },
+    data = [RubricAssessmentRating.mock()],
+    rubric_association = RubricAssociation.mock(),
+    score = 10,
+  } = {}) => ({
+    _id,
+    artifactAttempt,
+    assessment_type,
+    assessor,
+    data,
+    rubric_association,
+    score,
+  }),
 }
 
 export const DefaultMocks = {
@@ -66,6 +90,6 @@ export const DefaultMocks = {
     artifactAttempt: '1',
     assessmentType: 'grading',
     assessmentRatings: [{}],
-    score: '10'
-  })
+    score: '10',
+  }),
 }

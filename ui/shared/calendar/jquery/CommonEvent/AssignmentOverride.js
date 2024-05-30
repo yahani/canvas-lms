@@ -17,12 +17,12 @@
  */
 
 import {useScope as useI18nScope} from '@canvas/i18n'
-import $ from 'jquery'
 import CommonEvent from './CommonEvent'
-import fcUtil from '../fcUtil.coffee'
+import fcUtil from '../fcUtil'
 import {extend} from '@canvas/util/legacyCoffeesScriptHelpers'
-import '@canvas/datetime'
+import '@canvas/datetime/jquery'
 import '@canvas/jquery/jquery.instructure_misc_helpers'
+import replaceTags from '@canvas/util/replaceTags'
 
 const I18n = useI18nScope('calendar')
 
@@ -107,9 +107,9 @@ Object.assign(AssignmentOverride.prototype, {
   },
 
   methodAndURLForSave() {
-    const url = $.replaceTags(this.contextInfo.assignment_override_url, {
+    const url = replaceTags(this.contextInfo.assignment_override_url, {
       assignment_id: this.assignment.id,
-      id: this.override.id
+      id: this.override.id,
     })
     return ['PUT', url]
   },
@@ -118,5 +118,5 @@ Object.assign(AssignmentOverride.prototype, {
     return (
       this.assignment.user_submitted || (this.isPast() && this.assignment.needs_grading_count === 0)
     )
-  }
+  },
 })

@@ -18,16 +18,17 @@
 
 import {
   recordEulaAgreement,
-  verifyPledgeIsChecked
-} from 'ui/features/submit_assignment/jquery/helper.js'
+  verifyPledgeIsChecked,
+} from 'ui/features/submit_assignment/jquery/helper'
 import $ from 'jquery'
+import 'jquery-migrate'
 
 QUnit.module('SubmitAssignmentHelper', {
   teardown() {
     let ENV
     $('#fixtures').html('')
     ENV = null
-  }
+  },
 })
 
 test('Sets the input value to the current time if checked is true for all eula inputs', () => {

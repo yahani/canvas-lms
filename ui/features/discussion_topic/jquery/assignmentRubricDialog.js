@@ -1,4 +1,3 @@
-//
 // Copyright (C) 2012 - present Instructure, Inc.
 //
 // This file is part of Canvas.
@@ -17,7 +16,7 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
 import 'jqueryui/dialog'
 import 'jquery-tinypubsub'
 
@@ -35,7 +34,9 @@ const assignmentRubricDialog = {
       const selector = $trigger.data('focusReturnsTo')
       try {
         this.$focusReturnsTo = $(document.querySelector(selector))
-      } catch (err) {}
+      } catch (err) {
+        // no-op
+      }
 
       $trigger.click(event => {
         event.preventDefault()
@@ -53,7 +54,8 @@ const assignmentRubricDialog = {
       modal: false,
       resizable: true,
       autoOpen: false,
-      close: () => this.$focusReturnsTo.focus()
+      close: () => this.$focusReturnsTo.focus(),
+      zIndex: 1000,
     })
 
     return $.get(ENV.DISCUSSION.GRADED_RUBRICS_URL, html => {
@@ -74,7 +76,7 @@ const assignmentRubricDialog = {
   openDialog() {
     if (!this.dialogInited) this.initDialog()
     this.$dialog.dialog('open')
-  }
+  },
 }
 
 export default assignmentRubricDialog

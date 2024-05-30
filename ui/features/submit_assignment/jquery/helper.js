@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU Affero General Public License along
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-import $ from 'jquery'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import '@canvas/jquery/jquery.instructure_misc_plugins'
 import '@canvas/rails-flash-notifications'
@@ -30,7 +29,7 @@ export function recordEulaAgreement(querySelector, checked) {
 }
 
 export function verifyPledgeIsChecked(checkbox) {
-  if (checkbox.length > 0 && !checkbox.attr('checked')) {
+  if (checkbox.length > 0 && !checkbox.prop('checked')) {
     alert(
       I18n.t(
         'messages.agree_to_pledge',

@@ -17,7 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_dependency "canvas/errors"
 module Canvas
   # TODO: Leaving one spec in here to make sure the shim
   # works until we've successfully re-pointed all
@@ -48,7 +47,7 @@ module Canvas
       described_class.instance_variable_set(:@registry, @old_registry)
     end
 
-    let(:error) { double("Some Error") }
+    let(:error) { double("Some Error", backtrace: []) }
 
     describe ".capture_exception" do
       it "tags with the exception type and default level" do

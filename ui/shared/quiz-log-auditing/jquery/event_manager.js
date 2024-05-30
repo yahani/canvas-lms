@@ -20,18 +20,17 @@ import K from './constants'
 import QuizEvent from './event'
 import EventBuffer from './event_buffer'
 import {ajax, when as jWhen} from 'jquery'
-import eraseFromArray from 'array-erase'
+import eraseFromArray from '@canvas/array-erase'
 import debugConsole from './util/debugConsole'
-import {extend} from 'underscore'
 
 const JSON_HEADERS = {
   Accept: 'application/json; charset=UTF-8',
-  'Content-Type': 'application/json; charset=UTF-8'
+  'Content-Type': 'application/json; charset=UTF-8',
 }
 
 export default class EventManager {
   constructor(options = {}) {
-    this.options = extend({}, EventManager.options, options)
+    this.options = {...EventManager.options, ...options}
     this._trackerFactories = []
     this._state = {
       trackers: [],
@@ -117,9 +116,9 @@ export default class EventManager {
       global: false, // don't whine to the user if this fails
       headers: JSON_HEADERS,
       data: JSON.stringify({
-        quiz_submission_events: eventSet.toJSON()
+        quiz_submission_events: eventSet.toJSON(),
       }),
-      error: options.errorHandler
+      error: options.errorHandler,
     })
 
     delivery.then(
@@ -208,5 +207,5 @@ export default class EventManager {
 EventManager.options = {
   autoDeliver: true,
   autoDeliveryFrequency: 15000, // milliseconds
-  deliveryUrl: '/quiz_submission_events'
+  deliveryUrl: '/quiz_submission_events',
 }

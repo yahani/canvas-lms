@@ -1,3 +1,4 @@
+/* eslint-disable import/no-unresolved */
 /*
  * Copyright (C) 2015 - present Instructure, Inc.
  *
@@ -25,19 +26,19 @@
 const path = require('path')
 const Handlebars = require('handlebars')
 const EmberHandlebars = require('ember-template-compiler').EmberHandlebars
-const ScopedHbsExtractor = require('i18nliner-canvas/js/scoped_hbs_extractor')
-const PreProcessor = require('@instructure/i18nliner-handlebars/dist/lib/pre_processor').default
-const { canvasDir } = require('#params')
+const {readI18nScopeFromJSONFile} = require('@instructure/i18nliner-canvas/scoped_hbs_resolver')
+const ScopedHbsExtractor = require('@instructure/i18nliner-canvas/scoped_hbs_extractor')
+const ScopedHbsPreProcessor = require('@instructure/i18nliner-canvas/scoped_hbs_pre_processor')
+const {canvasDir} = require('../params')
 
 function compileHandlebars(data) {
   const {path, source} = data
   try {
     let translationCount = 0
     const ast = Handlebars.parse(source)
-    const extractor = new ScopedHbsExtractor(ast, {path})
-    const scope = extractor.scope
-    PreProcessor.scope = scope
-    PreProcessor.process(ast)
+    const scope = readI18nScopeFromJSONFile(path)
+    const extractor = new ScopedHbsExtractor(ast, {path, scope})
+    ScopedHbsPreProcessor.processWithScope(scope, ast)
     extractor.forEach(() => translationCount++)
 
     const precompiler = data.ember ? EmberHandlebars : Handlebars
@@ -45,41 +46,40 @@ function compileHandlebars(data) {
     const payload = {template, scope, translationCount}
     return payload
   } catch (e) {
+    // eslint-disable-next-line no-ex-assign
     e = e.message || e
+    // eslint-disable-next-line no-console
     console.log(e)
+    // eslint-disable-next-line no-throw-literal
     throw {error: e}
   }
 }
 
-function resourceName(path) {
-  return path.replace(/^.+?\/templates\//, '').replace(/\.hbs$/, '')
-}
-
-function emitTemplate(path, name, result, dependencies) {
+function emitTemplate({name, template, dependencies}) {
   return `
     import Ember from 'ember';
     ${dependencies.map(d => `import ${JSON.stringify(d)};`).join('\n')}
-    const template = Ember.Handlebars.template(${result.template});
+
+    const template = Ember.Handlebars.template(${template});
     Ember.TEMPLATES['${name}'] = template;
     export default template;
   `
 }
 
-const withLeadingDotSlash = x => x.startsWith('.') ? x : `./${x}`
-const emberHelpers = path.resolve(canvasDir, 'ui/features/screenreader_gradebook/ember/helpers/common.js')
+const withLeadingDotSlash = x => (x.startsWith('.') ? x : `./${x}`)
+const emberHelpers = path.resolve(
+  canvasDir,
+  'ui/features/screenreader_gradebook/ember/helpers/common.js'
+)
 const emberJSTRoot = path.resolve(canvasDir, 'ui/features/screenreader_gradebook/jst')
 
-module.exports = function(source) {
+module.exports = function (source) {
   this.cacheable()
 
-  const pathFromMeToEmberHelpers = withLeadingDotSlash(
-    path.relative(this.context, emberHelpers)
-  )
+  const pathFromMeToEmberHelpers = withLeadingDotSlash(path.relative(this.context, emberHelpers))
 
   const name = this.resourcePath.slice(emberJSTRoot.length + 1).replace(/\.hbs$/, '')
-  const dependencies = [
-    pathFromMeToEmberHelpers
-  ]
+  const dependencies = [pathFromMeToEmberHelpers]
 
   const result = compileHandlebars({path: this.resourcePath, source, ember: true})
 
@@ -91,6 +91,6 @@ module.exports = function(source) {
   if (result.translationCount > 0) {
     dependencies.push('@canvas/i18n')
   }
-  const compiledTemplate = emitTemplate(this.resourcePath, name, result, dependencies)
-  return compiledTemplate
+
+  return emitTemplate({name, template: result.template, dependencies})
 }

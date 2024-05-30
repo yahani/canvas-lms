@@ -18,8 +18,24 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "yaml"
-require "date"
+ADDITIONAL_ALLOWED_CLASSES = [
+  ActiveSupport::HashWithIndifferentAccess,
+  ActiveSupport::SafeBuffer,
+  ActiveSupport::TimeWithZone,
+  ActiveSupport::TimeZone,
+  ActionController::Parameters,
+  BigDecimal,
+  Date,
+  DateTime,
+  Mime::Type,
+  Mime::NullType,
+  OpenObject,
+  OpenStruct,
+  Symbol,
+  Time,
+  URI::HTTP,
+  URI::HTTPS
+].freeze
 
 # SafeYAML-like interface, but vanilla Psych
 module SafeYAML
@@ -32,34 +48,26 @@ module SafeYAML
   end
 
   self.permitted_classes = []
-  whitelist_class!(
-    ActiveSupport::HashWithIndifferentAccess,
-    ActiveSupport::TimeWithZone,
-    ActiveSupport::TimeZone,
-    ActionController::Parameters,
-    BigDecimal,
-    Date,
-    DateTime,
-    Mime::Type,
-    Mime::NullType,
-    OpenObject,
-    OpenStruct,
-    Symbol,
-    Time,
-    URI::HTTP,
-    URI::HTTPS
-  )
+  whitelist_class!(*ADDITIONAL_ALLOWED_CLASSES)
 
   module Psych
-    # load defaults to safe
-    def load(*args, safe: true, **kwargs)
-      return super(*args, **kwargs) unless safe
+    if ::Psych::VERSION < "4"
+      # load defaults to safe
+      def load(*args, safe: true, **kwargs)
+        return super(*args, **kwargs) unless safe
 
-      safe_load(*args, **kwargs)
-    end
+        safe_load(*args, **kwargs)
+      end
 
-    def unsafe_load(*args, **kwargs)
-      load(*args, safe: false, **kwargs)
+      def unsafe_load(*args, **kwargs)
+        load(*args, safe: false, **kwargs)
+      end
+    else
+      def load(*args, safe: true, **kwargs)
+        return unsafe_load(*args, **kwargs) unless safe
+
+        super(*args, aliases: true, **kwargs)
+      end
     end
 
     def safe_load(yaml, permitted_classes: [], **kwargs)
@@ -68,6 +76,8 @@ module SafeYAML
   end
 end
 Psych.singleton_class.prepend(SafeYAML::Psych)
+
+ActiveRecord.yaml_column_permitted_classes = ADDITIONAL_ALLOWED_CLASSES
 
 module ScalarScannerFix
   # in rubies < 2.7, Psych uses a regex to identify an integer, then strips commas and underscores,

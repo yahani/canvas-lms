@@ -17,15 +17,21 @@
  */
 
 import classnames from 'classnames'
-import {renderImage, renderLinkedImage, renderVideo, renderAudio} from './contentRendering'
-import scroll from '../common/scroll'
+import {
+  renderAudio,
+  renderImage,
+  renderLink,
+  renderLinkedImage,
+  renderVideo,
+} from './contentRendering'
 import {
   cleanUrl,
   getAnchorElement,
+  isImageFigure,
   isOnlyTextSelected,
-  isImageFigure
 } from './contentInsertionUtils'
 import {mediaPlayerURLFromFile} from './plugins/shared/fileTypeUtils'
+import {absoluteToRelativeUrl} from '../common/fileUrl'
 
 /** * generic content insertion ** */
 
@@ -59,7 +65,11 @@ export function insertContent(editor, content) {
     // insertion should reference the newly created node (or first of the newly
     // created nodes if there were multiple, unfortunately), because the cursor
     // itself stays just before the new content.
-    scroll.scrollIntoViewWDelay(editor.iframeElement, {})
+    setTimeout(() => {
+      if (editor.iframeElement) {
+        editor.iframeElement.scrollIntoView()
+      }
+    }, 100)
     // there's a bug in tinymce where insertContent calls execCommand('mceInsertContent'),
     // but doesn't correctly forward the second "args" argument. Let's go right for
     // execCommand
@@ -95,20 +105,36 @@ function shouldPreserveImgAnchor(editor) {
   )
 }
 
-export function insertImage(editor, image) {
+export function insertImage(editor, image, canvasOrigin) {
   let content = ''
   if (shouldPreserveImgAnchor(editor)) {
-    content = renderLinkedImage(editor.selection.getRng().startContainer, image)
+    content = renderLinkedImage(editor.selection.getRng().startContainer, image, canvasOrigin)
   } else {
     // render the image, constraining its size on insertion
-    content = renderImage({
-      ...image
-    })
+    const imgNode = editor.selection.getNode()
+    // apply selected styles only in course/user images
+    if (isElemImg(imgNode) && !image['data-inst-icon-maker-icon']) {
+      const customStyles = imgNode.style
+      const customWidth = imgNode.getAttribute('width')
+      const parseStyles = {}
+      for (let i = 0; i < customStyles.length; ++i) {
+        const cssAttribute = customStyles.item(i)
+        parseStyles[cssAttribute] = customStyles[cssAttribute]
+      }
+      image.width = customWidth
+      image.style = parseStyles
+    }
+    content = renderImage(
+      {
+        ...image,
+      },
+      canvasOrigin
+    )
   }
   return insertContent(editor, content)
 }
 
-export function insertEquation(editor, latex, canvasUrl) {
+export function insertEquation(editor, latex) {
   const docSz =
     parseFloat(
       editor.dom.doc.defaultView.getComputedStyle(editor.dom.doc.body).getPropertyValue('font-size')
@@ -121,10 +147,7 @@ export function insertEquation(editor, latex, canvasUrl) {
     : docSz
   const scale = imgSz / docSz
 
-  let url = `/equation_images/${encodeURIComponent(encodeURIComponent(latex))}?scale=${scale}`
-  if (canvasUrl) {
-    url = canvasUrl + url
-  }
+  const url = `/equation_images/${encodeURIComponent(encodeURIComponent(latex))}?scale=${scale}`
 
   // if I simply create the html string, xsslint fails jenkins
   const img = document.createElement('img')
@@ -152,7 +175,7 @@ function currentLink(editor, link) {
 function hasSelection(editor) {
   let selection = editor.selection.getContent()
   selection = editor.dom.decode(selection)
-  return !!selection && selection != ''
+  return !!selection && selection !== ''
 }
 
 export function existingContentToLink(editor, link) {
@@ -187,21 +210,22 @@ function decorateLinkWithEmbed(link) {
     instructure_video_link: type === 'video',
     instructure_audio_link: type === 'audio',
     auto_open: link.embed && link.embed.autoOpenPreview,
-    inline_disabled: link.embed && link.embed.disablePreview
+    inline_disabled: link.embed && link.embed.disableInlinePreview,
+    no_preview: link.embed && link.embed.noPreview,
   })
 
-  if (link.embed.type == 'video' || link.embed.type == 'audio') {
+  if (link.embed.type === 'video' || link.embed.type === 'audio') {
     link.id = `media_comment_${link.embed.id || 'maybe'}`
   }
 }
 
-export function insertLink(editor, link) {
+export function insertLink(editor, link, canvasOrigin) {
   const linkAttrs = {...link}
   if (linkAttrs.embed) {
     decorateLinkWithEmbed(linkAttrs)
     delete linkAttrs.embed
   }
-  return insertUndecoratedLink(editor, linkAttrs)
+  return insertUndecoratedLink(editor, linkAttrs, canvasOrigin)
 }
 
 function textForLink(linkProps, editor, anchorElm) {
@@ -214,8 +238,8 @@ function textForLink(linkProps, editor, anchorElm) {
   return getAnchorText(editor.selection, anchorElm) || linkProps.text
 }
 
-// link edit/create logic based on tinymce/plugins/link/plugin.js
-function insertUndecoratedLink(editor, linkProps) {
+// link edit/create logic based on tinymce/plugins/link/plugin.ts
+function insertUndecoratedLink(editor, linkProps, canvasOrigin) {
   const selectedElm = editor.selection.getNode()
   const anchorElm = getAnchorElement(editor, selectedElm)
   const selectedContent = editor.selection.getContent()
@@ -223,15 +247,16 @@ function insertUndecoratedLink(editor, linkProps) {
   const onlyText = isOnlyTextSelected(selectedContent)
 
   const linkText = onlyText && textForLink(linkProps, editor, anchorElm)
-
   // only keep the props we want as attributes on the <a>
   const linkAttrs = {
     id: linkProps.id,
-    href: cleanUrl(linkProps.href || linkProps.url),
+    href: absoluteToRelativeUrl(cleanUrl(linkProps.href || linkProps.url), canvasOrigin),
     target: linkProps.target,
     class: linkProps.class,
     title: linkProps.title,
-    'data-canvas-previewable': linkProps['data-canvas-previewable']
+    'data-canvas-previewable': linkProps['data-canvas-previewable'],
+    'data-course-type': linkProps['data-course-type'],
+    'data-published': linkProps['data-published'],
   }
 
   if (linkAttrs.target === '_blank') {
@@ -242,12 +267,12 @@ function insertUndecoratedLink(editor, linkProps) {
     updateLink(editor, anchorElm, linkText, linkAttrs)
   } else if (selectedContent) {
     if (linkProps.userText && selectedPlainText !== linkText) {
-      createLink(editor, selectedElm, linkText, linkAttrs)
+      createLink(editor, selectedElm, linkText, linkAttrs, canvasOrigin)
     } else {
-      createLink(editor, selectedElm, undefined, linkAttrs)
+      createLink(editor, selectedElm, undefined, linkAttrs, canvasOrigin)
     }
   } else {
-    createLink(editor, selectedElm, linkText, linkAttrs)
+    createLink(editor, selectedElm, linkText, linkAttrs, canvasOrigin)
   }
   return editor.selection.getEnd() // this will be the newly created or updated content
 }
@@ -265,60 +290,48 @@ function updateLink(editor, anchorElm, text, linkAttrs) {
   editor.undoManager.add()
 }
 
-function createLink(editor, selectedElm, text, linkAttrs) {
+function createLink(editor, selectedElm, text, linkAttrs, canvasOrigin) {
   if (isImageFigure(selectedElm)) {
-    linkImageFigure(editor, selectedElm, linkAttrs)
+    linkImageFigure(editor, selectedElm, linkAttrs, canvasOrigin)
   } else if (text) {
     // create the whole wazoo
-    insertContent(editor, editor.dom.createHTML('a', linkAttrs, editor.dom.encode(text)))
+    insertContent(editor, renderLink(linkAttrs, text, canvasOrigin))
   } else {
     // create a link on the selected content
     editor.execCommand('mceInsertLink', false, linkAttrs)
   }
 }
 
-function linkImageFigure(editor, fig, attrs) {
+function linkImageFigure(editor, fig, attrs, canvasOrigin) {
   const img = fig.tagName === 'IMG' ? fig : editor.dom.select('img', fig)[0]
   if (img) {
-    const a = editor.dom.create('a', attrs)
+    const a = renderLink(attrs, img, canvasOrigin)
     img.parentNode.insertBefore(a, img)
-    a.appendChild(img)
   }
 }
 
 /* ** video insertion ** */
 
-export function insertVideo(editor, video) {
-  if (editor.selection.isCollapsed()) {
-    let result = insertContent(editor, renderVideo(video))
-    // for some reason, editor.selection.getEnd() returned from
-    // insertContent is parent paragraph when inserting the
-    // video iframe. Look for the iframe with the right
-    // src attribute. (Aside: tinymce strips the id or data-*
-    // attributes from the iframe, that's why we can't look for those)
-    const src = mediaPlayerURLFromFile(video)
-    result = result.querySelector(`iframe[src="${src}"]`)
-
-    // When the iframe is inserted, it doesn't allow the video to play
-    // because the wrapping span captures the click events. Setting
-    // contentEditable to false disables this behavior.
-    if (result?.parentElement) {
-      editor.dom.setAttrib(result.parentElement, 'contenteditable', false)
-    }
-
-    return result
-  } else {
-    return insertLink(editor, {...video, href: mediaPlayerURLFromFile(video)})
-  }
+export function insertVideo(editor, video, canvasOrigin) {
+  return insertMedia(editor, video, renderVideo, canvasOrigin)
 }
 
-export function insertAudio(editor, audio) {
+export function insertAudio(editor, audio, canvasOrigin) {
+  return insertMedia(editor, audio, renderAudio, canvasOrigin)
+}
+
+function insertMedia(editor, media, renderMedia, canvasOrigin) {
+  const src = mediaPlayerURLFromFile(media, canvasOrigin)
   if (editor.selection.isCollapsed()) {
-    let result = insertContent(editor, renderAudio(audio))
-    const src = mediaPlayerURLFromFile(audio)
+    let result = insertContent(editor, renderMedia(media, canvasOrigin))
+    // for some reason, editor.selection.getEnd() returned from
+    // insertContent is parent paragraph when inserting the
+    // media iframe. Look for the iframe with the right
+    // src attribute. (Aside: tinymce strips the id or data-*
+    // attributes from the iframe, that's why we can't look for those)
     result = result.querySelector(`iframe[src="${src}"]`)
 
-    // When the iframe is inserted, it doesn't allow the audio to play
+    // When the iframe is inserted, it doesn't allow the media to play
     // because the wrapping span captures the click events. Setting
     // contentEditable to false disables this behavior.
     if (result?.parentElement) {
@@ -327,6 +340,6 @@ export function insertAudio(editor, audio) {
 
     return result
   } else {
-    return insertLink(editor, {...audio, href: mediaPlayerURLFromFile(audio)})
+    return insertLink(editor, {...media, href: src}, canvasOrigin)
   }
 }

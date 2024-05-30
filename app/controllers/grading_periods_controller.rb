@@ -139,7 +139,7 @@ class GradingPeriodsController < ApplicationController
 
     if authorized_action(grading_period(inherit: false), @current_user, :update)
       respond_to do |format|
-        DueDateCacher.with_executing_user(@current_user) do
+        SubmissionLifecycleManager.with_executing_user(@current_user) do
           if grading_period(inherit: false).update(grading_period_params)
             format.json { render json: serialize_json_api(grading_period(inherit: false)) }
           else
@@ -158,7 +158,7 @@ class GradingPeriodsController < ApplicationController
   # successful.
   def destroy
     if authorized_action(grading_period(inherit: false), @current_user, :delete)
-      DueDateCacher.with_executing_user(@current_user) do
+      SubmissionLifecycleManager.with_executing_user(@current_user) do
         grading_period(inherit: false).destroy
       end
 
@@ -168,10 +168,44 @@ class GradingPeriodsController < ApplicationController
     end
   end
 
+  # @API Batch update grading periods
+  #
+  # Update multiple grading periods
+  #
+  # @argument set_id [Required, String]
+  #   The id of the grading period set.
+  #
+  # @argument grading_periods[][id] [String]
+  #   The id of the grading period. If the id parameter does not exist, a new grading period will be created.
+  #
+  # @argument grading_periods[][title] [Required, String]
+  #   The title of the grading period.
+  #   The title is required for creating a new grading period, but not for updating an existing grading period.
+  #
+  # @argument grading_periods[][start_date] [Required, Date]
+  #   The date the grading period starts.
+  #   The start_date is required for creating a new grading period, but not for updating an existing grading period.
+  #
+  # @argument grading_periods[][end_date] [Required, Date]
+  #   The date the grading period ends.
+  #   The end_date is required for creating a new grading period, but not for updating an existing grading period.
+  #
+  # @argument grading_periods[][close_date] [Required, Date]
+  #   The date after which grades can no longer be changed for a grading period.
+  #   The close_date is required for creating a new grading period, but not for updating an existing grading period.
+  #
+  # @argument grading_periods[][weight] [Float]
+  #   A weight value that contributes to the overall weight of a grading period set which is used to calculate how much assignments in this period contribute to the total grade
+  #
+  # @example_response
+  #   {
+  #     "grading_periods": [GradingPeriod]
+  #   }
+  #
   def batch_update
     if authorized_action(@context, @current_user, :manage_grades)
-      DueDateCacher.with_executing_user(@current_user) do
-        method("#{@context.class.to_s.downcase}_batch_update").call
+      SubmissionLifecycleManager.with_executing_user(@current_user) do
+        method(:"#{@context.class.to_s.downcase}_batch_update").call
       end
     end
   end
@@ -180,7 +214,7 @@ class GradingPeriodsController < ApplicationController
 
   def grading_period(inherit: true)
     @grading_period ||= begin
-      grading_period = GradingPeriod.for(@context, inherit: inherit).find_by(id: params[:id])
+      grading_period = GradingPeriod.for(@context, inherit:).find_by(id: params[:id])
       raise ActionController::RoutingError, "Not Found" if grading_period.blank?
 
       grading_period
@@ -201,7 +235,7 @@ class GradingPeriodsController < ApplicationController
       respond_to do |format|
         if errors.present?
           format.json do
-            render json: { errors: errors }, status: :unprocessable_entity
+            render json: { errors: }, status: :unprocessable_entity
           end
         else
           periods.each(&:save!)
@@ -230,7 +264,7 @@ class GradingPeriodsController < ApplicationController
       respond_to do |format|
         if errors.present?
           format.json do
-            render json: { errors: errors }, status: :unprocessable_entity
+            render json: { errors: }, status: :unprocessable_entity
           end
         else
           periods.each(&:save!)
@@ -325,7 +359,7 @@ class GradingPeriodsController < ApplicationController
                                      each_serializer: GradingPeriodSerializer,
                                      controller: self,
                                      root: :grading_periods,
-                                     meta: meta,
+                                     meta:,
                                      scope: @current_user,
                                      include_root: false
                                    }).as_json
@@ -334,6 +368,6 @@ class GradingPeriodsController < ApplicationController
   def index_permissions
     can_create_grading_periods = @context.is_a?(Account) &&
                                  @context.root_account? && @context.grants_right?(@current_user, :manage)
-    { can_create_grading_periods: can_create_grading_periods }.as_json
+    { can_create_grading_periods: }.as_json
   end
 end

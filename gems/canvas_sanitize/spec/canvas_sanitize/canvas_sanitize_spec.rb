@@ -55,6 +55,13 @@ describe CanvasSanitize do
     expect(cleaned).to eq("<p data-item-id=\"1234\">Item1234</p>")
   end
 
+  it "does strip the specific data-method attribute" do
+    input_html = "<a data-method='post'>Data-Method Attr</a>"
+    expected_html = "<a>Data-Method Attr</a>"
+    cleaned = Sanitize.clean(input_html, CanvasSanitize::SANITIZE)
+    expect(cleaned).to eq(expected_html)
+  end
+
   it "does not strip track elements" do
     cleaned = Sanitize.clean("<track src=\"http://google.com\"></track>", CanvasSanitize::SANITIZE)
     expect(cleaned).to eq("<track src=\"http://google.com\">")
@@ -169,6 +176,48 @@ describe CanvasSanitize do
     str = %(<span lang="EN" style="font-family: 'Times New Roman','serif'; color: #17375e; font-size: 12pt; mso-fareast-font-family: 'Times New Roman'; mso-themecolor: text2; mso-themeshade: 191; mso-style-textfill-fill-color: #17375E; mso-style-textfill-fill-themecolor: text2; mso-style-textfill-fill-alpha: 100.0%; mso-ansi-language: EN; mso-style-textfill-fill-colortransforms: lumm=75000"><p></p></span>)
     # the above string took over a minute to sanitize as of 8ae4ba8e
     Timeout.timeout(1) { Sanitize.clean(str, CanvasSanitize::SANITIZE) }
+  end
+
+  it "allows data sources for audio tags" do
+    str = %(<audio controls="" src="data:audio/mp3;base64,aHR0cHM6Ly93d3cueW91dHViZS5jb20vd2F0Y2g/dj1kUXc0dzlXZ1hjUQ=="></audio>)
+    res = Sanitize.clean(str, CanvasSanitize::SANITIZE)
+    expect(res).to eq str
+  end
+
+  it "allows data sources for video tags" do
+    str = %(<video controls="" src="data:video/mp4;base64,aHR0cHM6Ly93d3cueW91dHViZS5jb20vd2F0Y2g/dj1kUXc0dzlXZ1hjUQ=="></video>)
+    res = Sanitize.clean(str, CanvasSanitize::SANITIZE)
+    expect(res).to eq str
+  end
+
+  it "allows data sources for source tags" do
+    str = %(<source type="audio/mp3" src="data:audio/mp3;base64,aHR0cHM6Ly93d3cueW91dHViZS5jb20vd2F0Y2g/dj1kUXc0dzlXZ1hjUQ==">)
+    res = Sanitize.clean(str, CanvasSanitize::SANITIZE)
+    expect(res).to eq str
+  end
+
+  it "allows data sources for track tags" do
+    str = %(<track kind="subtitles" srclang="en" label="English" src="data:audio/mp3;base64,aHR0cHM6Ly93d3cueW91dHViZS5jb20vd2F0Y2g/dj1kUXc0dzlXZ1hjUQ==">)
+    res = Sanitize.clean(str, CanvasSanitize::SANITIZE)
+    expect(res).to eq str
+  end
+
+  it "strips spaces from ids" do
+    str = %(<div class="mini_month"><div class="day_wrapper" id="mini_day_2023_10_31_1"><div class="mini_calendar_day" id="mini_day_2023_10_31_1, id=[<img src=x onerror='alert(`${document.domain}:${document.cookie}`)' />]">Click me to trigger XSS</div></div></div>)
+    res = Sanitize.clean(str, CanvasSanitize::SANITIZE)
+    expect(res).to eq(%(<div class="mini_month"><div class="day_wrapper" id="mini_day_2023_10_31_1"><div class="mini_calendar_day" id="mini_day_2023_10_31_1,id=[<imgsrc=xonerror='alert(`${document.domain}:${document.cookie}`)'/>]">Click me to trigger XSS</div></div></div>))
+  end
+
+  it "strips tabs and long whitespace from ids" do
+    str = %(<div id="my id    with      tabs    and  spaces"></div>)
+    res = Sanitize.clean(str, CanvasSanitize::SANITIZE)
+    expect(res).to eq %(<div id="myidwithtabsandspaces"></div>)
+  end
+
+  it "does not affect ids without whitespace" do
+    str = %(<div id="my-id-5"></div>)
+    res = Sanitize.clean(str, CanvasSanitize::SANITIZE)
+    expect(res).to eq str
   end
 
   Dir.glob(File.expand_path(File.join(__FILE__, "..", "..", "fixtures", "xss", "*.xss"))) do |filename|

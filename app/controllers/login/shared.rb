@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 module Login::Shared
-  include FullStoryHelper
-
   def reset_session_for_login
     reset_session_saving_keys(:return_to,
                               :oauth,
@@ -35,6 +33,11 @@ module Login::Shared
     reset_authenticity_token!
     Auditors::Authentication.record(pseudonym, "login")
 
+    # Send metrics for successful login
+    auth_type = pseudonym&.authentication_provider&.auth_type
+    tags = { auth_type:, domain: request.host }
+    InstStatsd::Statsd.increment("login.count", tags:) if auth_type
+
     # Since the user just logged in, we'll reset the context to include their info.
     setup_live_events_context
     # TODO: Only send this if the current_pseudonym's root account matches the current root
@@ -42,7 +45,7 @@ module Login::Shared
     Canvas::LiveEvents.logged_in(session, user, pseudonym)
 
     otp_passed ||= user.validate_otp_secret_key_remember_me_cookie(cookies["canvas_otp_remember_me"], request.remote_ip)
-    unless otp_passed
+    unless otp_passed || pseudonym.authentication_provider.skip_internal_mfa
       mfa_settings = user.mfa_settings(pseudonym_hint: @current_pseudonym)
       if (user.otp_secret_key && mfa_settings == :optional) ||
          mfa_settings == :required
@@ -81,8 +84,6 @@ module Login::Shared
     @current_user = user
     @current_pseudonym = pseudonym
 
-    fullstory_init(@domain_root_account, session)
-
     respond_to do |format|
       if (oauth = session[:oauth2])
         provider = Canvas::OAuth::Provider.new(oauth[:client_id], oauth[:redirect_uri], oauth[:scopes], oauth[:purpose])
@@ -96,7 +97,7 @@ module Login::Shared
           redirect_to(registration_confirmation_path(session.delete(:confirm),
                                                      enrollment: session.delete(:enrollment),
                                                      login_success: 1,
-                                                     confirm: (user.id == session.delete(:expected_user_id) ? 1 : nil)))
+                                                     confirm: ((user.id == session.delete(:expected_user_id)) ? 1 : nil)))
         end
       else
         # the URL to redirect back to is stored in the session, so it's
@@ -132,5 +133,15 @@ module Login::Shared
 
   def delegated_auth_redirect_uri(uri)
     uri
+  end
+
+  protected
+
+  def statsd_timeout_error
+    "auth.timeout_error"
+  end
+
+  def statsd_timeout_cutoff
+    "auth.timeout_cutoff"
   end
 end

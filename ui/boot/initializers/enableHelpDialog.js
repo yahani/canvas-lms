@@ -23,11 +23,10 @@
 import {useScope as useI18nScope} from '@canvas/i18n'
 import helpDialogTemplate from './jst/helpDialog.handlebars'
 import $ from 'jquery'
-import _ from 'underscore'
-import INST from 'browser-sniffer'
-import htmlEscape from 'html-escape'
-import preventDefault from 'prevent-default'
+import {find} from 'lodash'
+import htmlEscape, {raw} from '@instructure/html-escape'
 import '@canvas/jquery/jquery.instructure_misc_helpers'
+import '@canvas/jquery/jquery.instructure_forms'
 import 'jqueryui/dialog'
 import '@canvas/jquery/jquery.disableWhileLoading'
 
@@ -46,21 +45,26 @@ const helpDialog = {
       resizable: false,
       width: 400,
       title: helpDialog.defaultTitle,
-      close: () => helpDialog.switchTo('#help-dialog-options')
+      close: () => helpDialog.switchTo('#help-dialog-options'),
+      modal: true,
+      zIndex: 1000,
     })
 
-    helpDialog.$dialog.dialog('widget').delegate(
-      `a[href="#teacher_feedback"],
-      a[href="#create_ticket"],
-      a[href="#help-dialog-options"]`,
-      'click',
-      preventDefault(({currentTarget}) => helpDialog.switchTo($(currentTarget).attr('href')))
-    )
+    helpDialog.$dialog
+      .dialog('widget')
+      .on(
+        'click',
+        'a[href="#teacher_feedback"],a[href="#create_ticket"],a[href="#help-dialog-options"]',
+        event => {
+          if (event) event.preventDefault()
+          helpDialog.switchTo($(event.currentTarget).attr('href'))
+        }
+      )
 
     helpDialog.helpLinksDfd = $.getJSON('/help_links').done(links => {
       // only show the links that are available to the roles of this user
       links = $.grep(links, link =>
-        _.find(
+        find(
           link.available_to,
           role =>
             role === 'user' || (ENV.current_user_roles && ENV.current_user_roles.includes(role))
@@ -71,7 +75,7 @@ const helpDialog = {
         helpLinks: links,
         url: window.location,
         contextAssetString: ENV.context_asset_string,
-        userRoles: ENV.current_user_roles
+        userRoles: ENV.current_user_roles,
       }
 
       helpDialog.$dialog.html(helpDialogTemplate(locals))
@@ -97,7 +101,7 @@ const helpDialog = {
       success: () => {
         helpDialog.$dialog.dialog('close')
         $form.find(':input').val('')
-      }
+      },
     })
   },
 
@@ -130,7 +134,7 @@ const helpDialog = {
           if (!toFocus.length) toFocus = newPanel.find(':focusable')
           toFocus.first().focus()
           if (panelId !== homePanel) $(homePanel).hide()
-        }
+        },
       }
     )
 
@@ -177,7 +181,7 @@ const helpDialog = {
           .formSubmit({
             disableWhileLoading: true,
             required: ['recipients[]', 'body'],
-            success: () => helpDialog.$dialog.dialog('close')
+            success: () => helpDialog.$dialog.dialog('close'),
           })
       })
 
@@ -187,7 +191,7 @@ const helpDialog = {
           c =>
             `<option
             value='course_${c.id}_admins'
-            ${$.raw(ENV.context_id === c.id ? 'selected' : '')}
+            ${raw(ENV.context_id === c.id ? 'selected' : '')}
           >
             ${htmlEscape(c.name)}
           </option>`
@@ -198,7 +202,10 @@ const helpDialog = {
   },
 
   initTriggers() {
-    $('.help_dialog_trigger').click(preventDefault(helpDialog.open))
-  }
+    $('.help_dialog_trigger').click(event => {
+      event.preventDefault()
+      helpDialog.open()
+    })
+  },
 }
 export default helpDialog

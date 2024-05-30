@@ -24,16 +24,16 @@ const I18n = useI18nScope('quiz_migration_notifications')
 
 $('.close_migration_notification_link').click(function (event) {
   event.preventDefault()
-  $(this).attr('disabled', true)
+  $(this).prop('disabled', true)
   doFetchApi({
     path: $(this).attr('rel'),
-    method: 'POST'
+    method: 'POST',
   })
     .then(() => {
       $(this).closest('.quiz_migration_notification').remove()
     })
     .catch(err => {
       showFlashAlert({message: I18n.t('There was an error removing the notification'), err})
-      $(this).attr('disabled', false)
+      $(this).prop('disabled', false)
     })
 })

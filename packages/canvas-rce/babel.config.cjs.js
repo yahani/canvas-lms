@@ -17,24 +17,28 @@
  */
 module.exports = {
   assumptions: {
-    setPublicClassFields: true
+    setPublicClassFields: true,
   },
   presets: [
-    ['@babel/preset-env', { modules: 'commonjs' }],
-    ['@babel/preset-react', { useBuiltIns: true }],
-    ['@instructure/babel-preset-pretranslated-translations-package-format-message', {
-      translationsDir: 'lib/canvas-rce',
-      extractDefaultTranslations: false
-    }]
+    '@babel/preset-typescript',
+    ['@babel/preset-env', {modules: 'commonjs'}],
+    ['@babel/preset-react', {useBuiltIns: true}],
+    [
+      '@instructure/babel-preset-pretranslated-translations-package-format-message',
+      {
+        translationsDir: 'lib/canvas-rce',
+        extractDefaultTranslations: false,
+      },
+    ],
   ],
   plugins: [
-    ['transform-inline-environment-variables', {
-      include: ['BUILD_LOCALE']
-    }],
+    ['babel-plugin-typescript-to-proptypes'],
+    [
+      'transform-inline-environment-variables',
+      {
+        include: ['BUILD_LOCALE'],
+      },
+    ],
     ['@babel/plugin-proposal-decorators', {legacy: true}],
-    ['@instructure/babel-plugin-themeable-styles', {
-      postcssrc: require('@instructure/ui-postcss-config')()(),
-      themeablerc: {},
-    }]
-  ]
+  ],
 }

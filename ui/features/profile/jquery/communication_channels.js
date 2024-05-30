@@ -19,24 +19,26 @@
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/forms/jquery/jquery.instructure_forms'/* formSubmit, fillFormData, getFormData, formErrors */
+import '@canvas/jquery/jquery.instructure_forms' /* formSubmit, fillFormData, getFormData, formErrors */
 import 'jqueryui/dialog'
-import '@canvas/jquery/jquery.instructure_misc_helpers'/* replaceTags */
-import '@canvas/jquery/jquery.instructure_misc_plugins'/* confirmDelete, showIf */
+import '@canvas/jquery/jquery.instructure_misc_helpers' /* replaceTags */
+import '@canvas/jquery/jquery.instructure_misc_plugins' /* confirmDelete, showIf */
 import '@canvas/loading-image'
 import '@canvas/rails-flash-notifications'
-import '@canvas/util/templateData'/* fillTemplateData, getTemplateData */
+import '@canvas/util/templateData' /* fillTemplateData, getTemplateData */
 import 'jqueryui/tabs'
+import replaceTags from '@canvas/util/replaceTags'
 
 const I18n = useI18nScope('profile')
 
-$(document).ready(function() {
+$(document).ready(function () {
   $('#communication_channels').tabs()
-  $('#communication_channels').bind('tabsshow', function(event) {
+  $('#communication_channels').bind('tabsshow', function (_event) {
     let channelInputField
-    if ($(this).css('display') != 'none') {
+    if ($(this).css('display') !== 'none') {
       // TODO: This is always undefined - where did this come from?
       const idx = $(this).data('selected.tabs')
+      // eslint-disable-next-line eqeqeq
       if (idx == 0) {
         channelInputField = $('#register_email_address').find(':text:first')
       } else {
@@ -46,7 +48,7 @@ $(document).ready(function() {
     formatTabs(channelInputField)
   })
   $('.channel_list tr').hover(
-    function() {
+    function () {
       if ($(this).hasClass('unconfirmed')) {
         let title = I18n.t(
           'titles.contact_not_confirmed',
@@ -59,56 +61,41 @@ $(document).ready(function() {
           )
         }
         $(this).attr('title', title)
-        $(this)
-          .find('a.path')
-          .parent()
-          .attr('title', title)
+        $(this).find('a.path').parent().attr('title', title)
       }
     },
-    function() {
+    function () {
       $(this).attr('title', '')
-      $(this)
-        .find('a.path')
-        .parent()
-        .attr(
-          'title',
-          $(this)
-            .find('a.path')
-            .text()
-        )
+      $(this).find('a.path').parent().attr('title', $(this).find('a.path').text())
     }
   )
-  $('.add_email_link,.add_contact_link').click(function(event) {
+  $('.add_email_link,.add_contact_link').click(function (event) {
     event.preventDefault()
-    let view = 'email'
     $('#communication_channels')
       .show()
       .dialog({
         title: I18n.t('titles.register_communication', 'Register Communication'),
         width: 600,
         resizable: false,
-        modal: true
+        modal: true,
+        zIndex: 1000,
       })
     if ($(this).hasClass('add_contact_link')) {
       $('#communication_channels').tabs('select', '#register_sms_number')
-      view = 'sms'
     } else {
       $('#communication_channels').tabs('select', '#register_email_address')
     }
   })
 
-  var formatTabs = function(tabs) {
+  const formatTabs = function (tabs) {
     const $form = $(tabs).parents('#register_sms_number')
-    const sms_number = $form
-      .find('.sms_number')
-      .val()
-      .replace(/[^\d]/g, '')
+    const sms_number = $form.find('.sms_number').val().replace(/[^\d]/g, '')
 
     const useEmail =
       !ENV.INTERNATIONAL_SMS_ENABLED || $form.find('.country option:selected').data('useEmail')
 
     // Don't show the 10-digit warning if we're not expecting a U.S. number
-    $form.find('.should_be_10_digits').showIf(useEmail && sms_number && sms_number.length != 10)
+    $form.find('.should_be_10_digits').showIf(useEmail && sms_number && sms_number.length !== 10)
 
     // Show the "international text messaging rates may apply" warning if international SMS is enabled, the user has
     // selected a country, and that country is not the U.S.
@@ -123,8 +110,8 @@ $(document).ready(function() {
     if (useEmail) {
       $form.find('.sms_email_group').show()
       let email = $form.find('.carrier').val()
-      $form.find('.sms_email').attr('disabled', email != 'other')
-      if (email == 'other') {
+      $form.find('.sms_email').prop('disabled', email !== 'other')
+      if (email === 'other') {
         return
       }
       email = email.replace('#', sms_number)
@@ -134,7 +121,7 @@ $(document).ready(function() {
     }
   }
 
-  $('#register_sms_number .user_selected').bind('change blur keyup focus', function() {
+  $('#register_sms_number .user_selected').bind('change blur keyup focus', function () {
     formatTabs(this)
   })
 
@@ -157,7 +144,7 @@ $(document).ready(function() {
       ) {
         // Haven't selected a country yet
         $(this).formErrors({
-          communication_channel_sms_country: I18n.t('Country or Region is required')
+          communication_channel_sms_country: I18n.t('Country or Region is required'),
         })
         return false
       } else if (
@@ -178,14 +165,14 @@ $(document).ready(function() {
 
       if (type === 'email' || type === 'sms_email' || type === 'slack') {
         // Make sure it's a valid email address
-        var match = address.match(
+        const match = address.match(
           /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/
         )
         if (!match) {
           // Not a valid email address. Show a message on the relevant field, then bail.
-          var errorMessage =
+          const errorMessage =
             address === '' ? I18n.t('Email is required') : I18n.t('Email is invalid!')
-          if (type == 'email') {
+          if (type === 'email') {
             $(this).formErrors({communication_channel_email: errorMessage})
           } else {
             $(this).formErrors({communication_channel_sms_email: errorMessage})
@@ -197,9 +184,9 @@ $(document).ready(function() {
         // the address will already have the country code prepended, and this will result in our regex failing always
         // because it's not expecting the leading plus sign (and it can't just be added to the regex because then
         // we can't detect when they entered a blank phone number). libphonenumber plz
-        var match = data.communication_channel_sms_number.match(/^[0-9]+$/)
+        const match = data.communication_channel_sms_number.match(/^[0-9]+$/)
         if (!match) {
-          var errorMessage =
+          const errorMessage =
             address === '' ? I18n.t('Cell Number is required') : I18n.t('Cell Number is invalid!')
           $(this).formErrors({communication_channel_sms_number: errorMessage})
           return false
@@ -223,18 +210,15 @@ $(document).ready(function() {
       }
       let path = data['communication_channel[address]']
       $(this).data('email', path)
-      $list.find('.channel .path').each(function() {
-        if ($(this).text() == path) {
+      $list.find('.channel .path').each(function () {
+        if ($(this).text() === path) {
           path = ''
         }
       })
       $list.removeClass('single')
       let $channel = null
       if (path) {
-        $channel = $list
-          .find('.channel.blank')
-          .clone(true)
-          .removeClass('blank')
+        $channel = $list.find('.channel.blank').clone(true).removeClass('blank')
         if (data['communication_channel[type]'] === 'slack') {
           $channel.find('#communication_text_type').text('slack')
         }
@@ -245,7 +229,7 @@ $(document).ready(function() {
             I18n.t('titles.unconfirmed_click_to_confirm', 'Unconfirmed.  Click to confirm')
           )
         $channel.fillTemplateData({
-          data: {path}
+          data: {path},
         })
         $list.find('.channel.blank').before($channel.show())
       }
@@ -264,7 +248,7 @@ $(document).ready(function() {
 
       channel.channel_id = channel.id
       let select_type = 'email_select'
-      if ($(this).attr('id') == 'register_sms_number') {
+      if ($(this).attr('id') === 'register_sms_number') {
         select_type = 'sms_select'
       }
       const $select = $('#select_templates .' + select_type)
@@ -272,96 +256,78 @@ $(document).ready(function() {
       $option.val(channel.id).text(channel.address)
       $select.find('option:last').before($option)
       $select.find('option.blank_option').remove()
-      $('.' + select_type).each(function() {
+      $('.' + select_type).each(function () {
         let val = $(this).val()
-        if (val == 'new') {
+        if (val === 'new') {
           val = channel.id
         }
-        $(this)
-          .after($select.clone(true).val(val))
-          .remove()
+        $(this).after($select.clone(true).val(val)).remove()
       })
       $channel.fillTemplateData({
         data: channel,
         id: 'channel_' + channel.id,
-        hrefValues: ['user_id', 'pseudonym_id', 'channel_id']
+        hrefValues: ['user_id', 'pseudonym_id', 'channel_id'],
       })
       $channel.find('.path').triggerHandler('click')
     },
     error(data, $channel) {
       $channel.loadingImage('remove')
       $channel.remove()
-    }
+    },
   })
-  $('a.email_address_taken_learn_more').live('click', event => {
+  $(document).on('click', 'a.email_address_taken_learn_more', event => {
     event.preventDefault()
   })
 
-  const manageAfterDeletingAnEmailFocus = function(currentElement) {
+  const manageAfterDeletingAnEmailFocus = function (currentElement) {
     // There may be a better way to do this but I'm not aware of another way. I'm trying to
     // find the closest prev() or next() sibling
-    let $elementToFocusOn = $(currentElement)
-      .next('.channel:not(.blank)')
-      .last()
+    let $elementToFocusOn = $(currentElement).next('.channel:not(.blank)').last()
     if (!$elementToFocusOn.length) {
-      $elementToFocusOn = $(currentElement)
-        .prev('.channel:not(.blank)')
-        .last()
+      $elementToFocusOn = $(currentElement).prev('.channel:not(.blank)').last()
     }
 
     if ($elementToFocusOn.length) {
-      $elementToFocusOn
-        .find('.email_channel')
-        .first()
-        .focus()
+      $elementToFocusOn.find('.email_channel').first().focus()
     } else {
-      $(this)
-        .parents('.channel_list .email_channel')
-        .first()
-        .focus()
+      $(this).parents('.channel_list .email_channel').first().focus()
     }
   }
 
-  $('.channel_list .channel .delete_channel_link').click(function(event) {
+  $('.channel_list .channel .delete_channel_link').click(function (event) {
     event.preventDefault()
     $(this)
       .parents('.channel')
       .confirmDelete({
         url: $(this).attr('href'),
-        success(data) {
+        success(_data) {
           const $list = $(this).parents('.channel_list')
           manageAfterDeletingAnEmailFocus(this)
           $(this).remove()
           $list.toggleClass('single', $list.find('.channel:visible').length <= 1)
-        }
+        },
       })
   })
-  $('.channel_list .channel .reset_bounce_count_link').click(function(event) {
+  $('.channel_list .channel .reset_bounce_count_link').click(function (event) {
     event.preventDefault()
-    $.ajaxJSON($(this).attr('href'), 'POST', {}, data => {
-      $(this)
-        .parents('.channel')
-        .find('.bouncing-channel')
-        .remove()
+    $.ajaxJSON($(this).attr('href'), 'POST', {}, _data => {
+      $(this).parents('.channel').find('.bouncing-channel').remove()
       $(this).remove()
       $.flashMessage(I18n.t('Bounce count reset!'))
     })
   })
-  $('#confirm_communication_channel .cancel_button').click(event => {
+  $('#confirm_communication_channel .cancel_button').click(_event => {
     $('#confirm_communication_channel').dialog('close')
   })
-  $('.email_channels .channel .path,.other_channels .channel .path').click(function(event) {
+  $('.email_channels .channel .path,.other_channels .channel .path').click(function (event) {
     event.preventDefault()
     const $channel = $(this).parents('.channel')
     if ($channel.hasClass('unconfirmed')) {
       let type = 'email address',
         confirm_title = I18n.t('titles.confirm_email_address', 'Confirm Email Address')
-      if (
-        $(this)
-          .parents('.channel_list')
-          .hasClass('other_channels')
-      ) {
-        ;(type = 'sms number'), (confirm_title = I18n.t('Confirm Communication Channel'))
+      if ($(this).parents('.channel_list').hasClass('other_channels')) {
+        type = 'sms number'
+        confirm_title = I18n.t('Confirm Communication Channel')
       }
       let $box = $('#confirm_communication_channel')
 
@@ -375,8 +341,8 @@ $(document).ready(function() {
         `/confirmations/${data.user_id}/limit_reached/${data.channel_id}`,
         'GET',
         {},
-        data => {
-          if (data.confirmation_limit_reached) {
+        data_ => {
+          if (data_.confirmation_limit_reached) {
             $box.find('.re_send_confirmation_link').css('visibility', 'hidden')
           } else {
             $box.find('.re_send_confirmation_link').css('visibility', 'visible')
@@ -385,7 +351,7 @@ $(document).ready(function() {
         _ => {}
       )
 
-      if (type == 'sms number') {
+      if (type === 'sms number') {
         path = path.split('@')[0]
       }
       data.code = ''
@@ -395,14 +361,14 @@ $(document).ready(function() {
           path,
           path_type: type,
           user_id: data.user_id,
-          channel_id: data.channel_id
-        }
+          channel_id: data.channel_id,
+        },
       })
       $box.find('.status_message').css('visibility', 'hidden')
       let url = $('.re_send_confirmation_url').attr('href')
-      url = $.replaceTags(url, 'id', data.channel_id)
-      url = $.replaceTags(url, 'pseudonym_id', data.pseudonym_id)
-      url = $.replaceTags(url, 'user_id', data.user_id)
+      url = replaceTags(url, 'id', data.channel_id)
+      url = replaceTags(url, 'pseudonym_id', data.pseudonym_id)
+      url = replaceTags(url, 'user_id', data.user_id)
 
       $box
         .find('.re_send_confirmation_link')
@@ -413,61 +379,53 @@ $(document).ready(function() {
         title: confirm_title,
         width: 350,
         open() {
-          $(this)
-            .closest('.ui-dialog')
-            .focus()
-        }
+          $(this).closest('.ui-dialog').focus()
+        },
       })
     }
   })
   $('#confirm_communication_channel').formSubmit({
     formErrors: false,
     processData(data) {
-      let url = $(this)
-        .find('.register_channel_link')
-        .attr('href')
-      url = $.replaceTags(url, 'id', data.channel_id)
-      url = $.replaceTags(url, 'code', data.code)
+      let url = $(this).find('.register_channel_link').attr('href')
+      url = replaceTags(url, 'id', data.channel_id)
+      url = replaceTags(url, 'code', data.code)
       $(this).attr('action', url)
     },
-    beforeSubmit(data) {
+    beforeSubmit(_data) {
       $(this)
         .find('.status_message')
         .text(I18n.t('confirming_contact', 'Confirming...'))
         .css('visibility', 'visible')
     },
     success(data) {
-      $(this)
-        .find('.status_message')
-        .css('visibility', 'hidden')
+      $(this).find('.status_message').css('visibility', 'hidden')
       const pseudonym_id = data.communication_channel.pseudonym_id
       $('#channel_' + data.communication_channel.id).removeClass('unconfirmed')
       $('.channel.pseudonym_' + pseudonym_id).removeClass('unconfirmed')
       $('#confirm_communication_channel').dialog('close')
       $.flashMessage(I18n.t('notices.contact_confirmed', 'Contact successfully confirmed!'))
     },
-    error(data) {
-      $(this)
-        .find('.status_message')
-        .css('visibility', 'hidden')
+    error(_data) {
+      $(this).find('.status_message').css('visibility', 'hidden')
       $.flashError(I18n.t('Confirmation failed.  Please try again.'))
-    }
+    },
   })
-  $('.channel_list .channel .default_link').click(function(event) {
+  $('.channel_list .channel .default_link').click(function (event) {
     event.preventDefault()
     const channel_id = $(this)
       .parents('.channel')
       .getTemplateData({textValues: ['channel_id']}).channel_id
     const formData = {
-      default_email_id: channel_id
+      default_email_id: channel_id,
     }
     $.ajaxJSON($(this).attr('href'), 'PUT', formData, data => {
-      const channel_id = data.user.communication_channel.id
+      const channel_id_ = data.user.communication_channel.id
       $('.channel.default')
         .removeClass('default')
         .find('a.default_link span.screenreader-only.default_label')
         .remove()
-      $('.channel#channel_' + channel_id)
+      $('.channel#channel_' + channel_id_)
         .addClass('default')
         .find('a.default_link')
         .append(
@@ -476,7 +434,7 @@ $(document).ready(function() {
       $('.default_email.display_data').text(data.user.communication_channel.path)
     })
   })
-  $('.dialog .re_send_confirmation_link').click(function(event) {
+  $('.dialog .re_send_confirmation_link').click(function (event) {
     event.preventDefault()
     const $link = $(this)
     $link.text(I18n.t('links.resending_confirmation', 'Re-Sending...'))
@@ -484,15 +442,15 @@ $(document).ready(function() {
       $link.attr('href'),
       'POST',
       {},
-      data => {
+      _data => {
         $link.text(I18n.t('links.resent_confirmation', 'Done! Message may take a few minutes.'))
       },
-      data => {
+      _data => {
         $link.text(I18n.t('links.resend_confirmation_failed', 'Request failed. Try again.'))
       }
     )
   })
-  $('#communication_channels .cancel_button').click(event => {
+  $('#communication_channels .cancel_button').click(_event => {
     $('#communication_channels').dialog('close')
   })
   $('#confirm_email_channel .cancel_button').click(() => {

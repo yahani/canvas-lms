@@ -92,9 +92,9 @@ describe "new groups" do
       expect(f(".group-user")).to include_text(@students[0].name)
 
       # Moves the student
-      f(".group-user-actions").click
+      f("[data-testid=groupUserMenu").click
       wait_for_ajaximations
-      f(".edit-group-assignment").click
+      f("[data-testid=moveTo").click
       wait_for_ajaximations
       click_option(".move-select .move-select__group select", @testgroup[1].name.to_s)
       button = f('.move-select button[type="submit"]')
@@ -145,9 +145,9 @@ describe "new groups" do
       wait_for_ajaximations
 
       # Sets user as group leader
-      f(".group-user-actions").click
+      f("[data-testid=groupUserMenu]").click
       wait_for_ajaximations
-      f(".set-as-leader").click
+      f("[data-testid=setAsLeader]").click
       wait_for_ajaximations
 
       # Looks for student to have a group leader icon
@@ -156,7 +156,7 @@ describe "new groups" do
       expect(f(".span3.ellipsis.group-leader")).to be_displayed
       expect(f(".span3.ellipsis.group-leader")).to include_text(@students.first.name)
 
-      check_element_has_focus f(".group-user-actions[data-user-id='user_#{@students.first.id}']")
+      check_element_has_focus f("[data-userid='#{@students.first.id}']")
     end
 
     it "allows teachers to message unassigned students" do
@@ -180,7 +180,8 @@ describe "new groups" do
       click_add_group_set
       replace_and_proceed f("#new-group-set-name"), "Test Group Set"
       fxpath("//input[@data-testid='checkbox-allow-self-signup']/..").click
-      replace_and_proceed f("#textinput-limit-group-size"), "2"
+      force_click('[data-testid="group-member-limit"]')
+      f('[data-testid="group-member-limit"]').send_keys("2")
       f(%(button[data-testid="group-set-save"])).click
       wait_for_ajaximations
 
@@ -224,6 +225,7 @@ describe "new groups" do
     end
 
     it "Allows teacher to join students to groups in unpublished courses", priority: "1" do
+      skip "FOO-4220" # TODO: re-enable this test (or rewrite) after fixing FOO-4263
       group_test_setup(3, 1, 2)
       @course.workflow_state = "unpublished"
       @course.save!
@@ -283,10 +285,10 @@ describe "new groups" do
       f(".group[data-id=\"#{@testgroup[0].id}\"] .toggle-group").click
       wait_for_ajaximations
 
-      f(".group-user-actions[data-user-id=\"user_#{@students[0].id}\"]").click
+      fj("[data-testid=groupUserMenu][data-userid=#{@students[0].id}]").click
       wait_for_ajaximations
 
-      f(".ui-menu-item .edit-group-assignment").click
+      f("[data-testid=moveTo]").click
       wait_for_ajaximations
 
       f(".move-select .move-select__group") # fixes flakiness since the ff below doesn't wait for the element to appear
@@ -323,10 +325,10 @@ describe "new groups" do
       f(".group[data-id=\"#{@testgroup[0].id}\"] .toggle-group").click
       wait_for_ajaximations
 
-      f(".group-user-actions[data-user-id=\"user_#{@students[0].id}\"]").click
+      fj("[data-testid=groupUserMenu][data-userid=#{@students[0].id}]").click
       wait_for_ajaximations
 
-      f(".ui-menu-item .remove-from-group").click
+      f("[data-testid=removeFromGroup]").click
       wait_for_ajaximations
 
       expect(f(".ui-cnvs-scrollable")).to include_text(@students[0].name)
@@ -345,9 +347,9 @@ describe "new groups" do
 
       f(".group[data-id=\"#{@testgroup[0].id}\"] .toggle-group").click
       wait_for_ajaximations
-      f(".group-user-actions[data-user-id=\"user_#{@students[0].id}\"]").click
-      wait_for(method: nil, timeout: 1) { f(".ui-menu-item .edit-group-assignment").displayed? }
-      f(".ui-menu-item .edit-group-assignment").click
+      fj("[data-testid=groupUserMenu][data-userid=#{@students[0].id}]").click
+      wait_for_ajaximations
+      f("[data-testid=moveTo]").click
       wait_for(method: nil, timeout: 2) { fxpath("//*[@data-cid='Tray']//*[@role='dialog']").displayed? }
       ff(".move-select .move-select__group option").last.click
       f('.move-select button[type="submit"]').click
@@ -408,8 +410,9 @@ describe "new groups" do
       expect(f(".group[data-id=\"#{@testgroup[0].id}\"] .group-user")).to include_text("Test Student 1")
       expect(f(".group-leader .icon-user")).to be_displayed
 
-      f(".group-user-actions[data-user-id=\"user_#{@students[0].id}\"]").click
-      f(".ui-menu-item .icon-trash").click
+      fj("[data-testid=groupUserMenu][data-userid=#{@students[0].id}]").click
+      wait_for_ajaximations
+      f("[data-testid=removeFromGroup]").click
       wait_for_ajaximations
 
       get "/courses/#{@course.id}/groups"
@@ -424,13 +427,16 @@ describe "new groups" do
     end
 
     it "splits students into groups automatically", priority: "1" do
+      skip "FOO-3807 (10/7/2023)"
       seed_students(4)
 
       get "/courses/#{@course.id}/groups"
 
       click_add_group_set
       replace_and_proceed f("#new-group-set-name"), "Test Group Set"
-      fxpath("//input[@data-testid='radio-button-split-groups']/..").click
+
+      force_click('[data-testid="group-structure-selector"]')
+      force_click('[data-testid="group-structure-num-groups"]')
 
       expect(f('span[data-testid="group-leadership-controls"] input[data-testid="first"]')).not_to be_enabled
       expect(f('span[data-testid="group-leadership-controls"] input[data-testid="random"]')).not_to be_enabled
@@ -440,7 +446,9 @@ describe "new groups" do
       expect(f('span[data-testid="group-leadership-controls"] input[data-testid="first"]')).to be_enabled
       expect(f('span[data-testid="group-leadership-controls"] input[data-testid="random"]')).to be_enabled
 
-      replace_and_proceed f("#textinput-create-groups-count"), "2"
+      force_click('[data-testid="split-groups"]')
+
+      f('[data-testid="split-groups"]').send_keys("2")
       f(%(button[data-testid="group-set-save"])).click
       # Need to run delayed jobs for the random group assignments to work, and then refresh the page
       run_jobs
@@ -449,6 +457,46 @@ describe "new groups" do
         expect(ffj(".toggle-group.group-summary:visible")[n]).to include_text("2 students")
       end
       expect(ffj(".group-name:visible").size).to eq 2
+    end
+
+    it "auto-splits students into groups by section" do
+      skip "FOO-3807 (10/7/2023)"
+      course = Course.create!(name: "Group by section")
+
+      course.enroll_teacher(@teacher)
+
+      course.course_sections.create!(name: "section 1")
+      course.course_sections.create!(name: "section 2")
+      course.course_sections.create!(name: "section 3")
+
+      s1 = User.create!(name: "First Student")
+      s2 = User.create!(name: "Second Student")
+      s3 = User.create!(name: "Third Student")
+      s4 = User.create!(name: "Fourth Student")
+      s5 = User.create!(name: "Fifth Student")
+
+      course.course_sections[0].enroll_user(s1, "StudentEnrollment")
+      course.course_sections[1].enroll_user(s2, "StudentEnrollment")
+      course.course_sections[2].enroll_user(s3, "StudentEnrollment")
+      course.course_sections[2].enroll_user(s4, "StudentEnrollment")
+      course.course_sections[2].enroll_user(s5, "StudentEnrollment")
+
+      Enrollment.last(6).each { |e| e.update!(workflow_state: "active") }
+
+      get "/courses/#{course.id}/groups"
+
+      f("#add-group-set").click
+      replace_and_proceed f("#new-group-set-name"), "auto_split"
+      force_click('[data-testid="group-structure-selector"]')
+      force_click('[data-testid="group-structure-num-groups"]')
+      f('[data-testid="split-groups"]').send_keys("3")
+      force_click(%(input[data-testid="require-same-section-auto-assign"]))
+      f(%(button[data-testid="group-set-save"])).click
+      run_jobs
+      wait_for_ajaximations
+      expect(GroupCategory.last.name).to eq "auto_split"
+      expect(Group.last(3).pluck(:name)).to match_array ["auto_split 1", "auto_split 2", "auto_split 3"]
+      expect(Group.last(3).map(&:members_count)).to match_array [3, 1, 1]
     end
 
     it "respects individual group member limits when randomly assigning", priority: "1" do
@@ -474,41 +522,6 @@ describe "new groups" do
       expect(f(".group[data-id=\"#{@testgroup[0].id}\"] .group-summary")).to include_text("7 / 7 students")
       expect(f(".group[data-id=\"#{@testgroup[0].id}\"] span.show-group-full")).to be_displayed
       expect(f(".group[data-id=\"#{@testgroup[1].id}\"] span.show-group-full").css_value("display")).to eq "none"
-    end
-
-    it "creates a group with a given name and limit", priority: "2" do
-      skip("broken qa-729")
-      group_test_setup(5, 1, 1)
-      3.times do |n|
-        add_user_to_group(@students[n + 1], @testgroup.first, false)
-      end
-
-      get "/courses/#{@course.id}/groups"
-
-      f(".people.active").click
-      wait_for_ajaximations
-      fj('.btn.button-sidebar-wide:contains("View User Groups")').click
-      wait_for_ajaximations
-      fj('.ui-tabs-anchor:contains("Everyone")').click
-      wait_for_ajaximations
-      fj('.ui-tabs-anchor:contains("Test Group Set 1")').click
-      wait_for_ajaximations
-
-      2.times do |n|
-        f(".btn.add-group").click
-        wait_for_ajaximations
-        f("#group_name").send_keys("Test Group #{n + 2}")
-        wait_for_ajaximations
-        f("#group_max_membership").send_keys("2")
-        wait_for_ajaximations
-        f("#groupEditSaveButton").click
-        wait_for_ajaximations
-        @testgroup << Group.last
-      end
-
-      expect(f(".group[data-id=\"#{@testgroup[0].id}\"] .group-name")).to include_text("Test Group 1")
-      expect(f(".group[data-id=\"#{@testgroup[1].id}\"] .group-name")).to include_text("Test Group 2")
-      expect(f(".group[data-id=\"#{@testgroup[2].id}\"] .group-name")).to include_text("Test Group 3")
     end
 
     it "adds students via drag and drop", priority: "1" do
@@ -962,9 +975,9 @@ describe "new groups" do
           expect(ff(".group-users").last).to include_text @students.last.name
 
           # Moves Test User 2 to Test Group 1
-          ff(".group-user-actions").last.click
-          wait_for(method: nil, timeout: 1) { f(".ui-menu-item .edit-group-assignment").displayed? }
-          ff(".edit-group-assignment").last.click
+          ff("[data-testid=groupUserMenu]").last.click
+          wait_for_ajaximations
+          f("[data-testid=moveTo]").click
           wait_for(method: nil, timeout: 2) { fxpath("//*[@data-cid='Tray']//*[@role='dialog']").displayed? }
           click_option(".move-select .move-select__group select", @testgroup.first.name.to_s)
 

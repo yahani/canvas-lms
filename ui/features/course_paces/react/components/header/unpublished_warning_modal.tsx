@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -42,7 +43,7 @@ const WARNING_MODAL_BODY_TEXT = {
   ),
   Enrollment: I18n.t(
     'You have unpublished changes to your student pace. Continuing will discard these changes.'
-  )
+  ),
 }
 
 const UnpublishedWarningModal = ({open, onCancel, onConfirm, contextType}) => {

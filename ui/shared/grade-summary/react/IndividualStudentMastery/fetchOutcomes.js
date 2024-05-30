@@ -18,9 +18,9 @@
 
 import _ from 'lodash'
 import uuid from 'uuid'
-import parseLinkHeader from 'parse-link-header'
+import parseLinkHeader from '@canvas/parse-link-header'
 import NaiveFetchDispatch from './NaiveFetchDispatch'
-import makePromisePool from 'make-promise-pool'
+import makePromisePool from '@canvas/make-promise-pool'
 
 const deepMerge = (lhs, rhs) => {
   if (lhs === undefined || lhs === null) {
@@ -40,7 +40,7 @@ const combine = (promiseOfJson1, promiseOfJson2) =>
 export function fetchUrl(url, dispatch) {
   return dispatch
     .fetch(url, {
-      credentials: 'include'
+      credentials: 'include',
     })
     .then(response => {
       const linkHeader = response.headers.get('link')
@@ -75,7 +75,7 @@ const fetchOutcomes = (courseId, studentId) => {
     fetchWithDispatch(
       `/api/v1/courses/${courseId}/outcome_rollups?user_ids[]=${studentId}&per_page=100`
     ),
-    fetchWithDispatch(`/api/v1/courses/${courseId}/outcome_alignments?student_id=${studentId}`)
+    fetchWithDispatch(`/api/v1/courses/${courseId}/outcome_alignments?student_id=${studentId}`),
   ])
     .then(([groups, links, rollups, alignments]) => {
       outcomeGroups = groups
@@ -106,6 +106,7 @@ const fetchOutcomes = (courseId, studentId) => {
         res.outcome_results
           .filter(r => !r.hidden)
           .forEach(r => {
+            outcomeResultsByOutcomeId[r.links.learning_outcome] ??= []
             outcomeResultsByOutcomeId[r.links.learning_outcome].push(r)
           })
         res.linked.assignments.forEach(a => {
@@ -119,7 +120,7 @@ const fetchOutcomes = (courseId, studentId) => {
         // id to manage expansion/contraction
         expansionId: uuid(),
         groupId: outcomeLink.outcome_group.id,
-        ...outcomeLink.outcome
+        ...outcomeLink.outcome,
       }))
 
       // filter empty outcome groups

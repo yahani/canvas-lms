@@ -20,7 +20,7 @@
 
 require_relative "../views_helper"
 
-describe "/gradebooks/grade_summary" do
+describe "gradebooks/grade_summary" do
   it "renders" do
     course_with_student
     view_context
@@ -79,7 +79,9 @@ describe "/gradebooks/grade_summary" do
     view_context
     a = @course.assignments.create!(title: "some assignment", submission_types: ["online_text_entry"])
     sub = a.submit_homework(@student, submission_type: "online_text_entry", body: "o hai")
-    sub.add_comment(author: @teacher, media_comment_id: "0_ijklmnop", media_comment_type: "video",
+    sub.add_comment(author: @teacher,
+                    media_comment_id: "0_ijklmnop",
+                    media_comment_type: "video",
                     comment: "hello")
     assign(:presenter, GradeSummaryPresenter.new(@course, @teacher, @student.id))
     render("gradebooks/grade_summary")
@@ -113,14 +115,13 @@ describe "/gradebooks/grade_summary" do
       @assignment.grade_student(@student, score: 10, grader: @teacher)
 
       @assignment_url = context_url(@course, :context_assignment_url, @assignment)
-      @speed_grader_url = speed_grader_course_gradebook_url({ course_id: @assignment.context_id, assignment_id: @assignment }.merge({ student_id: @student.id }))
+      @speed_grader_url = speed_grader_course_gradebook_url({ course_id: @assignment.context_id, assignment_id: @assignment }.merge({ student_id: @student.id, only_path: true }))
       @submission_details_url = context_url(@course, :context_assignment_submission_url, @assignment, @student.id)
     end
 
     context "when the assignment enhancements flag is enabled" do
       before do
         @course.enable_feature!(:assignments_2_student)
-        Setting.set("assignments_2_observer_view", "true")
       end
 
       it "takes the submitting student to A2 flow" do
@@ -210,7 +211,7 @@ describe "/gradebooks/grade_summary" do
       @assignment.grade_student(@student, score: 10, grader: @teacher)
 
       @assignment_url = context_url(@course, :context_assignment_url, @assignment)
-      @speed_grader_url = speed_grader_course_gradebook_url({ course_id: @assignment.context_id, assignment_id: @assignment }.merge({ student_id: @student.id }))
+      @speed_grader_url = speed_grader_course_gradebook_url({ course_id: @assignment.context_id, assignment_id: @assignment }.merge({ student_id: @student.id, only_path: true }))
       @submission_details_url = context_url(@course, :context_assignment_submission_url, @assignment, @student.id)
     end
 
@@ -301,7 +302,7 @@ describe "/gradebooks/grade_summary" do
     let(:course) { Course.create! }
     let(:site_admin) { site_admin_user }
     let(:teacher) { course.enroll_teacher(User.create!, active_all: true).user }
-    let(:student) { student_in_course(course: course, active_all: true).user }
+    let(:student) { student_in_course(course:, active_all: true).user }
     let(:attachment) { attachment_model(context: student, content_type: "text/plain") }
     let(:state) { "acceptable" }
 
@@ -344,7 +345,7 @@ describe "/gradebooks/grade_summary" do
             web_overlap: 5.0,
             publication_overlap: 0.0,
             student_overlap: 0.0,
-            state: state
+            state:
           }
         }
       end
@@ -553,7 +554,7 @@ describe "/gradebooks/grade_summary" do
 
       it "displays an updated plagiarism indicator when the assignment uses Turnitin" do
         allow(presenter).to receive(:turnitin_enabled?).and_return(true)
-        submission.update!(turnitin_data: turnitin_data)
+        submission.update!(turnitin_data:)
 
         render "gradebooks/grade_summary"
         expect(response).to have_tag(icon_css_query)
@@ -695,167 +696,231 @@ describe "/gradebooks/grade_summary" do
     end
   end
 
+  describe "display due value" do
+    let(:course) { Course.create! }
+    let(:student) { course.enroll_student(User.create!, active_all: true).user }
+    let(:teacher) { course.enroll_teacher(User.create!, active_all: true).user }
+    let(:presenter) { GradeSummaryPresenter.new(course, student, student.id) }
+
+    before do
+      view_context(course, student)
+      assign(:presenter, presenter)
+    end
+
+    it "due is not shown" do
+      render "gradebooks/grade_summary"
+      expect(response).not_to have_tag("#grades_summary .due")
+    end
+
+    it "renders \"due\" when there is a submission" do
+      assignment1 = course.assignments.create!(points_possible: 10)
+      assignment1.submit_homework student, submission_type: "online_text_entry", body: "hey"
+      assignment1.grade_student(student, score: 10, grader: teacher)
+
+      render "gradebooks/grade_summary"
+      expect(response).to have_tag("#grades_summary .due")
+    end
+  end
+
+  describe "display submitted value" do
+    let(:course) { Course.create! }
+    let(:student) { course.enroll_student(User.create!, active_all: true).user }
+    let(:teacher) { course.enroll_teacher(User.create!, active_all: true).user }
+    let(:presenter) { GradeSummaryPresenter.new(course, student, student.id) }
+
+    before do
+      view_context(course, student)
+      assign(:presenter, presenter)
+    end
+
+    it "submitted is not shown" do
+      render "gradebooks/grade_summary"
+      expect(response).not_to have_tag("#grades_summary .submitted")
+    end
+
+    it "renders \"submitted\" when there is a submission" do
+      assignment1 = course.assignments.create!(points_possible: 10)
+      assignment1.submit_homework student, submission_type: "online_text_entry", body: "hey"
+      assignment1.grade_student(student, score: 10, grader: teacher)
+
+      render "gradebooks/grade_summary"
+      expect(response).to have_tag("#grades_summary .submitted")
+    end
+  end
+
   describe "display out of value" do
     let(:course) { Course.create! }
     let(:student) { course.enroll_student(User.create!, active_all: true).user }
     let(:teacher) { course.enroll_teacher(User.create!, active_all: true).user }
+    let(:presenter) { GradeSummaryPresenter.new(course, student, student.id) }
 
     before do
       view_context(course, student)
-      assign(:presenter, GradeSummaryPresenter.new(course, student, nil))
+      assign(:presenter, presenter)
     end
 
-    context "when visibility feedback feature is enabled" do
-      before do
-        Account.site_admin.enable_feature!(:visibility_feedback_student_grades_page)
-      end
-
-      it "out of value is shown in the score column" do
-        render "gradebooks/grade_summary"
-        expect(response).not_to have_tag("#grades_summary th.possible")
-      end
-
-      it "renders \"out of\" with new format" do
-        assignment1 = course.assignments.create!(points_possible: 10)
-        assignment1.submit_homework student, submission_type: "online_text_entry", body: "hey"
-        assignment1.grade_student(student, score: 10, grader: teacher)
-
-        render "gradebooks/grade_summary"
-        expect(response).to match(%r{10\s+</span>\s+<span>/ 10</span>})
-      end
-
-      it "renders letter for letter graded" do
-        assignment1 = course.assignments.create!(grading_type: "letter_grade", points_possible: 10)
-        assignment1.submit_homework student, submission_type: "online_text_entry", body: "hey 1"
-        assignment1.grade_student(student, grade: "A", grader: teacher)
-
-        render "gradebooks/grade_summary"
-        expect(response).to match(%r{<span class="score_value">\s+10 \(A\)\s+</span>}mi)
-      end
-
-      it "renders percentage for \"percent\" grade" do
-        assignment1 = course.assignments.create!(grading_type: "percent", points_possible: 10)
-        assignment1.submit_homework student, submission_type: "online_text_entry", body: "hey 2"
-        assignment1.grade_student(student, grade: "90%", grader: teacher)
-
-        render "gradebooks/grade_summary"
-        expect(response).to match(%r{</span>\s+90%\s+</span>}mi)
-      end
+    it "out of value is shown in the score column" do
+      render "gradebooks/grade_summary"
+      expect(response).not_to have_tag("#grades_summary th.possible")
     end
 
-    context "when visibility feedback feature is disabled" do
-      it "out of value is shown in the 'out of' column" do
-        Account.site_admin.disable_feature!(:visibility_feedback_student_grades_page)
-        course.assignments.create!
-        render "gradebooks/grade_summary"
-        expect(response).to have_tag("#grades_summary th.possible")
-      end
+    it "renders \"out of\" with new format" do
+      assignment1 = course.assignments.create!(points_possible: 10)
+      assignment1.submit_homework student, submission_type: "online_text_entry", body: "hey"
+      assignment1.grade_student(student, score: 10, grader: teacher)
+
+      render "gradebooks/grade_summary"
+      expect(response).to match(%r{10\s+</span>\s+<span>/ 10</span>})
+    end
+
+    it "renders letter for letter graded" do
+      assignment1 = course.assignments.create!(grading_type: "letter_grade", points_possible: 10)
+      assignment1.submit_homework student, submission_type: "online_text_entry", body: "hey 1"
+      assignment1.grade_student(student, grade: "A", grader: teacher)
+
+      render "gradebooks/grade_summary"
+      expect(response).to match(%r{<span class="score_value">\s+10 \(A\)\s+</span>}mi)
+    end
+
+    it "renders percentage for \"percent\" grade" do
+      assignment1 = course.assignments.create!(grading_type: "percent", points_possible: 10)
+      assignment1.submit_homework student, submission_type: "online_text_entry", body: "hey 2"
+      assignment1.grade_student(student, grade: "90%", grader: teacher)
+
+      render "gradebooks/grade_summary"
+      expect(response).to match(%r{</span>\s+90%\s+</span>}mi)
+    end
+
+    it "renders out of for assignment groups" do
+      assignment1 = course.assignments.create!(grading_type: "percent", points_possible: 10)
+      assignment1.submit_homework student, submission_type: "online_text_entry", body: "hey 2"
+      assignment1.grade_student(student, grade: "90%", grader: teacher)
+
+      group = course.assignment_groups.create!(name: "a group")
+      group_assignment = OpenObject.build("assignment",
+                                          id: "group-#{group.id}",
+                                          rules: group.rules,
+                                          title: group.name,
+                                          points_possible: 10,
+                                          hard_coded: true,
+                                          special_class: "group_total",
+                                          assignment_group_id: group.id,
+                                          group_weight: group.group_weight,
+                                          asset_string: "group_total_#{group.id}")
+      presenter.groups_assignments = [group_assignment]
+
+      render "gradebooks/grade_summary"
+      expect(response).to match(%r{</span>\s+90%\s+</span>}mi)
+      expect(response).to have_tag("span.points_possible")
     end
   end
 
   describe "visibility feedback student grades page" do
-    let(:course) { Course.create! }
-    let(:teacher) { course.enroll_teacher(User.create!, active_all: true).user }
-    let(:student) { course.enroll_student(User.create!, active_all: true).user }
-    let(:assignment) { course.assignments.create!(peer_reviews: true) }
-    let(:submission) { assignment.submission_for_student(student) }
+    before(:once) do
+      course_with_student({ active_all: true })
+      @a1 = @course.assignments.create!(submission_types: "online_text_entry")
+      @a2 = @course.assignments.create!(submission_types: "online_text_entry")
 
-    before do
-      view_context(course, student)
-      assign(:presenter, GradeSummaryPresenter.new(course, student, nil))
+      view_context(@course, @student)
+      assign(:presenter, GradeSummaryPresenter.new(@course, @student, nil))
+
+      @a1.submit_homework(@student, body: "done!")
+      @a2.submit_homework(@student, body: "done!")
     end
 
-    context "when the feature flag is enabled" do
-      before do
-        Account.site_admin.enable_feature!(:visibility_feedback_student_grades_page)
-      end
+    it "has no blue dot if no comment, grade or rubric" do
+      render "gradebooks/grade_summary"
 
-      context "submission has unread comments" do
-        before do
-          submission.add_comment(author: teacher, comment: "hello")
-        end
+      expect(response).not_to have_tag("#submission_#{@a1.id} td .grade_dot")
+      expect(response).not_to have_tag("#submission_#{@a1.id} td .comment_dot")
+      expect(response).not_to have_tag("#submission_#{@a1.id} td .rubric_dot")
+    end
 
-        it "displays the region surrounding the icon" do
-          render "gradebooks/grade_summary"
-          expect(response).to have_tag("#submission_#{submission.assignment_id} .visibility_feedback_ff .toggle_comments_link")
-        end
+    it "has a blue dot on unread grade" do
+      @a1.grade_student(@student, grader: @teacher, grade: 1)
 
-        it "displays the number of comments" do
-          render "gradebooks/grade_summary"
-          expect(response).to have_tag("#submission_#{submission.assignment_id} .visibility_feedback_ff .comment_count")
-        end
+      render "gradebooks/grade_summary"
 
-        it "displays the blue dot" do
-          render "gradebooks/grade_summary"
-          expect(response).to have_tag("#submission_#{submission.assignment_id} .visibility_feedback_ff .unread_comment_dot")
-        end
-      end
+      expect(response).to have_tag("#submission_#{@a1.id} td .grade_dot")
+    end
 
-      context "rubric comments" do
-        before do
-          rubric = rubric_model(
-            user: teacher,
-            context: course,
-            data: larger_rubric_data
-          )
-          assignment.create_rubric_association(
-            rubric: rubric,
-            purpose: "grading",
-            use_for_grading: true,
-            context: course
-          )
-        end
+    it "has a blue dot on unread grade and comments" do
+      @a1.grade_student(@student, grader: @teacher, grade: 1)
+      @a1.submissions.first.add_comment(author: @teacher, comment: "Good!")
 
-        context "when rubric has comments" do
-          before do
-            assignment.rubric_association.assess(
-              assessor: teacher,
-              user: student,
-              artifact: submission,
-              assessment: {
-                assessment_type: "grading",
-                criterion_crit1: { points: 2, comments: "Hmm" }
-              }
-            )
-            student.reload
-          end
+      render "gradebooks/grade_summary"
 
-          it "shows a blue dot" do
-            render "gradebooks/grade_summary"
-            expect(response).to have_tag("#submission_#{submission.assignment_id} .visibility_feedback_ff .unread_rubric_dot")
-          end
-        end
+      expect(response).to have_tag("#submission_#{@a1.id} td .grade_dot")
+      expect(response).to have_tag("#submission_#{@a1.id} td .comment_dot")
+    end
 
-        context "when rubric has no comment" do
-          before do
-            assignment.rubric_association.assess(
-              assessor: teacher,
-              user: student,
-              artifact: submission,
-              assessment: {
-                assessment_type: "grading",
-                criterion_crit1: { points: 2 }
-              }
-            )
-            student.reload
-          end
+    it "has a blue dot on unread grade, comments and rubric" do
+      submission = @a1.grade_student(@student, grader: @teacher, grade: 1).first
+      @a1.submissions.first.add_comment(author: @teacher, comment: "Good!")
 
-          it "does not show a blue dot" do
-            render "gradebooks/grade_summary"
-            expect(response).not_to have_tag("#submission_#{submission.assignment_id} .visibility_feedback_ff .unread_rubric_dot")
-          end
-        end
-      end
+      rubric_model
+      association = @rubric.associate_with(@a1, @course, purpose: "grading", use_for_grading: true)
+      association.assess({
+                           user: @student,
+                           assessor: @teacher,
+                           artifact: submission,
+                           assessment: {
+                             assessment_type: "grading",
+                             criterion_crit1: {
+                               points: 5,
+                               comments: "comments"
+                             }
+                           }
+                         })
+
+      render "gradebooks/grade_summary"
+
+      expect(response).to have_tag("#submission_#{@a1.id} td .grade_dot")
+      expect(response).to have_tag("#submission_#{@a1.id} td .comment_dot")
+      expect(response).to have_tag("#submission_#{@a1.id} td .rubric_dot")
+    end
+
+    it "doesn't have blue dot on grade after it has been read" do
+      submission = @a1.grade_student(@student, grader: @teacher, grade: 1).first
+
+      submission.mark_item_read("grade")
+
+      render "gradebooks/grade_summary"
+
+      expect(response).not_to have_tag("#submission_#{@a1.id} td .grade_dot")
+    end
+
+    it "has a blue dot on comment if only grade is marked as read" do
+      submission = @a1.grade_student(@student, grader: @teacher, grade: 1).first
+      submission.add_comment(author: @teacher, comment: "Good!")
+      submission.mark_item_read("grade")
+
+      render "gradebooks/grade_summary"
+
+      expect(response).not_to have_tag("#submission_#{@a1.id} td .grade_dot")
+      expect(response).to have_tag("#submission_#{@a1.id} td .comment_dot")
+    end
+
+    it "has a blue dot for unread grades on each submission" do
+      @a1.grade_student(@student, grader: @teacher, grade: 1)
+      @a2.grade_student(@student, grader: @teacher, grade: 1)
+
+      render "gradebooks/grade_summary"
+
+      expect(response).to have_tag("#submission_#{@a1.id} td .grade_dot")
+      expect(response).to have_tag("#submission_#{@a2.id} td .grade_dot")
     end
 
     context "when the feature flag is disabled" do
-      before do
-        Account.site_admin.disable_feature!(:visibility_feedback_student_grades_page)
-        submission.add_comment(author: teacher, comment: "hello")
+      before(:once) do
+        course_with_student({ active_all: true })
+
+        view_context(@course, @student)
+        assign(:presenter, GradeSummaryPresenter.new(@course, @student, nil))
       end
 
       it "does not have the visibility_feedback_ff class" do
-        expect(response).not_to have_tag("#submission_#{submission.assignment_id} .visibility_feedback_ff")
+        expect(response).not_to have_tag("#grades_summary .visibility_feedback_ff")
       end
     end
   end

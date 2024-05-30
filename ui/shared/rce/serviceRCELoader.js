@@ -17,12 +17,11 @@
  */
 
 import $ from 'jquery'
-import _ from 'underscore'
+import {reduce, pick} from 'lodash'
 import editorOptions from './editorOptions'
 import loadEventListeners from './loadEventListeners'
 import polyfill from './polyfill'
 import getRCSProps from './getRCSProps'
-import closedCaptionLanguages from '@canvas/util/closedCaptionLanguages'
 import shouldUseFeature, {Feature} from './shouldUseFeature'
 
 const RCELoader = {
@@ -122,7 +121,7 @@ const RCELoader = {
    */
   _attrsToMirror(textarea) {
     const validAttrs = ['name']
-    const attrs = _.reduce(
+    const attrs = reduce(
       textarea.attributes,
       (memo, attr) => {
         memo[attr.name] = attr.value
@@ -131,7 +130,7 @@ const RCELoader = {
       {}
     )
 
-    return _.pick(attrs, validAttrs)
+    return pick(attrs, validAttrs)
   },
 
   /**
@@ -149,30 +148,15 @@ const RCELoader = {
     if (height) {
       tinyMCEInitOptions.tinyOptions = {
         height,
-        ...(tinyMCEInitOptions.tinyOptions || {})
+        ...(tinyMCEInitOptions.tinyOptions || {}),
       }
     }
 
-    const myLanguage = ENV.LOCALE
-    const languages = Object.keys(closedCaptionLanguages)
-      .map(locale => {
-        return {id: locale, label: closedCaptionLanguages[locale]}
-      })
-      .sort((a, b) => {
-        if (a.id === myLanguage) {
-          return -1
-        } else if (b.id === myLanguage) {
-          return 1
-        } else {
-          return a.label.localeCompare(b.label, myLanguage)
-        }
-      })
-
     // TODO: let client pass autosave_enabled in as a prop from the outside
-    //       Assignmens2 student view is going to be doing their own autosave
+    //       Assignments2 student view is going to be doing their own autosave
     const autosave = {
       enabled: true,
-      maxAge: Number.isNaN(ENV.rce_auto_save_max_age_ms) ? 3600000 : ENV.rce_auto_save_max_age_ms
+      maxAge: Number.isNaN(ENV.rce_auto_save_max_age_ms) ? 3600000 : ENV.rce_auto_save_max_age_ms,
     }
 
     return {
@@ -185,16 +169,29 @@ const RCELoader = {
       textareaClassName: textarea.className,
       textareaId: textarea.id,
       trayProps: getRCSProps(),
-      languages,
       liveRegion: () => document.getElementById('flash_screenreader_holder'),
       ltiTools: window.INST?.editorButtons,
       autosave: tinyMCEInitOptions.autosave || autosave,
       instRecordDisabled: ENV.RICH_CONTENT_INST_RECORD_TAB_DISABLED,
       maxInitRenderedRCEs: tinyMCEInitOptions.maxInitRenderedRCEs,
       highContrastCSS: window.ENV?.url_for_high_contrast_tinymce_editor_css,
-      use_rce_icon_maker: shouldUseFeature(Feature.IconMaker, window.ENV)
+      use_rce_icon_maker: shouldUseFeature(Feature.IconMaker, window.ENV),
+      features: ENV?.FEATURES || {},
+      flashAlertTimeout: ENV?.flashAlertTimeout || 10000,
+      timezone: ENV?.TIMEZONE,
+      userCacheKey: ENV?.user_cache_key,
+      canvasOrigin: ENV?.DEEP_LINKING_POST_MESSAGE_ORIGIN || window.location?.origin || '',
+      resourceType: tinyMCEInitOptions.resourceType,
+      resourceId: tinyMCEInitOptions.resourceId,
+      externalToolsConfig: {
+        ltiIframeAllowances: window.ENV?.LTI_LAUNCH_FRAME_ALLOWANCES,
+        isA2StudentView: window.ENV?.a2_student_view,
+        maxMruTools: window.ENV?.MAX_MRU_LTI_TOOLS,
+        resourceSelectionUrlOverride:
+          $('#context_external_tool_resource_selection_url').attr('href') || null,
+      },
     }
-  }
+  },
 }
 
 export default RCELoader

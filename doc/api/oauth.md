@@ -73,8 +73,7 @@ including but not limited to:
 For testing your application before you've implemented OAuth, the
 simplest option is to generate an access token on your user's profile
 page. Note that asking any other user to manually generate a token and
-enter it into your application is a violation of Canvas' terms of
-service. Applications in use by multiple users <b>MUST</b> use OAuth to obtain
+enter it into your application is a violation of <a href="https://www.instructure.com/policies/api-policy">Canvas' API Policy</a>. Applications in use by multiple users <b>MUST</b> use OAuth to obtain
 tokens.
 
 To manually generate a token for testing:
@@ -226,7 +225,7 @@ with the following parameters:
     </tr>
     <tr>
       <td class="mono">replace_tokens</td>
-      <td>(optional) If this option is provided, existing access tokens issued for this developer key/secret will be destroyed and replaced with the new token that is returned from this request</td>
+      <td>(optional) If this option is set to `1`, existing access tokens issued for this developer key/secret will be destroyed and replaced with the new token that is returned from this request</td>
     </tr>
   </tbody>
 </table>

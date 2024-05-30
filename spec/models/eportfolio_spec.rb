@@ -48,7 +48,7 @@ describe Eportfolio do
 
       it "is invalid when spam_status is not nil, 'marked_as_spam', 'marked_as_safe', or 'flagged_as_possible_spam'" do
         @eportfolio.spam_status = "a_new_status"
-        expect(@eportfolio).to be_invalid
+        expect(@eportfolio).not_to be_valid
       end
     end
   end
@@ -76,7 +76,10 @@ describe Eportfolio do
         account = Account.default
         account.settings[:enable_eportfolios] = false
         account.save!
+        Account.current_domain_root_account = account
         expect(@eportfolio.grants_right?(@student, :update)).to be false
+      ensure
+        Account.current_domain_root_account = nil
       end
 
       it "cannot update if the eportfolio is flagged as possible spam" do
@@ -110,7 +113,10 @@ describe Eportfolio do
         account = Account.default
         account.settings[:enable_eportfolios] = false
         account.save!
+        Account.current_domain_root_account = account
         expect(@eportfolio.grants_right?(@student, :manage)).to be false
+      ensure
+        Account.current_domain_root_account = nil
       end
 
       it "cannot manage if the eportfolio is flagged as possible spam" do
@@ -190,7 +196,10 @@ describe Eportfolio do
         account = Account.default
         account.settings[:enable_eportfolios] = false
         account.save!
+        Account.current_domain_root_account = account
         expect(Eportfolio.new.grants_right?(@student, :create)).to be false
+      ensure
+        Account.current_domain_root_account = nil
       end
 
       it "cannot create if the user has another eportfolio flagged as possible spam" do
@@ -299,7 +308,7 @@ describe Eportfolio do
   describe "callbacks" do
     describe "#check_for_spam" do
       let(:user) { User.create! }
-      let(:eportfolio) { Eportfolio.create!(name: "my file", user: user) }
+      let(:eportfolio) { Eportfolio.create!(name: "my file", user:) }
       let(:spam_status) { eportfolio.reload.spam_status }
 
       context "when the setting has a value" do

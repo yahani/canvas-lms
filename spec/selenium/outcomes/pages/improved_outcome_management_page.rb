@@ -92,7 +92,7 @@ module ImprovedOutcomeManagementPage
   def select_nth_outcome_for_bulk_action(index)
     # This button is obscured by an overlaying element, so we use force_click, which just
     # takes a jquery selector
-    "input[type='checkbox']:eq(#{index})"
+    "label[for='Checkbox_#{index}']"
   end
 
   def tree_browser_root_group
@@ -217,6 +217,54 @@ module ImprovedOutcomeManagementPage
   def calculation_method_input
     f("input[data-testid='calculation-method-input']")
   end
+
+  def alignments_tab
+    f("div[id='tab-alignments']")
+  end
+
+  def alignment_summary_outcomes_list
+    ff("div[data-testid='alignment-outcome-item']")
+  end
+
+  def alignment_summary_expand_outcome_description_button(index)
+    ff("button[data-testid='alignment-summary-outcome-expand-toggle']")[index]
+  end
+
+  def alignment_summary_outcome_alignments(index)
+    ff("span[data-testid='outcome-alignments']")[index].text
+  end
+
+  def alignment_summary_outcome_alignments_list
+    ff("div[data-testid='outcome-alignments-list']")
+  end
+
+  def alignment_summary_filter_all_input
+    f("input[value^='All']")
+  end
+
+  def alignment_summary_filter_with_alignments_input
+    f("input[value^='With']")
+  end
+
+  def alignment_summary_alignment_stat_name(index)
+    ff("span[data-testid='outcome-alignment-stat-name']")[index].text
+  end
+
+  def alignment_summary_alignment_stat_percent(index)
+    ff("span[data-testid='outcome-alignment-stat-percent']")[index].text
+  end
+
+  def alignment_summary_alignment_stat_type(index)
+    ff("span[data-testid='outcome-alignment-stat-type']")[index].text
+  end
+
+  def alignment_summary_alignment_stat_average(index)
+    ff("span[data-testid='outcome-alignment-stat-average']")[index].text
+  end
+
+  def alignment_summary_alignment_stat_description(index)
+    ff("span[data-testid='outcome-alignment-stat-description']")[index].text
+  end
   # ---------------------- Actions -----------------------
 
   def goto_improved_state_outcomes(outcome_url = "/accounts/self/outcomes")
@@ -224,8 +272,11 @@ module ImprovedOutcomeManagementPage
   end
 
   def enable_improved_outcomes_management(account)
-    account.enable_feature!(:account_level_mastery_scales)
     account.enable_feature!(:improved_outcomes_management)
+  end
+
+  def enable_account_level_mastery_scales(account)
+    account.enable_feature!(:account_level_mastery_scales)
   end
 
   def enable_friendly_description
@@ -323,7 +374,7 @@ module ImprovedOutcomeManagementPage
   end
 
   def select_outcome_group_with_text(text, timeout = 2)
-    wait_for(method: nil, timeout: timeout) { tree_browser.present? }
+    wait_for(method: nil, timeout:) { tree_browser.present? }
     tree_browser_outcome_groups.find { |group| group.text.split("\n")[0] == text }
   end
 
@@ -352,5 +403,9 @@ module ImprovedOutcomeManagementPage
   def delete_nth_individual_outcome_rating(index = nil)
     nth_individual_rating_delete_button(index).click
     confirm_delete_individual_rating_button.click
+  end
+
+  def click_alignments_tab
+    alignments_tab.click
   end
 end

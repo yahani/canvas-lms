@@ -102,6 +102,31 @@ describe "links", priority: "2" do
     end
   end
 
+  describe "account links" do
+    before :once do
+      @account = Account.default
+      account_admin_user(account: @account, user: @user)
+    end
+
+    before do
+      user_session(@user)
+    end
+
+    it "shows new pill on new tabs for user until the feature is visited" do
+      get "/accounts/#{@account.id}"
+      account_calendars_link = f("#section-tabs a.account_calendars")
+      expect(account_calendars_link).to include_text "New"
+      expect(f("#section-tabs a.courses")).not_to include_text "New"
+      expect(f("#section-tabs a.permissions")).not_to include_text "New"
+      expect(@user.reload.get_preference(:visited_tabs)).to be_nil
+
+      account_calendars_link.click
+      account_calendars_link = f("#section-tabs a.account_calendars")
+      expect(account_calendars_link).not_to include_text "New"
+      expect(@user.reload.get_preference(:visited_tabs)).to eq ["account_calendars"]
+    end
+  end
+
   describe "dashboard links" do
     before do
       get "/"
@@ -138,7 +163,7 @@ describe "links", priority: "2" do
 
       it "navigates to main content from skip_to_link" do
         driver.action.send_keys(:tab).perform
-        expect(check_element_has_focus(f("a#skip_navigation_link"))).to eq(true)
+        expect(check_element_has_focus(f("a#skip_navigation_link"))).to be(true)
         driver.action.send_keys(:enter).perform
         expect(driver.switch_to.active_element.attribute("id")).to eq("content")
       end

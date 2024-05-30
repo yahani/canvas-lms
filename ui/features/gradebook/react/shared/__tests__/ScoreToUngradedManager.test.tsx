@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2022 - present Instructure, Inc.
  *
@@ -23,8 +24,8 @@ import axios from '@canvas/axios'
 
 const monitoringBase = ScoreToUngradedManager.DEFAULT_MONITORING_BASE_URL
 const workingProcess = {
-  progressId: 1,
-  workflowState: 'running'
+  progressId: '1',
+  workflowState: 'running',
 }
 
 describe('ScoreToUngradedManager', () => {
@@ -43,7 +44,7 @@ describe('ScoreToUngradedManager', () => {
       ;['completed', 'failed'].forEach(workflowState => {
         const existingProcess = {
           progressId: workingProcess.progressId,
-          workflowState
+          workflowState,
         }
 
         const manager = new ScoreToUngradedManager(existingProcess)
@@ -52,7 +53,7 @@ describe('ScoreToUngradedManager', () => {
       ;['discombobulated', undefined].forEach(workflowState => {
         const existingProcess = {
           progressId: workingProcess.progressId,
-          workflowState
+          workflowState,
         }
 
         const manager = new ScoreToUngradedManager(existingProcess)
@@ -92,6 +93,7 @@ describe('ScoreToUngradedManager', () => {
     beforeEach(() => {
       spy = jest
         .spyOn(GradebookApi, 'applyScoreToUngradedSubmissions')
+        // @ts-expect-error
         .mockResolvedValue({data: {id: 1, workflow_state: 'running'}})
     })
 
@@ -111,7 +113,7 @@ describe('ScoreToUngradedManager', () => {
     it('sets a new existing progress and returns a fulfilled promise', async () => {
       const expectedProgress = {
         progressId: 1,
-        workflowState: 'running'
+        workflowState: 'running',
       }
 
       const manager = new ScoreToUngradedManager()
@@ -144,8 +146,8 @@ describe('ScoreToUngradedManager', () => {
       jest.spyOn(axios, 'get').mockResolvedValue({
         data: {
           workflow_state: 'failed',
-          message: 'Arbitrary failure'
-        }
+          message: 'Arbitrary failure',
+        },
       })
 
       try {
@@ -161,8 +163,8 @@ describe('ScoreToUngradedManager', () => {
       jest.spyOn(axios, 'get').mockResolvedValue({
         data: {
           workflow_state: 'discombobulated',
-          message: 'Pattern buffer degradation'
-        }
+          message: 'Pattern buffer degradation',
+        },
       })
 
       try {
@@ -177,8 +179,8 @@ describe('ScoreToUngradedManager', () => {
 
       jest.spyOn(axios, 'get').mockResolvedValue({
         data: {
-          workflow_state: 'completed'
-        }
+          workflow_state: 'completed',
+        },
       })
 
       await manager.startProcess(undefined, () => [])

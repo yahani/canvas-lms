@@ -30,7 +30,7 @@ module CC::Importer::Standard
     include QuizConverter
 
     MANIFEST_FILE = "imsmanifest.xml"
-    SUPPORTED_TYPES = /assessment\z|\Aassignment|\Aimswl|\Aimsbasiclti|\Aimsdt|webcontent|learning-application-resource\z/.freeze
+    SUPPORTED_TYPES = /assessment\z|\Aassignment|\Aimswl|\Aimsbasiclti|\Aimsdt|webcontent|learning-application-resource\z/
 
     attr_accessor :resources
 
@@ -101,13 +101,20 @@ module CC::Importer::Standard
                @file_path_migration_id[path.gsub(%r{\$[^$]*\$|\.\./}, "").sub(WEB_RESOURCES_FOLDER + "/", "")]
 
       unless mig_id
-        full_path = @package_root.item_path(path)
+        full_path = begin
+          @package_root.item_path(path)
+        rescue ArgumentError => e
+          ::Canvas::Errors.capture_exception(:content_imports, e)
+          nil
+        end
 
-        if File.exist?(full_path)
+        if full_path && File.exist?(full_path)
           # try to make it work even if the file wasn't technically included in the manifest :/
           mig_id = Digest::MD5.hexdigest(path)
-          file = { path_name: path, migration_id: mig_id,
-                   file_name: File.basename(path), type: "FILE_TYPE" }
+          file = { path_name: path,
+                   migration_id: mig_id,
+                   file_name: File.basename(path),
+                   type: "FILE_TYPE" }
           add_course_file(file)
         end
       end
@@ -116,9 +123,7 @@ module CC::Importer::Standard
     end
 
     def get_canvas_att_replacement_url(path, resource_dir = nil)
-      if path.start_with?("../") && (url = get_canvas_att_replacement_url(path.sub("../", ""), resource_dir))
-        return url
-      end
+      return get_canvas_att_replacement_url(path.sub("../", ""), resource_dir) if path.start_with?("../")
 
       path = path[1..] if path.start_with?("/")
       mig_id = nil
@@ -155,7 +160,7 @@ module CC::Importer::Standard
       add_file(file)
     end
 
-    FILEBASE_REGEX = /\$IMS[-_]CC[-_]FILEBASE\$/.freeze
+    FILEBASE_REGEX = /\$IMS[-_]CC[-_]FILEBASE\$/
     def replace_urls(html, resource_dir = nil)
       return "" if html.blank?
 
@@ -165,20 +170,20 @@ module CC::Importer::Standard
         attrs.each do |attr|
           next unless node[attr]
 
-          val = URI.unescape(node[attr])
+          val = URI::DEFAULT_PARSER.unescape(node[attr])
           begin
             if FILEBASE_REGEX.match?(val)
               val.gsub!(FILEBASE_REGEX, "")
               if (new_url = get_canvas_att_replacement_url(val, resource_dir))
-                node[attr] = URI.escape(new_url)
+                node[attr] = URI::DEFAULT_PARSER.escape(new_url)
 
                 if node.text.strip.blank? && !node.at_css("img") # add in the filename if the link is blank and doesn't have something visible like an image
                   node.inner_html = HtmlTextHelper.escape_html(File.basename(val)) + (node.inner_html || "")
                 end
               end
-            elsif ImportedHtmlConverter.relative_url?(val) &&
+            elsif CanvasLinkMigrator.relative_url?(val) &&
                   (new_url = get_canvas_att_replacement_url(val))
-              node[attr] = URI.escape(new_url)
+              node[attr] = URI::DEFAULT_PARSER.escape(new_url)
             end
           rescue URI::Error
             Rails.logger.warn "attempting to translate invalid url: #{val}"

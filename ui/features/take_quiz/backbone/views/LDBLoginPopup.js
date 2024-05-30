@@ -15,12 +15,12 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
-import _ from 'underscore'
+import _, {map, isBoolean, extend} from 'lodash'
 import Backbone from '@canvas/backbone'
 import $ from 'jquery'
 import Markup from '../../jst/LDBLoginPopup.handlebars'
-import htmlEscape from 'html-escape'
-import '@canvas/util/toJSON'
+import htmlEscape from '@instructure/html-escape'
+import '@canvas/jquery/jquery.toJSON'
 
 // Consumes an event and stops it from propagating.
 function consume(e) {
@@ -61,8 +61,8 @@ export default class LDBLoginPopup extends Backbone.View {
         toolbar: false,
         fullscreen: false,
         width: 480,
-        height: 480
-      }
+        height: 480,
+      },
     }
   }
 
@@ -95,10 +95,10 @@ export default class LDBLoginPopup extends Backbone.View {
     // captured.
     let $inputSink
 
-    _.extend(this.options, options)
+    extend(this.options, options)
 
-    const windowOptions = _.map(this.options.window, (v, k) =>
-      [k, _.isBoolean(v) ? (v ? 'yes' : 'no') : v].join('=')
+    const windowOptions = map(this.options.window, (v, k) =>
+      [k, isBoolean(v) ? (v ? 'yes' : 'no') : v].join('=')
     ).join(',')
 
     // @method on
@@ -123,6 +123,7 @@ export default class LDBLoginPopup extends Backbone.View {
     function isStuck() {
       if (whnd) {
         try {
+          // eslint-disable-next-line babel/no-unused-expressions
           whnd.document
         } catch (e) {
           if (/Permission/.test(e.message)) return true
@@ -169,17 +170,16 @@ export default class LDBLoginPopup extends Backbone.View {
     // Lift the restriction on user input in the background.
     //
     // See #reset()
-    var unlockBackground = () => $inputSink.detach()
+    const unlockBackground = () => $inputSink.detach()
 
     const login = e => {
       const consumptionRc = consume(e)
 
-      const credentials = $(e.target)
-        .closest('form')
-        .toJSON()
+      const credentials = $(e.target).closest('form').toJSON()
 
       const authenticate = this.authenticate(credentials)
 
+      // eslint-disable-next-line promise/catch-or-return
       authenticate.then(rc => {
         $delegate.triggerHandler('login_success')
         whnd.close()
@@ -247,16 +247,14 @@ export default class LDBLoginPopup extends Backbone.View {
       .compact()
       .value()
 
-    $inputSink = $('<div />')
-      .on('click', bringToFront)
-      .css({
-        'z-index': 1000,
-        position: 'fixed',
-        left: 0,
-        right: 0,
-        top: 0,
-        bottom: 0
-      })
+    $inputSink = $('<div />').on('click', bringToFront).css({
+      'z-index': 1000,
+      position: 'fixed',
+      left: 0,
+      right: 0,
+      top: 0,
+      bottom: 0,
+    })
 
     if (this.options.sticky) {
       let relaunch
@@ -265,7 +263,7 @@ export default class LDBLoginPopup extends Backbone.View {
 
       this.on('login_success.sticky', () => (relaunch = false))
 
-      return this.on('close.sticky', function() {
+      return this.on('close.sticky', function () {
         if (relaunch) {
           setTimeout(this.exec, 1)
         }
@@ -288,8 +286,8 @@ export default class LDBLoginPopup extends Backbone.View {
       global: false,
       headers: {
         'Content-Type': 'application/json',
-        Accept: 'application/json'
-      }
+        Accept: 'application/json',
+      },
     })
   }
 }

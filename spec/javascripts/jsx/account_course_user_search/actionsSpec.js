@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import actions from 'ui/features/account_course_user_search/react/actions/UserActions.js'
+import actions from 'ui/features/account_course_user_search/react/actions/UserActions'
 
 const STUDENTS = [
   {
@@ -31,7 +31,7 @@ const STUDENTS = [
     login_id: 'student57',
     email: 'brotherhood@example.com',
     last_login: null,
-    time_zone: 'Mountain Time (US & Canada)'
+    time_zone: 'Mountain Time (US & Canada)',
   },
   {
     id: '44',
@@ -45,7 +45,7 @@ const STUDENTS = [
     login_id: 'student55',
     email: 'brotherhood@example.com',
     last_login: null,
-    time_zone: 'Mountain Time (US & Canada)'
+    time_zone: 'Mountain Time (US & Canada)',
   },
   {
     id: '52',
@@ -59,8 +59,8 @@ const STUDENTS = [
     login_id: 'student63',
     email: 'marauders@example.com',
     last_login: null,
-    time_zone: 'Mountain Time (US & Canada)'
-  }
+    time_zone: 'Mountain Time (US & Canada)',
+  },
 ]
 
 QUnit.module('Account Course User Search Actions')
@@ -86,11 +86,10 @@ test('loadingUsers', () => {
   equal(message.type, 'LOADING_USERS', 'it returns the proper type')
 })
 
-test('applySearchFilter', assert => {
-  const start = assert.async()
+test('applySearchFilter', () => {
   let count = 3
   const done = () => {
-    --count || start()
+    --count
   }
 
   const fakeDispatcherSearchLengthOkay = response => {
@@ -107,9 +106,9 @@ test('applySearchFilter', assert => {
   const fakeGetStateSearchLengthOkay = () => ({
     userList: {
       searchFilter: {
-        search_term: 'abcd'
-      }
-    }
+        search_term: 'abcd',
+      },
+    },
   })
 
   const fakeDispatcherSearchLengthTooShort = response => {
@@ -125,15 +124,15 @@ test('applySearchFilter', assert => {
   const fakeGetStateSearchLengthTooShort = () => ({
     userList: {
       searchFilter: {
-        search_term: 'a'
-      }
-    }
+        search_term: 'a',
+      },
+    },
   })
 
   const fakeUserStore = {
     load() {
       return Promise.resolve([STUDENTS[0]])
-    }
+    },
   }
 
   const actionThunk = actions.applySearchFilter(4, fakeUserStore)

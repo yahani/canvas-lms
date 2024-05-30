@@ -69,13 +69,13 @@ describe LearningOutcomeResult do
     let_once(:assessed_at) { 2.weeks.ago }
 
     it "returns #submitted_at when present" do
-      learning_outcome_result.update(submitted_at: submitted_at)
+      learning_outcome_result.update(submitted_at:)
       expect(learning_outcome_result.submitted_or_assessed_at).to eq(submitted_at)
     end
 
     it "returns #assessed_at when #submitted_at is not present" do
       learning_outcome_result.assign_attributes({
-                                                  assessed_at: assessed_at,
+                                                  assessed_at:,
                                                   submitted_at: nil
                                                 })
       expect(learning_outcome_result.submitted_or_assessed_at).to eq(assessed_at)
@@ -187,7 +187,7 @@ describe LearningOutcomeResult do
     it "returns accurate results" do
       points_possible = 5.5
       allow(learning_outcome_result.learning_outcome).to receive_messages({
-                                                                            points_possible: points_possible, mastery_points: 3.5
+                                                                            points_possible:, mastery_points: 3.5
                                                                           })
       allow(learning_outcome_result.alignment).to receive_messages(mastery_score: 0.6)
       learning_outcome_result.update(score: 6)
@@ -379,7 +379,173 @@ describe LearningOutcomeResult do
     it "returns nil if no explicit assignment or artifact exists" do
       lor = create_and_associate_lor(nil)
 
-      expect(lor.assignment).to eq(nil)
+      expect(lor.assignment).to be_nil
+    end
+  end
+
+  describe "before create" do
+    describe "check_for_existing_result" do
+      before :once do
+        @assignment = assignment_model
+        @outcome = course.created_learning_outcomes.create!(title: "outcome")
+        @lor = LearningOutcomeResult.create(
+          alignment: ContentTag.create!({
+                                          title: "content",
+                                          context: course,
+                                          learning_outcome: @outcome,
+                                          content_id: @assignment.id
+                                        }),
+          user: student,
+          score: 2,
+          possible: 9,
+          learning_outcome_id: @outcome.id
+        )
+      end
+
+      it "deletes result if there is a previous one for the same user, learning outcome, and alignment" do
+        same_lor = @lor.clone
+        same_lor.save!
+        expect(LearningOutcomeResult.find(@lor.id).workflow_state).to eq("active")
+        expect(LearningOutcomeResult.find(same_lor.id).workflow_state).to eq("deleted")
+      end
+
+      it "updates score and possible if there is a previous one for the same user, learning outcome, and alignment" do
+        same_lor = @lor.clone
+        same_lor.score = 3
+        same_lor.possible = 10
+        same_lor.save!
+        @lor.reload
+        expect(@lor.score).to eq(3)
+        expect(@lor.possible).to eq(10)
+      end
+
+      it "creates a LearningOutcomeResult for the same user and learning outcome if there is none for the alignment" do
+        assignment_2 = assignment_model
+        new_lor = LearningOutcomeResult.create(
+          alignment: ContentTag.create!({
+                                          title: "content",
+                                          context: course,
+                                          learning_outcome: @outcome,
+                                          content_id: assignment_2.id
+                                        }),
+          user: student,
+          score: 2,
+          learning_outcome_id: @outcome.id
+        )
+        expect(LearningOutcomeResult.find(@lor.id).workflow_state).to eq("active")
+        expect(LearningOutcomeResult.find(new_lor.id).workflow_state).to eq("active")
+      end
+
+      describe "for QuestionBanks with questions used in multiple quizzes" do
+        before :once do
+          assessment_question_bank_with_questions
+          @outcome.align(@bank, course, mastery_score: 0.7)
+          @quiz1 = course.quizzes.create!(title: "new quiz", shuffle_answers: true, quiz_type: "assignment", scoring_policy: "keep_highest")
+          @quiz1.add_assessment_questions [@q1]
+          @quiz2 = course.quizzes.create!(title: "new quiz 2", shuffle_answers: true, quiz_type: "assignment", scoring_policy: "keep_highest")
+          @quiz2.add_assessment_questions [@q1]
+          @qb_alignment = ContentTag.find_by(content_type: "AssessmentQuestionBank")
+        end
+
+        it "creates a LearningOutcomeResult for the same user and learning outcome for different quizzes" do
+          lor1 = LearningOutcomeResult.create(
+            alignment: @qb_alignment,
+            user: student,
+            score: 2,
+            learning_outcome_id: @outcome.id,
+            associated_asset_id: @quiz1.id,
+            associated_asset_type: "Quizzes::Quiz"
+          )
+          lor2 = LearningOutcomeResult.create(
+            alignment: @qb_alignment,
+            user: student,
+            score: 2,
+            learning_outcome_id: @outcome.id,
+            associated_asset_id: @quiz2.id,
+            associated_asset_type: "Quizzes::Quiz"
+          )
+          expect(LearningOutcomeResult.find(lor1.id).workflow_state).to eq("active")
+          expect(LearningOutcomeResult.find(lor2.id).workflow_state).to eq("active")
+        end
+
+        it "deletes result if there is a previous one for the same user, learning outcome, and associated asset" do
+          lor1 = LearningOutcomeResult.create(
+            alignment: @qb_alignment,
+            user: student,
+            score: 2,
+            learning_outcome_id: @outcome.id,
+            associated_asset_id: @quiz1.id,
+            associated_asset_type: "Quizzes::Quiz"
+          )
+          same_lor = lor1.clone
+          same_lor.save!
+          expect(LearningOutcomeResult.find(lor1.id).workflow_state).to eq("active")
+          expect(LearningOutcomeResult.find(same_lor.id).workflow_state).to eq("deleted")
+        end
+
+        it "updates score and possible if there is a previous one for the same user, learning outcome, and associated asset" do
+          lor1 = LearningOutcomeResult.create(
+            alignment: @qb_alignment,
+            user: student,
+            score: 2,
+            possible: 9,
+            learning_outcome_id: @outcome.id,
+            associated_asset_id: @quiz1.id,
+            associated_asset_type: "Quizzes::Quiz"
+          )
+          same_lor = lor1.clone
+          same_lor.score = 3
+          same_lor.possible = 10
+          same_lor.save!
+          lor1.reload
+          expect(lor1.score).to eq(3)
+          expect(lor1.possible).to eq(10)
+        end
+      end
+
+      describe "for multiple QuestionBanks with questions used in same quizzes" do
+        def create_bank(title, course, quiz, outcome)
+          bank = course.assessment_question_banks.create!(title:)
+          q = bank.assessment_questions.create!(
+            question_data: {
+              "name" => "#{title} question 1",
+              "points_possible" => 10,
+              "answers" => [{ "id" => 1 }, { "id" => 2 }]
+            }
+          )
+          outcome.align(bank, course, mastery_score: 0.7)
+          quiz.add_assessment_questions [q]
+          tag = ContentTag.find_by(content_type: "AssessmentQuestionBank", content_id: bank.id)
+          [bank, tag]
+        end
+
+        before :once do
+          @quiz = course.quizzes.create!(title: "new quiz", shuffle_answers: true, quiz_type: "assignment", scoring_policy: "keep_highest")
+          @bank1, @qb_alignment1 = create_bank("Test Bank1", course, @quiz, @outcome)
+          @bank2, @qb_alignment2 = create_bank("Test Bank2", course, @quiz, @outcome)
+        end
+
+        it "store one result per alignment" do
+          lor1 = LearningOutcomeResult.create(
+            alignment: @qb_alignment1,
+            user: student,
+            score: 2,
+            learning_outcome_id: @outcome.id,
+            associated_asset_id: @quiz.id,
+            associated_asset_type: "Quizzes::Quiz"
+          )
+          lor2 = LearningOutcomeResult.create(
+            alignment: @qb_alignment2,
+            user: student,
+            score: 2,
+            learning_outcome_id: @outcome.id,
+            associated_asset_id: @quiz.id,
+            associated_asset_type: "Quizzes::Quiz"
+          )
+          expect(LearningOutcomeResult.find(lor1.id).workflow_state).to eq("active")
+          expect(LearningOutcomeResult.find(lor2.id).workflow_state).to eq("active")
+        end
+      end
     end
   end
 
@@ -415,7 +581,7 @@ describe LearningOutcomeResult do
       }
 
       attributes.each do |method_name, value|
-        learning_outcome_result.send("#{method_name}=".to_sym, value)
+        learning_outcome_result.send(:"#{method_name}=", value)
       end
       learning_outcome_result.save!
 

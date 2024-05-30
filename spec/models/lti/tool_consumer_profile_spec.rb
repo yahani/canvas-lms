@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_dependency "lti/tool_consumer_profile"
-
 module Lti
   describe ToolConsumerProfile do
     describe ".cached_find_by_developer_key" do
@@ -69,7 +67,7 @@ module Lti
           tcp = ToolConsumerProfile.cached_find_by_developer_key(dev_key.id)
           tcp.services = ToolConsumerProfile::RESTRICTED_SERVICES
           tcp.save!
-          expect(MultiCache.fetch(ToolConsumerProfile.cache_key(dev_key.id))).to eq nil
+          expect(MultiCache.fetch(ToolConsumerProfile.cache_key(dev_key.id))).to be_nil
         end
       end
     end

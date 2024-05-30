@@ -18,11 +18,9 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_dependency "importers/attachment_importer"
-
 module Importers
   describe AttachmentImporter do
-    describe "#process_migration", no_retry: true do
+    describe "#process_migration", :no_retry do
       let(:course) { ::Course.new }
       let(:course_id) { 1 }
       let(:migration) { ContentMigration.new(context: course) }
@@ -48,7 +46,7 @@ module Importers
           "file_map" => {
             "a" => {
               id: attachment_id,
-              migration_id: migration_id
+              migration_id:
             }
           }
         }
@@ -72,7 +70,7 @@ module Importers
           "file_map" => {
             "a" => {
               id: attachment_id,
-              migration_id: migration_id,
+              migration_id:,
               files_to_import: {
                 migration_id => true
               }
@@ -92,13 +90,13 @@ module Importers
           "file_map" => {
             "a" => {
               id: attachment_id,
-              migration_id: migration_id,
+              migration_id:,
             }
           }
         }
 
         expect(::Attachment).to receive(:where).with(context_type: "Course", context_id: course, id: attachment_id).and_return(double(first: nil))
-        expect(::Attachment).to receive(:where).with(context_type: "Course", context_id: course, migration_id: migration_id).and_return(double(first: attachment))
+        expect(::Attachment).to receive(:where).with(context_type: "Course", context_id: course, migration_id:).and_return(double(first: attachment))
         expect(migration).to receive(:import_object?).with("attachments", migration_id).and_return(true)
         expect(attachment).to receive(:save_without_broadcasting!)
 
@@ -110,14 +108,14 @@ module Importers
           "file_map" => {
             "a" => {
               id: attachment_id,
-              migration_id: migration_id,
+              migration_id:,
               path_name: "path/to/file"
             }
           }
         }
 
         expect(::Attachment).to receive(:where).with(context_type: "Course", context_id: course, id: attachment_id).and_return(double(first: nil))
-        expect(::Attachment).to receive(:where).with(context_type: "Course", context_id: course, migration_id: migration_id).and_return(double(first: nil))
+        expect(::Attachment).to receive(:where).with(context_type: "Course", context_id: course, migration_id:).and_return(double(first: nil))
         expect(::Attachment).to receive(:find_from_path).with("path/to/file", course).and_return(attachment)
         expect(migration).to receive(:import_object?).with("attachments", migration_id).and_return(true)
         expect(attachment).to receive(:save_without_broadcasting!)
@@ -130,7 +128,7 @@ module Importers
           "file_map" => {
             "a" => {
               id: attachment_id,
-              migration_id: migration_id
+              migration_id:
             }
           }
         }
@@ -149,7 +147,7 @@ module Importers
           "file_map" => {
             "a" => {
               id: attachment_id,
-              migration_id: migration_id,
+              migration_id:,
               files_to_import: {}
             }
           }
@@ -165,7 +163,7 @@ module Importers
           "file_map" => {
             "a" => {
               id: attachment_id,
-              migration_id: migration_id,
+              migration_id:,
               locked: true,
               hidden: true,
               display_name: "display name"
@@ -225,7 +223,7 @@ module Importers
             "file_map" => {
               "a" => {
                 id: attachment_id,
-                migration_id: migration_id,
+                migration_id:,
                 display_name: "foo"
               }
             }
@@ -243,7 +241,7 @@ module Importers
             "file_map" => {
               "a" => {
                 id: attachment_id,
-                migration_id: migration_id,
+                migration_id:,
                 path_name: "bar"
               }
             }

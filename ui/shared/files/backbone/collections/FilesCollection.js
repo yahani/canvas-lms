@@ -16,9 +16,11 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 //
 
-import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection.coffee'
-import _ from 'underscore'
-import File from '../models/File.coffee'
+import $ from 'jquery'
+import PaginatedCollection from '@canvas/pagination/backbone/collections/PaginatedCollection'
+import {extend as lodashExtend, each} from 'lodash'
+import deparam from 'deparam'
+import File from '../models/File'
 
 export default class FilesCollection extends PaginatedCollection {
   initialize() {
@@ -27,21 +29,20 @@ export default class FilesCollection extends PaginatedCollection {
   }
 
   fetch(options = {}) {
-    let res
-    options.data = _.extend(
+    options.data = lodashExtend(
       {content_types: this.parentFolder != null ? this.parentFolder.contentTypes : undefined},
       options.data || {}
     )
     if (this.parentFolder != null ? this.parentFolder.useVerifiers : undefined) {
       options.data.use_verifiers = 1
     }
-    return (res = super.fetch(options))
+    return super.fetch(options)
   }
 
   parse(response) {
     if (response && this.parentFolder) {
       const previewUrl = this.parentFolder.previewUrl()
-      _.each(
+      each(
         response,
         file =>
           (file.rce_preview_url = previewUrl
@@ -52,19 +53,19 @@ export default class FilesCollection extends PaginatedCollection {
     return super.parse(...arguments)
   }
 
-  // TODO: This is duplicate code from Folder.coffee, can we DRY?
+  // TODO: This is duplicate code from Folder.js, can we DRY?
   setQueryStringParams() {
     const newParams = {
       include: ['user'],
       per_page: 20,
       sort: this.get('sort'),
-      order: this.get('order')
+      order: this.get('order'),
     }
 
     if (this.loadedAll) return
     const url = new URL(this.url)
     const params = deparam(url.search)
-    url.search = $.param(_.extend(params, newParams))
+    url.search = $.param(lodashExtend(params, newParams))
     this.url = url.toString()
     return this.reset()
   }

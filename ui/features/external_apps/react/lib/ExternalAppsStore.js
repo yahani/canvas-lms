@@ -18,7 +18,7 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import _ from 'underscore'
+import {map, sortBy, filter, forEach, find} from 'lodash'
 import createStore from './createStoreJestCompatible'
 import parseLinkHeader from 'link-header-parsing/parseLinkHeaderFromXHR'
 import '@canvas/rails-flash-notifications'
@@ -29,7 +29,7 @@ const PER_PAGE = 50
 
 const sort = function (tools) {
   if (tools) {
-    return _.sortBy(tools, tool => {
+    return sortBy(tools, tool => {
       if (tool.name) {
         return tool.name.toUpperCase()
       } else {
@@ -47,7 +47,7 @@ const defaultState = {
   isLoading: false, // flag to indicate fetch is in progress
   isLoaded: false, // flag to indicate data has loaded
   hasMore: false, // flag to indicate if there are more pages of external tools
-  lastReset: 0 // time of last reset. if a reset happens while waiting for an
+  lastReset: 0, // time of last reset. if a reset happens while waiting for an
   // AJAX request, we will ignore the response
 }
 
@@ -72,7 +72,7 @@ store.fetch = function () {
     type: 'GET',
     success: (tools, status, xhr) =>
       this._fetchSuccessHandler.call(self, tools, status, xhr, lastReset),
-    error: () => this._fetchErrorHandler.call(self, lastReset)
+    error: () => this._fetchErrorHandler.call(self, lastReset),
   })
 }
 
@@ -96,7 +96,7 @@ store.togglePlacements = function ({tool, placements, onSuccess = () => {}, onEr
   const data = {
     // include this always, since it will only change for
     // 1.1 tools toggling default placements
-    not_selectable: tool.not_selectable
+    not_selectable: tool.not_selectable,
   }
   for (const p of placements) {
     data[p] = {enabled: tool[p].enabled}
@@ -107,7 +107,7 @@ store.togglePlacements = function ({tool, placements, onSuccess = () => {}, onEr
     data,
     type: 'PUT',
     success: onSuccess.bind(this),
-    error: onError.bind(this)
+    error: onError.bind(this),
   })
 }
 
@@ -133,7 +133,7 @@ store.save = function (configurationType, data, success, error) {
     data: JSON.stringify({external_tool: params}),
     type: method,
     success: success.bind(this),
-    error: error.bind(this)
+    error: error.bind(this),
   })
 }
 
@@ -146,7 +146,7 @@ store.setAsFavorite = function (tool, isFavorite, success, error) {
     contentType: 'application/json',
     type: method,
     success: success.bind(this),
-    error: error.bind(this)
+    error: error.bind(this),
   })
 }
 
@@ -157,7 +157,7 @@ store.updateAccessToken = function (context_base_url, accessToken, success, erro
     type: 'PUT',
     data: {account: {settings: {app_center_access_token: accessToken}}},
     success: success.bind(this),
-    error: error.bind(this)
+    error: error.bind(this),
   })
 }
 
@@ -171,14 +171,14 @@ store.delete = function (tool) {
     url = '/api/v1' + ENV.CONTEXT_BASE_URL + '/tool_proxies/' + tool.app_id
   }
 
-  const tools = _.filter(this.getState().externalTools, t => t.app_id !== tool.app_id)
+  const tools = filter(this.getState().externalTools, t => t.app_id !== tool.app_id)
   this.setState({externalTools: sort(tools)})
 
   $.ajax({
     url,
     type: 'DELETE',
     success: this._deleteSuccessHandler.bind(this),
-    error: this._deleteErrorHandler.bind(this)
+    error: this._deleteErrorHandler.bind(this),
   })
 }
 
@@ -197,7 +197,7 @@ function handleToolUpdate(tool, dismiss = false) {
     url,
     type: dismiss ? 'DELETE' : 'PUT',
     success: this._genericSuccessHandler.bind(this),
-    error: errorHandler.bind(this)
+    error: errorHandler.bind(this),
   })
 }
 
@@ -215,7 +215,7 @@ store.triggerUpdate = function () {
 
 store.activate = function (tool, success, error) {
   const url = '/api/v1' + ENV.CONTEXT_BASE_URL + '/tool_proxies/' + tool.app_id
-  const tools = _.map(this.getState().externalTools, t => {
+  const tools = map(this.getState().externalTools, t => {
     if (t.app_id === tool.app_id) {
       t.enabled = true
     }
@@ -228,12 +228,12 @@ store.activate = function (tool, success, error) {
     data: {workflow_state: 'active'},
     type: 'PUT',
     success: success.bind(this),
-    error: error.bind(this)
+    error: error.bind(this),
   })
 }
 
 store.deactivate = function (tool, success, error) {
-  const tools = _.map(this.getState().externalTools, t => {
+  const tools = map(this.getState().externalTools, t => {
     if (t.app_id === tool.app_id) {
       t.enabled = false
     }
@@ -246,12 +246,12 @@ store.deactivate = function (tool, success, error) {
     data: {workflow_state: 'disabled'},
     type: 'PUT',
     success: success.bind(this),
-    error: error.bind(this)
+    error: error.bind(this),
   })
 }
 
 store.findById = function (toolId) {
-  return _.find(this.getState().externalTools, tool => tool.app_id === toolId)
+  return find(this.getState().externalTools, tool => tool.app_id === toolId)
 }
 
 store._generateParams = function (configurationType, data) {
@@ -275,7 +275,7 @@ store._generateParams = function (configurationType, data) {
       } else {
         const pairs = (data.customFields || '').split('\n')
         params.custom_fields = {}
-        _.forEach(pairs, pair => {
+        forEach(pairs, pair => {
           const vals = pair.trim().split(/=(.+)?/)
           params.custom_fields[vals[0]] = vals[1]
         })
@@ -318,7 +318,7 @@ store._fetchSuccessHandler = function (tools, status, xhr, lastReset) {
     isLoading: false,
     isLoaded: true,
     externalTools: sort(tools),
-    hasMore: !!links.next
+    hasMore: !!links.next,
   })
 }
 
@@ -331,7 +331,7 @@ store._fetchErrorHandler = function (lastReset) {
     isLoading: false,
     isLoaded: false,
     externalTools: [],
-    hasMore: false
+    hasMore: false,
   })
 }
 

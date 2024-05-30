@@ -18,11 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "atom"
-
-# Force loaded so that it will be in ActiveRecord::Base.descendants for switchman to use
-require_dependency "assignment_student_visibility"
-
 class WikiPage < ActiveRecord::Base
   attr_readonly :wiki_id
   attr_accessor :saved_by
@@ -30,6 +25,7 @@ class WikiPage < ActiveRecord::Base
   validates :body, length: { maximum: maximum_long_text_length, allow_blank: true }
   validates :wiki_id, presence: true
   include Canvas::SoftDeletable
+  include ScheduledPublication
   include HasContentTags
   include CopyAuthorizedLinks
   include ContextModuleItem
@@ -38,12 +34,21 @@ class WikiPage < ActiveRecord::Base
   include DuplicatingObjects
   include SearchTermHelper
   include LockedFor
+  include HtmlTextHelper
+  include DatesOverridable
 
   include MasterCourses::Restrictor
   restrict_columns :content, [:body, :title]
   restrict_columns :settings, [:editing_roles, :url]
   restrict_assignment_columns
   restrict_columns :state, [:workflow_state]
+  restrict_columns :availability_dates, [:publish_at]
+
+  include SmartSearchable
+  use_smart_search title_column: :title,
+                   body_column: :body,
+                   index_scope: ->(course) { course.wiki_pages.not_deleted },
+                   search_scope: ->(course, user) { WikiPages::ScopedToUser.new(course, user, course.wiki_pages.not_deleted).scope }
 
   after_update :post_to_pandapub_when_revised
 
@@ -53,6 +58,12 @@ class WikiPage < ActiveRecord::Base
   belongs_to :context, polymorphic: [:course, :group]
   belongs_to :root_account, class_name: "Account"
 
+  belongs_to :current_lookup, class_name: "WikiPageLookup"
+  has_many :wiki_page_lookups, inverse_of: :wiki_page
+  has_many :wiki_page_student_visibilities
+  has_one :master_content_tag, class_name: "MasterCourses::MasterContentTag", inverse_of: :wiki_page
+  has_one :block_editor, as: :context, dependent: :destroy
+  accepts_nested_attributes_for :block_editor, allow_destroy: true
   acts_as_url :title, sync_url: true
 
   validate :validate_front_page_visibility
@@ -60,6 +71,7 @@ class WikiPage < ActiveRecord::Base
   before_save :default_submission_values,
               if: proc { context.try(:conditional_release?) }
   before_save :set_revised_at
+
   before_validation :ensure_wiki_and_context
   before_validation :ensure_unique_title
   before_create :set_root_account_id
@@ -67,13 +79,15 @@ class WikiPage < ActiveRecord::Base
   after_save  :touch_context
   after_save  :update_assignment,
               if: proc { context.try(:conditional_release?) }
+  after_save :create_lookup, if: :should_create_lookup?
+  after_save :delete_lookups, if: -> { !Account.site_admin.feature_enabled?(:permanent_page_links) && saved_change_to_workflow_state? && deleted? }
 
   scope :starting_with_title, lambda { |title|
     where("title ILIKE ?", "#{title}%")
   }
 
   scope :not_ignored_by, lambda { |user, purpose|
-    where("NOT EXISTS (?)", Ignore.where(asset_type: "WikiPage", user_id: user, purpose: purpose).where("asset_id=wiki_pages.id"))
+    where.not(Ignore.where(asset_type: "WikiPage", user_id: user, purpose:).where("asset_id=wiki_pages.id").arel.exists)
   }
   scope :todo_date_between, ->(starting, ending) { where(todo_date: starting...ending) }
   scope :for_courses_and_groups, lambda { |course_ids, group_ids|
@@ -90,10 +104,8 @@ class WikiPage < ActiveRecord::Base
   TITLE_LENGTH = 255
   SIMPLY_VERSIONED_EXCLUDE_FIELDS = %i[workflow_state editing_roles notify_of_update].freeze
 
-  self.ignored_columns = %i[view_count]
-
   def ensure_wiki_and_context
-    self.wiki_id ||= (context.wiki_id || context.wiki.id)
+    self.wiki_id ||= context.wiki_id || context.wiki.id
   end
 
   def context
@@ -117,11 +129,38 @@ class WikiPage < ActiveRecord::Base
     end
   end
 
+  def url
+    return read_attribute(:url) unless Account.site_admin.feature_enabled?(:permanent_page_links)
+
+    current_lookup&.slug || read_attribute(:url)
+  end
+
+  def should_create_lookup?
+    # covers page creation and title changes, and undeletes
+    saved_change_to_title? || (saved_change_to_workflow_state? && workflow_state_before_last_save == "deleted")
+  end
+
+  def create_lookup
+    new_record = id_changed?
+    WikiPageLookup.unique_constraint_retry do
+      lookup = wiki_page_lookups.find_by(slug: read_attribute(:url)) unless new_record
+      lookup ||= wiki_page_lookups.build(slug: read_attribute(:url))
+      lookup.save
+      # this is kind of circular so we want to avoid triggering callbacks again
+      update_column(:current_lookup_id, lookup.id)
+    end
+  end
+
+  def delete_lookups
+    update_column(:current_lookup_id, nil)
+    wiki_page_lookups.delete_all(:delete_all)
+  end
+
   def ensure_unique_title
-    return if deleted?
+    return if deleted? || Account.site_admin.feature_enabled?(:permanent_page_links)
 
     to_cased_title = ->(string) { string.gsub(/[^\w]+/, " ").gsub(/\b('?[a-z])/) { $1.capitalize }.strip }
-    self.title ||= to_cased_title.call(url || "page")
+    self.title ||= to_cased_title.call(read_attribute(:url) || "page")
     # TODO: i18n (see wiki.rb)
 
     if self.title == "Front Page" && new_record?
@@ -131,15 +170,21 @@ class WikiPage < ActiveRecord::Base
         p.save_without_broadcasting!
       end
     end
-    if context.wiki_pages.not_deleted.where(title: self.title).where.not(id: id).first
-      real_title = self.title.gsub(/-(\d*)\z/, "") # remove any "-#" at the end
-      n = $1 ? $1.to_i + 1 : 2
+
+    if context.wiki_pages.not_deleted.where(title: self.title).where.not(id:).first
+      if /-\d+\z/.match?(self.title)
+        # A page with this title already exists and the title ends in -<some number>.
+        # This has potential to conflict with our handling of duplicate title names.
+        # We tried to fix in earnest but there are too many edge cases. Thus, we just disallow this.
+        errors.add(:title, t("A page with this title already exists. Please choose a different title."))
+      end
+      n = 2
       new_title = nil
       loop do
         mod = "-#{n}"
-        new_title = real_title[0...(TITLE_LENGTH - mod.length)] + mod
+        new_title = self.title[0...(TITLE_LENGTH - mod.length)] + mod
         n = n.succ
-        break unless context.wiki_pages.not_deleted.where(title: new_title).where.not(id: id).exists?
+        break unless context.wiki_pages.not_deleted.where(title: new_title).where.not(id:).exists?
       end
 
       self.title = new_title
@@ -162,13 +207,16 @@ class WikiPage < ActiveRecord::Base
       )
     end
 
-    conditions = [wildcard(url_attribute.to_s, base_url, type: :right)]
+    url_conditions = [wildcard(url_attribute.to_s, base_url, type: :right)]
     unless new_record?
-      conditions.first << " and id != ?"
-      conditions << id
+      url_conditions.first << " and id != ?"
+      url_conditions << id
     end
+    urls = context.wiki_pages.where(*url_conditions).not_deleted.pluck(:url)
 
-    urls = context.wiki_pages.where(*conditions).not_deleted.pluck(:url)
+    lookup_conditions = [wildcard("slug", base_url, type: :right)]
+    urls += context.wiki_page_lookups.where(*lookup_conditions).where.not(wiki_page_id: id).pluck(:slug)
+
     # This is the part in stringex that messed us up, since it will never allow
     # a url of "front-page" once "front-page-1" or "front-page-2" is created
     # We modify it to allow "front-page" and start the indexing at "front-page-2"
@@ -206,6 +254,7 @@ class WikiPage < ActiveRecord::Base
     exclude_fields = [:user_id, :updated_at].concat(SIMPLY_VERSIONED_EXCLUDE_FIELDS).map(&:to_s)
     (wp.changes.keys.map(&:to_s) - exclude_fields).present?
   }
+
   after_save :remove_changed_flag
 
   workflow do
@@ -291,11 +340,11 @@ class WikiPage < ActiveRecord::Base
   end
 
   def context_module_tag_for(context)
-    @tag ||= context_module_tags.where(context_id: context, context_type: context.class.base_class.name).first
+    @context_module_tag_for ||= context_module_tags.where(context:).first
   end
 
   def context_module_action(user, context, action)
-    context_module_tags.where(context_id: context, context_type: context.class.base_class.name).each do |tag|
+    context_module_tags.where(context:).each do |tag|
       tag.context_module_action(user, action)
     end
   end
@@ -337,8 +386,14 @@ class WikiPage < ActiveRecord::Base
     # the page must be available for users of the following roles
     return false unless available_for?(user, session)
     return true if roles.include?("students") && context.respond_to?(:students) && context.includes_student?(user)
-    return true if roles.include?("members") && context.respond_to?(:users) && context.users.include?(user)
-    return true if roles.include?("public")
+
+    if roles.include?("members") || roles.include?("public")
+      if context.is_a?(Course)
+        return true if context.active_users.include?(user)
+      elsif context.respond_to?(:users) && context.users.include?(user)
+        return true
+      end
+    end
 
     false
   end
@@ -346,7 +401,7 @@ class WikiPage < ActiveRecord::Base
   def effective_roles
     context_roles = context.default_wiki_editing_roles rescue nil
     roles = (editing_roles || context_roles || default_roles).split(",")
-    roles == %w[teachers] ? [] : roles # "Only teachers" option doesn't grant rights excluded by RoleOverrides
+    (roles == %w[teachers]) ? [] : roles # "Only teachers" option doesn't grant rights excluded by RoleOverrides
   end
 
   def available_for?(user, session = nil)
@@ -399,16 +454,16 @@ class WikiPage < ActiveRecord::Base
 
   def to_atom(opts = {})
     context = opts[:context]
-    Atom::Entry.new do |entry|
-      entry.title = t(:atom_entry_title, "Wiki Page, %{course_or_group_name}: %{page_title}", course_or_group_name: context.name, page_title: self.title)
-      entry.authors << Atom::Person.new(name: t(:atom_author, "Wiki Page"))
-      entry.updated   = updated_at
-      entry.published = created_at
-      entry.id        = "tag:#{HostUrl.default_host},#{created_at.strftime("%Y-%m-%d")}:/wiki_pages/#{feed_code}_#{updated_at.strftime("%Y-%m-%d")}"
-      entry.links << Atom::Link.new(rel: "alternate",
-                                    href: "http://#{HostUrl.context_host(context)}/#{self.context.class.to_s.downcase.pluralize}/#{self.context.id}/pages/#{url}")
-      entry.content = Atom::Content::Html.new(body || t("defaults.no_content", "no content"))
-    end
+
+    {
+      title: t(:atom_entry_title, "Wiki Page, %{course_or_group_name}: %{page_title}", course_or_group_name: context.name, page_title: self.title),
+      author: t(:atom_author, "Wiki Page"),
+      updated: updated_at,
+      published: created_at,
+      id: "tag:#{HostUrl.default_host},#{created_at.strftime("%Y-%m-%d")}:/wiki_pages/#{feed_code}_#{updated_at.strftime("%Y-%m-%d")}",
+      link: "http://#{HostUrl.context_host(context)}/#{self.context.class.to_s.downcase.pluralize}/#{self.context.id}/pages/#{url}",
+      content: body || t("defaults.no_content", "no content")
+    }
   end
 
   def user_name
@@ -476,7 +531,7 @@ class WikiPage < ActiveRecord::Base
     # Convert to ascii chars unless the string matches
     # a script we want to store in unicode
     return title.to_s.to_url unless title.match?(
-      /#{use_unicode_scripts.map { |s| "\\p{#{s}}" }.join('|')}/
+      /#{use_unicode_scripts.map { |s| "\\p{#{s}}" }.join("|")}/
     )
 
     # Return title with unicode chars, replacing chars like ? and &
@@ -497,14 +552,14 @@ class WikiPage < ActiveRecord::Base
     result = WikiPage.new({
                             title: opts_with_default[:copy_title] || get_copy_title(self, t("Copy"), self.title),
                             wiki_id: self.wiki_id,
-                            context_id: context_id,
-                            context_type: context_type,
-                            body: body,
+                            context_id:,
+                            context_type:,
+                            body:,
                             workflow_state: "unpublished",
-                            user_id: user_id,
-                            protected_editing: protected_editing,
-                            editing_roles: editing_roles,
-                            todo_date: todo_date
+                            user_id:,
+                            protected_editing:,
+                            editing_roles:,
+                            todo_date:
                           })
     if assignment && opts_with_default[:duplicate_assignment]
       result.assignment = assignment.duplicate({

@@ -30,7 +30,7 @@ describe('apiClient', () => {
 
   beforeEach(() => {
     delete window.location
-    window.location = {reload: jest.fn()}
+    window.location = {search: ''}
     moxios.install()
   })
 
@@ -47,14 +47,27 @@ describe('apiClient', () => {
   })
 
   describe('publishCourse', () => {
-    it('reloads the window after upload', done => {
+    it('reloads the window after upload with the proper param', done => {
       moxios.stubRequest('/api/v1/courses/1', {
         status: 200,
-        response: {}
+        response: {},
       })
       apiClient.publishCourse({courseId: 1})
       moxios.wait(() => {
-        expect(window.location.reload).toHaveBeenCalled()
+        expect(window.location.search).toBe('for_reload=1')
+        done()
+      })
+    })
+
+    it('calls onSuccess function on success if provided', done => {
+      moxios.stubRequest('/api/v1/courses/1', {
+        status: 200,
+        response: {},
+      })
+      const onSuccess = jest.fn()
+      apiClient.publishCourse({courseId: 1, onSuccess})
+      moxios.wait(() => {
+        expect(onSuccess).toHaveBeenCalled()
         done()
       })
     })
@@ -63,12 +76,12 @@ describe('apiClient', () => {
       moxios.stubRequest('/api/v1/courses/1', {
         status: 401,
         response: {
-          status: 'unverified'
-        }
+          status: 'unverified',
+        },
       })
       apiClient.publishCourse({courseId: 1})
       moxios.wait(() => {
-        expect(window.location.reload).not.toHaveBeenCalled()
+        expect(window.location.search).toBe('')
         expect($.flashWarning).toHaveBeenCalledWith(
           'Complete registration by clicking the “finish the registration process” link sent to your email.'
         )
@@ -78,11 +91,11 @@ describe('apiClient', () => {
 
     it('flashes an error on failure', done => {
       moxios.stubRequest('/api/v1/courses/1', {
-        status: 404
+        status: 404,
       })
       apiClient.publishCourse({courseId: 1})
       moxios.wait(() => {
-        expect(window.location.reload).not.toHaveBeenCalled()
+        expect(window.location.search).toBe('')
         expect($.flashError).toHaveBeenCalledWith('An error ocurred while publishing course')
         done()
       })

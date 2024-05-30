@@ -46,19 +46,19 @@ describe "acts_as_list" do
     it "inserts in the position correctly" do
       expect(@modules.map(&:position)).to eq [1, 2, 3]
 
-      expect(@module_1.insert_at(3)).to eq true
+      expect(@module_1.insert_at(3)).to be true
       @modules.each(&:reload)
       expect(@modules.map(&:position)).to eq [3, 1, 2]
 
-      expect(@module_2.insert_at(2)).to eq true
+      expect(@module_2.insert_at(2)).to be true
       @modules.each(&:reload)
       expect(@modules.map(&:position)).to eq [3, 2, 1]
 
-      expect(@module_3.insert_at(3)).to eq true
+      expect(@module_3.insert_at(3)).to be true
       @modules.each(&:reload)
       expect(@modules.map(&:position)).to eq [2, 1, 3]
 
-      expect(@module_1.insert_at(1)).to eq true
+      expect(@module_1.insert_at(1)).to be true
       @modules.each(&:reload)
       expect(@modules.map(&:position)).to eq [1, 2, 3]
     end
@@ -104,7 +104,7 @@ describe "acts_as_list" do
   describe "base scope" do
     it "scopes by the base class rather then the STI class" do
       scope = AuthenticationProvider::CAS.new.list_scope_base
-      expect(scope.to_sql).not_to(match(/auth_type/))
+      expect(scope.where_clause.ast.to_sql).not_to(match(/auth_type/))
     end
   end
 end

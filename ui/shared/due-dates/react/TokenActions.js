@@ -16,9 +16,9 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import _ from 'underscore'
-import AssignmentOverride from '@canvas/assignments/backbone/models/AssignmentOverride.coffee'
-import Section from '@canvas/sections/backbone/models/Section.coffee'
+import {chain, difference, find, isEmpty, union} from 'lodash'
+import AssignmentOverride from '@canvas/assignments/backbone/models/AssignmentOverride'
+import Section from '@canvas/sections/backbone/models/Section'
 
 const TokenActions = {
   // -------------------
@@ -44,10 +44,10 @@ const TokenActions = {
   handleSectionTokenAdd(token, overridesFromRow) {
     const newOverride = this.newOverrideForRow({
       course_section_id: token.course_section_id,
-      title: token.name
+      title: token.name,
     })
 
-    return _.union(overridesFromRow, [newOverride])
+    return union(overridesFromRow, [newOverride])
   },
 
   // -- Adding Groups --
@@ -55,10 +55,10 @@ const TokenActions = {
   handleGroupTokenAdd(token, overridesFromRow) {
     const newOverride = this.newOverrideForRow({
       group_id: token.group_id,
-      title: token.name
+      title: token.name,
     })
 
-    return _.union(overridesFromRow, [newOverride])
+    return union(overridesFromRow, [newOverride])
   },
 
   // -- Adding Students --
@@ -76,10 +76,7 @@ const TokenActions = {
     const newOverride = existingOverride.set('student_ids', newStudentIds)
     newOverride.unset('title', {silent: true})
 
-    return _.chain(overridesFromRow)
-      .difference([existingOverride])
-      .union([newOverride])
-      .value()
+    return chain(overridesFromRow).difference([existingOverride]).union([newOverride]).value()
   },
 
   createNewAdhocOverrideForRow(newToken, overridesFromRow) {
@@ -92,14 +89,14 @@ const TokenActions = {
   handleNoopTokenAdd(token, overridesFromRow) {
     const newOverride = this.newOverrideForRow({
       noop_id: token.noop_id,
-      title: token.name
+      title: token.name,
     })
 
     if (token == AssignmentOverride.conditionalRelease) {
       overridesFromRow = this.removeDefaultSection(overridesFromRow)
     }
 
-    return _.union(overridesFromRow, [newOverride])
+    return union(overridesFromRow, [newOverride])
   },
 
   // -------------------
@@ -131,12 +128,12 @@ const TokenActions = {
   },
 
   removeForType(selector, tokenToRemove, overridesFromRow) {
-    const overrideToRemove = _.find(
+    const overrideToRemove = find(
       overridesFromRow,
       override => override.get(selector) == tokenToRemove[selector]
     )
 
-    return _.difference(overridesFromRow, [overrideToRemove])
+    return difference(overridesFromRow, [overrideToRemove])
   },
 
   removeDefaultSection(overridesFromRow) {
@@ -148,18 +145,15 @@ const TokenActions = {
 
   handleStudentTokenRemove(tokenToRemove, overridesFromRow) {
     const adhocOverride = this.findAdhoc(overridesFromRow, tokenToRemove.student_id)
-    const newStudentIds = _.difference(adhocOverride.get('student_ids'), [tokenToRemove.student_id])
+    const newStudentIds = difference(adhocOverride.get('student_ids'), [tokenToRemove.student_id])
 
-    if (_.isEmpty(newStudentIds)) {
-      return _.difference(overridesFromRow, [adhocOverride])
+    if (isEmpty(newStudentIds)) {
+      return difference(overridesFromRow, [adhocOverride])
     }
 
     const newOverride = adhocOverride.set('student_ids', newStudentIds)
     newOverride.unset('title', {silent: true})
-    return _.chain(overridesFromRow)
-      .difference([adhocOverride])
-      .union([newOverride])
-      .value()
+    return chain(overridesFromRow).difference([adhocOverride]).union([newOverride]).value()
   },
 
   setOverrideInitializer(rowKey, dates) {
@@ -172,11 +166,11 @@ const TokenActions = {
       lock_at_overridden: !!dates.lock_at,
       unlock_at: dates.unlock_at,
       unlock_at_overridden: !!dates.unlock_at,
-      rowKey
+      rowKey,
     }
 
-    this.newOverrideForRow = function(attributes) {
-      const all_attrs = _.extend(date_attrs, attributes)
+    this.newOverrideForRow = function (attributes) {
+      const all_attrs = {...date_attrs, ...attributes}
       return new AssignmentOverride(all_attrs)
     }
   },
@@ -186,13 +180,12 @@ const TokenActions = {
   // -------------------
 
   findAdhoc(collection, idToRemove) {
-    return _.find(collection, ov => {
+    return find(collection, ov => {
       return (
-        !!ov.get('student_ids') &&
-        (idToRemove ? _.includes(ov.get('student_ids'), idToRemove) : true)
+        !!ov.get('student_ids') && (idToRemove ? ov.get('student_ids').includes(idToRemove) : true)
       )
     })
-  }
+  },
 }
 
 export default TokenActions

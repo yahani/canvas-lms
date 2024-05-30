@@ -19,7 +19,7 @@
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import RichContentEditor from '@canvas/rce/RichContentEditor'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import '@canvas/jquery/jquery.instructure_forms'
 import '@canvas/jquery/jquery.instructure_misc_plugins'
 
 const I18n = useI18nScope('account_settings')
@@ -34,12 +34,13 @@ RichContentEditor.preloadRemoteModule()
 export default {
   bindDomEvents() {
     $('.add_notification_toggle_focus').on('click', () => {
-      const aria_expanded = $('add_notification_form').attr('aria-expanded') === 'true'
+      const aria_expanded = $('#add_notification_form').attr('aria-expanded') === 'true'
       if (!aria_expanded) {
         setTimeout(() => {
           $('#account_notification_subject').focus()
         }, 100)
       }
+      RichContentEditor.loadNewEditor($(`#add_notification_form textarea`))
     })
 
     $('.edit_notification_toggle_focus').on('click', function () {
@@ -51,6 +52,7 @@ export default {
           $('#account_notification_subject_' + id).focus()
         }, 100)
       }
+      RichContentEditor.loadNewEditor($(`${form_id} textarea`))
     })
 
     $('.add_notification_cancel_focus').on('click', () => {
@@ -81,8 +83,8 @@ export default {
             if (value && value.length > 255) {
               return I18n.t('Title is too long')
             }
-          }
-        }
+          },
+        },
       }
       if (
         $this[0].id === 'add_notification_form' &&
@@ -115,14 +117,8 @@ export default {
           $(this).slideUp(function () {
             $(this).remove()
           })
-        }
+        },
       })
     })
   },
-
-  augmentView() {
-    $('textarea.edit_notification_form, #add_notification_form textarea').each(function (_i) {
-      RichContentEditor.loadNewEditor($(this))
-    })
-  }
 }

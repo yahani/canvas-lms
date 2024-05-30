@@ -118,7 +118,7 @@ class BrandConfigsController < ApplicationController
                    end
     end
     opts = {
-      parent_md5: parent_md5,
+      parent_md5:,
       variables: process_variables(params[:brand_config][:variables])
     }
     BrandConfig::OVERRIDE_TYPES.each do |override|
@@ -162,7 +162,7 @@ class BrandConfigsController < ApplicationController
   def save_to_account
     old_md5 = @account.brand_config_md5
     session_config = session.delete(:brand_config)
-    new_md5 = session_config.nil? || session_config[:type] == :default ? nil : session_config[:md5]
+    new_md5 = (session_config.nil? || session_config[:type] == :default) ? nil : session_config[:md5]
     new_brand_config = new_md5 && BrandConfig.find(new_md5)
     progress = BrandConfigRegenerator.process(@account, @current_user, new_brand_config)
 
@@ -224,7 +224,7 @@ class BrandConfigsController < ApplicationController
     progress = Progress.new(context: @current_user, tag: :brand_config_save_and_sync_to_s3)
     progress.user = @current_user
     progress.reset!
-    progress.process_job(brand_config, :save_and_sync_to_s3!, priority: Delayed::HIGH_PRIORITY)
+    progress.process_job(brand_config, :save_and_sync_to_s3!, { priority: Delayed::HIGH_PRIORITY })
     progress
   end
 

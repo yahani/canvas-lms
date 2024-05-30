@@ -16,13 +16,13 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import createStore from '@canvas/util/createStore'
+import createStore from '@canvas/backbone/createStore'
 import $ from 'jquery'
 
 const ProgressStore = createStore({}),
   _progresses = {}
 
-ProgressStore.get = function(progress_id) {
+ProgressStore.get = function (progress_id) {
   const url = '/api/v1/progress/' + progress_id
 
   $.getJSON(url, data => {

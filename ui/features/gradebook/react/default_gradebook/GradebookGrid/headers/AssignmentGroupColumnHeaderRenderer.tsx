@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2017 - present Instructure, Inc.
  *
@@ -19,12 +20,18 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 import AssignmentGroupColumnHeader from './AssignmentGroupColumnHeader'
+import {scoreToPercentage, scoreToScaledPoints} from '@canvas/grading/GradeCalculationHelper'
+import type GridSupport from '../GridSupport/index'
 import type Gradebook from '../../Gradebook'
+import type {PartialStudent} from '@canvas/grading/grading.d'
+import type {Student} from '../../../../../../api.d'
+import type {SendMessageArgs} from '@canvas/message-students-dialog/react/MessageStudentsWhoDialog'
 
-function getProps(column, gradebook, options) {
+function getProps(column, gradebook: Gradebook, options) {
   const columnId = column.id
   const sortRowsBySetting = gradebook.getSortRowsBySetting()
   const assignmentGroup = gradebook.getAssignmentGroup(column.assignmentGroupId)
+  const pointsBased = gradebook.options.grading_standard_points_based
 
   const gradeSortDataLoaded =
     gradebook.assignmentsLoadedForCurrentView() &&
@@ -37,13 +44,35 @@ function getProps(column, gradebook, options) {
       gradebook.onApplyScoreToUngradedRequested(assignmentGroup)
     }
   }
+
+  const processStudent = (student: Student, assignmentGroupId: number): PartialStudent => {
+    return {
+      id: student.id,
+      isInactive: Boolean(student.isInactive),
+      isTestStudent: student.enrollments[0].type === 'StudentViewEnrollment',
+      name: student.name,
+      sortableName: student.sortable_name || '',
+      submission: null,
+      currentScore: pointsBased
+        ? scoreToScaledPoints(
+            student[`assignment_group_${assignmentGroupId}`]?.score,
+            student[`assignment_group_${assignmentGroupId}`]?.possible,
+            gradebook.options.grading_standard_scaling_factor
+          )
+        : scoreToPercentage(
+            student[`assignment_group_${assignmentGroupId}`]?.score,
+            student[`assignment_group_${assignmentGroupId}`]?.possible
+          ),
+    }
+  }
+
   return {
     ref: options.ref,
-    addGradebookElement: gradebook.keyboardNav.addGradebookElement,
+    addGradebookElement: gradebook.keyboardNav?.addGradebookElement,
 
     assignmentGroup: {
       groupWeight: assignmentGroup.group_weight,
-      name: assignmentGroup.name
+      name: assignmentGroup.name,
     },
 
     onApplyScoreToUngraded,
@@ -53,7 +82,10 @@ function getProps(column, gradebook, options) {
     onMenuDismiss() {
       setTimeout(gradebook.handleColumnHeaderMenuClose)
     },
-    removeGradebookElement: gradebook.keyboardNav.removeGradebookElement,
+    removeGradebookElement: gradebook.keyboardNav?.removeGradebookElement,
+
+    showMessageStudentsWithObserversDialog:
+      gradebook.options.show_message_students_with_observers_dialog,
 
     sortBySetting: {
       direction: sortRowsBySetting.direction,
@@ -65,28 +97,36 @@ function getProps(column, gradebook, options) {
       onSortByGradeDescending: () => {
         gradebook.setSortRowsBySetting(columnId, 'grade', 'descending')
       },
-      settingKey: sortRowsBySetting.settingKey
+      settingKey: sortRowsBySetting.settingKey,
     },
 
     viewUngradedAsZero: gradebook.viewUngradedAsZero(),
+    pointsBasedGradingScheme: pointsBased,
     isRunningScoreToUngraded: gradebook.isRunningScoreToUngraded,
-    weightedGroups: gradebook.weightedGroups()
+    weightedGroups: gradebook.weightedGroups(),
+    allStudents: Object.keys(gradebook.students).map(key =>
+      processStudent(gradebook.students[key], assignmentGroup.id)
+    ),
+    courseId: gradebook.options.context_id,
+    messageAttachmentUploadFolderId: gradebook.options.message_attachment_upload_folder_id,
+    userId: gradebook.options.currentUserId,
+    onSendMessageStudentsWho: gradebook.sendMessageStudentsWho,
   }
 }
 
 export default class AssignmentGroupColumnHeaderRenderer {
   gradebook: Gradebook
 
-  constructor(gradebook) {
+  constructor(gradebook: Gradebook) {
     this.gradebook = gradebook
   }
 
-  render(column, $container, _gridSupport, options) {
+  render(column, $container: HTMLElement, _gridSupport: GridSupport, options) {
     const props = getProps(column, this.gradebook, options)
     ReactDOM.render(<AssignmentGroupColumnHeader {...props} />, $container)
   }
 
-  destroy(column, $container, _gridSupport) {
+  destroy(_column, $container: HTMLElement, _gridSupport: GridSupport) {
     ReactDOM.unmountComponentAtNode($container)
   }
 }

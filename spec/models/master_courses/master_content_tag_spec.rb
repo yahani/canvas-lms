@@ -71,7 +71,7 @@ describe MasterCourses::MasterContentTag do
       expect(topic_master_tag.root_account).to eq @copy_from.root_account
       assmt = @copy_from.assignments.create!
       restrictions = { all: true }
-      assmt_master_tag = @template.create_content_tag_for!(assmt, { restrictions: restrictions })
+      assmt_master_tag = @template.create_content_tag_for!(assmt, { restrictions: })
 
       @copy_to = course_factory
       sub = @template.add_child_course!(@copy_to)
@@ -96,7 +96,7 @@ describe MasterCourses::MasterContentTag do
       @template.create_content_tag_for!(topic)
       assmt = @copy_from.assignments.create!
       restrictions = { content: true }
-      @template.create_content_tag_for!(assmt, { restrictions: restrictions })
+      @template.create_content_tag_for!(assmt, { restrictions: })
 
       mod = @copy_from.context_modules.create!(name: "something")
       tag1 = mod.add_item(id: topic.id, type: "discussion_topic")
@@ -104,6 +104,37 @@ describe MasterCourses::MasterContentTag do
 
       item_restriction_map = MasterCourses::MasterContentTag.fetch_module_item_restrictions_for_master([tag1.id, tag2.id])
       expect(item_restriction_map).to eq({ tag1.id => {}, tag2.id => restrictions })
+    end
+  end
+
+  describe "#quiz_lti_content?" do
+    context "when the content_type is not 'Assignment'" do
+      it "returns false" do
+        course_module = @course.context_modules.create!(name: "something")
+        restrictions = { content: true }
+        tag = @template.create_content_tag_for!(course_module, { restrictions: })
+
+        expect(tag.quiz_lti_content?).to be(false)
+      end
+    end
+
+    context "when the content_type is 'Assignment'" do
+      it "returns false if the assignment is not a New Quiz" do
+        assignment = @course.assignments.create!
+        restrictions = { content: true }
+        tag = @template.create_content_tag_for!(assignment, { restrictions: })
+
+        expect(tag.quiz_lti_content?).to be(false)
+      end
+
+      it "returns true if the assignment is a New Quiz" do
+        assignment = @course.assignments.create!
+        restrictions = { content: true }
+        allow_any_instance_of(Assignment).to receive(:quiz_lti?).and_return(true)
+        tag = @template.create_content_tag_for!(assignment, { restrictions: })
+
+        expect(tag.quiz_lti_content?).to be(true)
+      end
     end
   end
 end

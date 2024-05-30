@@ -119,6 +119,10 @@ module Lti
       #   The resource link id the Line Item should be attached to. This value should
       #   match the LTI id of the Canvas assignment associated with the tool.
       #
+      # @argument startDateTime [String]
+      #   The ISO8601 date and time when the line item is made available. Corresponds
+      #   to the assignment's unlock_at date.
+      #
       # @argument endDateTime [String]
       #   The ISO8601 date and time when the line item stops receiving submissions. Corresponds
       #   to the assignment's due_at date.
@@ -134,6 +138,7 @@ module Lti
       #     "resourceId": 1,
       #     "tag": "MyTag",
       #     "resourceLinkId": "1",
+      #     "startDateTime": "2022-01-31T22:23:11+0000",
       #     "endDateTime": "2022-02-07T22:23:11+0000",
       #     "https://canvas.instructure.com/lti/submission_type": {
       #       "type": "external_tool",
@@ -147,7 +152,7 @@ module Lti
           assignment,
           context,
           tool,
-          line_item_params.merge(resource_link: resource_link)
+          line_item_params.merge(resource_link:)
         )
 
         render json: LineItemsSerializer.new(new_line_item, line_item_id(new_line_item)),
@@ -173,6 +178,10 @@ module Lti
       #    A value used to qualify a line Item beyond its ids. Line Items may be queried
       #    by this value in the List endpoint. Multiple line items can share the same tag
       #    within a given context.
+      #
+      # @argument startDateTime [String]
+      #   The ISO8601 date and time when the line item is made available. Corresponds
+      #   to the assignment's unlock_at date.
       #
       # @argument endDateTime [String]
       #   The ISO8601 date and time when the line item stops receiving submissions. Corresponds
@@ -242,7 +251,15 @@ module Lti
       def destroy
         head :unauthorized and return if line_item.coupled
 
-        line_item.destroy!
+        if line_item.assignment_line_item?
+          # assignment owns the lifecycle of line items
+          # and resource links
+          line_item.assignment.destroy!
+        else
+          # this is an extra non-default line item and can be
+          # safely deleted on its own
+          line_item.destroy!
+        end
         head :no_content
       end
 
@@ -253,7 +270,7 @@ module Lti
       end
 
       def line_item_params
-        @_line_item_params ||= params.permit(%i[resourceId resourceLinkId scoreMaximum label tag endDateTime],
+        @_line_item_params ||= params.permit(%i[resourceId resourceLinkId scoreMaximum label tag startDateTime endDateTime],
                                              Lti::LineItem::AGS_EXT_SUBMISSION_TYPE => [:type, :external_tool_url]).transform_keys do |k|
           k.to_s.underscore
         end.except(:resource_link_id)
@@ -265,6 +282,7 @@ module Lti
 
       def line_item_id(line_item)
         lti_line_item_show_url(
+          host: line_item.root_account.environment_specific_domain,
           course_id: params[:course_id],
           id: line_item.id
         )
@@ -275,6 +293,7 @@ module Lti
         attr_mapping = {
           label: :name,
           score_maximum: :points_possible,
+          start_date_time: :unlock_at,
           end_date_time: :due_at
         }
 
@@ -282,8 +301,8 @@ module Lti
         return if line_item_params.values_at(*attr_mapping.keys).all?(&:blank?)
 
         a = line_item.assignment
-        attr_mapping.each do |param_name, assigment_attr_name|
-          a.send("#{assigment_attr_name}=", line_item_params[param_name]) if line_item_params.key?(param_name)
+        attr_mapping.each do |param_name, assignment_attr_name|
+          a.send(:"#{assignment_attr_name}=", line_item_params[param_name]) if line_item_params.key?(param_name)
         end
         a.save!
       end
@@ -302,7 +321,7 @@ module Lti
                       .joins(rlid.present? ? { line_items: :resource_link } : :line_items)
                       .where(
                         {
-                          context: context,
+                          context:,
                           lti_line_items: { client_id: developer_key.global_id }
                         }.merge!(rlid.present? ? { lti_resource_links: { resource_link_uuid: rlid } } : {})
                       )

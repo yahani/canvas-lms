@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_dependency "lti/membership_service/page_presenter"
-
 module Lti::MembershipService
   describe PagePresenter do
     let(:base_url) { "https://localhost:3000" }
@@ -179,8 +177,7 @@ module Lti::MembershipService
 
       describe "#as_json" do
         it "provides the right next_page url when no page/per_page/role params are given" do
-          allow(Api).to receive(:per_page).and_return(1)
-
+          stub_const("Api::PER_PAGE", 1)
           uri = URI(hash.fetch(:nextPage))
           expect(uri.scheme).to eq "https"
           expect(uri.host).to eq "localhost"
@@ -190,7 +187,6 @@ module Lti::MembershipService
         end
 
         it "provides the right next_page url when page/per_page/role params are given" do
-          allow(Api).to receive(:per_page).and_return(1)
           presenter = PagePresenter.new(@course, @user, base_url, page: 2, per_page: 1, role: "Instructor")
           hash = presenter.as_json
 

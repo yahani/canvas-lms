@@ -16,7 +16,7 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 //
 
-// cache.coffee
+// cache.js
 // defines a caching mixin for classes. may use memory, sessionStorage, or
 // localStorage to hold cached data. also accepts a prefix to namespace any
 // data stored (e.g. if using localStorage).
@@ -33,7 +33,7 @@
 // thing.cache.set 'key', 'value'
 // thing.cache.get 'key'
 
-import _ from 'underscore'
+import {flattenDeep} from 'lodash'
 
 export default {
   cache: {
@@ -55,7 +55,7 @@ export default {
       const possibleStores = {
         memory: {},
         sessionStorage,
-        localStorage
+        localStorage,
       }
       this.store = possibleStores[store]
     },
@@ -69,7 +69,7 @@ export default {
     toKey(...key) {
       return (
         this.prefix +
-        _.flatten(key)
+        flattenDeep(key)
           .map(arg => JSON.stringify(arg))
           .join('|')
       )
@@ -121,6 +121,6 @@ export default {
     // given a key, remove its contents from the cache
     remove(...key) {
       delete this.store[this.toKey(key)]
-    }
-  }
+    },
+  },
 }

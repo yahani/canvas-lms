@@ -167,7 +167,8 @@ describe "Outcomes API", type: :request do
     describe "show" do
       it "does not require manage permission" do
         revoke_permission(@account_user, :manage_outcomes)
-        raw_api_call(:get, "/api/v1/outcomes/#{@outcome.id}",
+        raw_api_call(:get,
+                     "/api/v1/outcomes/#{@outcome.id}",
                      controller: "outcomes_api",
                      action: "show",
                      id: @outcome.id.to_s,
@@ -179,7 +180,8 @@ describe "Outcomes API", type: :request do
         # new user, doesn't have a tie to the account
         user_with_pseudonym(account: Account.create!, active_all: true)
         allow_any_instantiation_of(@pseudonym).to receive(:works_for_account?).and_return(true)
-        raw_api_call(:get, "/api/v1/outcomes/#{@outcome.id}",
+        raw_api_call(:get,
+                     "/api/v1/outcomes/#{@outcome.id}",
                      controller: "outcomes_api",
                      action: "show",
                      id: @outcome.id.to_s,
@@ -190,7 +192,8 @@ describe "Outcomes API", type: :request do
       it "does not require any permission for global outcomes" do
         user_with_pseudonym(account: Account.create!, active_all: true)
         @outcome = LearningOutcome.create!(title: "My Outcome")
-        raw_api_call(:get, "/api/v1/outcomes/#{@outcome.id}",
+        raw_api_call(:get,
+                     "/api/v1/outcomes/#{@outcome.id}",
                      controller: "outcomes_api",
                      action: "show",
                      id: @outcome.id.to_s,
@@ -201,7 +204,8 @@ describe "Outcomes API", type: :request do
       it "still requires a user for global outcomes" do
         @outcome = LearningOutcome.create!(title: "My Outcome")
         @user = nil
-        raw_api_call(:get, "/api/v1/outcomes/#{@outcome.id}",
+        raw_api_call(:get,
+                     "/api/v1/outcomes/#{@outcome.id}",
                      controller: "outcomes_api",
                      action: "show",
                      id: @outcome.id.to_s,
@@ -211,7 +215,8 @@ describe "Outcomes API", type: :request do
 
       it "404s for deleted outcomes" do
         @outcome.destroy
-        raw_api_call(:get, "/api/v1/outcomes/#{@outcome.id}",
+        raw_api_call(:get,
+                     "/api/v1/outcomes/#{@outcome.id}",
                      controller: "outcomes_api",
                      action: "show",
                      id: @outcome.id.to_s,
@@ -220,7 +225,8 @@ describe "Outcomes API", type: :request do
       end
 
       it "returns the outcome json" do
-        json = api_call(:get, "/api/v1/outcomes/#{@outcome.id}",
+        json = api_call(:get,
+                        "/api/v1/outcomes/#{@outcome.id}",
                         controller: "outcomes_api",
                         action: "show",
                         id: @outcome.id.to_s,
@@ -258,7 +264,8 @@ describe "Outcomes API", type: :request do
         @outcome.rubric_criterion = criterion
         @outcome.save!
 
-        json = api_call(:get, "/api/v1/outcomes/#{@outcome.id}",
+        json = api_call(:get,
+                        "/api/v1/outcomes/#{@outcome.id}",
                         controller: "outcomes_api",
                         action: "show",
                         id: @outcome.id.to_s,
@@ -281,11 +288,7 @@ describe "Outcomes API", type: :request do
                              "calculation_int" => 65,
                              "calculation_method" => "decaying_average",
                              "assessed" => false,
-                             "ratings" => [
-                               { "points" => 5, "description" => "Exceeds Expectations" },
-                               { "points" => 3, "description" => "Meets Expectations" },
-                               { "points" => 0, "description" => "Does Not Meet Expectations" }
-                             ]
+                             "ratings" => @outcome.rubric_criterion[:ratings].map(&:stringify_keys)
                            })
       end
 
@@ -307,7 +310,8 @@ describe "Outcomes API", type: :request do
         # simulate pre-existing learning outcome records that have nil calculation_methods
         @outcome.update_column(:calculation_method, nil)
 
-        json = api_call(:get, "/api/v1/outcomes/#{@outcome.id}",
+        json = api_call(:get,
+                        "/api/v1/outcomes/#{@outcome.id}",
                         controller: "outcomes_api",
                         action: "show",
                         id: @outcome.id.to_s,
@@ -320,7 +324,8 @@ describe "Outcomes API", type: :request do
         student_in_course(active_all: true)
         assignment_model({ course: @course })
         assess_outcome(@outcome)
-        raw_api_call(:get, "/api/v1/outcomes/#{@outcome.id}",
+        raw_api_call(:get,
+                     "/api/v1/outcomes/#{@outcome.id}",
                      controller: "outcomes_api",
                      action: "show",
                      id: @outcome.id.to_s,
@@ -401,7 +406,8 @@ describe "Outcomes API", type: :request do
           it "ignores the outcome_proficiency and calculation_method values if one exists" do
             outcome_calculation_method_model(@account)
             outcome_proficiency_model(@account)
-            json = api_call(:get, "/api/v1/outcomes/#{@outcome.id}",
+            json = api_call(:get,
+                            "/api/v1/outcomes/#{@outcome.id}",
                             controller: "outcomes_api",
                             action: "show",
                             id: @outcome.id.to_s,
@@ -415,7 +421,8 @@ describe "Outcomes API", type: :request do
     describe "update" do
       it "requires manage permission" do
         revoke_permission(@account_user, :manage_outcomes)
-        raw_api_call(:put, "/api/v1/outcomes/#{@outcome.id}",
+        raw_api_call(:put,
+                     "/api/v1/outcomes/#{@outcome.id}",
                      controller: "outcomes_api",
                      action: "update",
                      id: @outcome.id.to_s,
@@ -427,7 +434,8 @@ describe "Outcomes API", type: :request do
         @account_user = @user.account_users.create(account: Account.site_admin)
         @outcome = LearningOutcome.global.create!(title: "global")
         revoke_permission(@account_user, :manage_global_outcomes)
-        raw_api_call(:put, "/api/v1/outcomes/#{@outcome.id}",
+        raw_api_call(:put,
+                     "/api/v1/outcomes/#{@outcome.id}",
                      controller: "outcomes_api",
                      action: "update",
                      id: @outcome.id.to_s,
@@ -437,7 +445,8 @@ describe "Outcomes API", type: :request do
 
       it "fails (400) if the outcome is invalid" do
         too_long_description = ([0] * (ActiveRecord::Base.maximum_text_length + 1)).join
-        raw_api_call(:put, "/api/v1/outcomes/#{@outcome.id}",
+        raw_api_call(:put,
+                     "/api/v1/outcomes/#{@outcome.id}",
                      { controller: "outcomes_api",
                        action: "update",
                        id: @outcome.id.to_s,
@@ -454,7 +463,8 @@ describe "Outcomes API", type: :request do
       end
 
       it "updates the outcome" do
-        api_call(:put, "/api/v1/outcomes/#{@outcome.id}",
+        api_call(:put,
+                 "/api/v1/outcomes/#{@outcome.id}",
                  { controller: "outcomes_api",
                    action: "update",
                    id: @outcome.id.to_s,
@@ -483,7 +493,8 @@ describe "Outcomes API", type: :request do
       end
 
       it "leaves alone fields not provided" do
-        api_call(:put, "/api/v1/outcomes/#{@outcome.id}",
+        api_call(:put,
+                 "/api/v1/outcomes/#{@outcome.id}",
                  { controller: "outcomes_api",
                    action: "update",
                    id: @outcome.id.to_s,
@@ -496,7 +507,8 @@ describe "Outcomes API", type: :request do
       end
 
       it "returns the updated outcome json" do
-        json = api_call(:put, "/api/v1/outcomes/#{@outcome.id}",
+        json = api_call(:put,
+                        "/api/v1/outcomes/#{@outcome.id}",
                         { controller: "outcomes_api",
                           action: "update",
                           id: @outcome.id.to_s,
@@ -545,7 +557,8 @@ describe "Outcomes API", type: :request do
           # Check pre-condition to make sure we're really updating with our API call
           expect(@outcome.calculation_method).not_to eq("n_mastery")
 
-          json = api_call(:put, "/api/v1/outcomes/#{@outcome.id}",
+          json = api_call(:put,
+                          "/api/v1/outcomes/#{@outcome.id}",
                           { controller: "outcomes_api",
                             action: "update",
                             id: @outcome.id.to_s,
@@ -564,7 +577,8 @@ describe "Outcomes API", type: :request do
           # Check pre-condition to make sure we're really updating with our API call
           expect(@outcome.calculation_int).not_to eq(3)
 
-          json = api_call(:put, "/api/v1/outcomes/#{@outcome.id}",
+          json = api_call(:put,
+                          "/api/v1/outcomes/#{@outcome.id}",
                           { controller: "outcomes_api",
                             action: "update",
                             id: @outcome.id.to_s,
@@ -575,13 +589,13 @@ describe "Outcomes API", type: :request do
                             calculation_method: "n_mastery",
                             calculation_int: 3 })
 
-          expect(json["calculation_int"]).to eql(3)
+          expect(json["calculation_int"]).to be(3)
           expect(json["calculation_method"]).to eql("n_mastery")
 
           @outcome.reload
           expect(json).to eq(outcome_json)
           expect(@outcome.calculation_method).to eql("n_mastery")
-          expect(@outcome.calculation_int).to eql(3)
+          expect(@outcome.calculation_int).to be(3)
         end
 
         context "should not allow updating the calculation_int to an illegal value for the calculation_method" do
@@ -603,7 +617,8 @@ describe "Outcomes API", type: :request do
           method_to_int.each do |method, int|
             it "does not allow updating the calculation_int to an illegal value for the calculation_method '#{method}'" do
               expect do
-                api_call(:put, "/api/v1/outcomes/#{@outcome.id}",
+                api_call(:put,
+                         "/api/v1/outcomes/#{@outcome.id}",
                          { controller: "outcomes_api",
                            action: "update",
                            id: @outcome.id.to_s,
@@ -617,7 +632,8 @@ describe "Outcomes API", type: :request do
               end.to change { @outcome.calculation_int }.to(int[:good])
 
               expect do
-                api_call(:put, "/api/v1/outcomes/#{@outcome.id}",
+                api_call(:put,
+                         "/api/v1/outcomes/#{@outcome.id}",
                          { controller: "outcomes_api",
                            action: "update",
                            id: @outcome.id.to_s,
@@ -643,7 +659,8 @@ describe "Outcomes API", type: :request do
           # simulate pre-existing learning outcome records that have nil calculation_methods
           @outcome.update_column(:calculation_method, nil)
 
-          api_call(:put, "/api/v1/outcomes/#{@outcome.id}",
+          api_call(:put,
+                   "/api/v1/outcomes/#{@outcome.id}",
                    { controller: "outcomes_api",
                      action: "update",
                      id: @outcome.id.to_s,
@@ -661,7 +678,8 @@ describe "Outcomes API", type: :request do
           bad_calc_method = "foo bar baz quz"
           expect(@outcome.calculation_method).not_to eq(bad_calc_method)
 
-          json = api_call(:put, "/api/v1/outcomes/#{@outcome.id}",
+          json = api_call(:put,
+                          "/api/v1/outcomes/#{@outcome.id}",
                           { controller: "outcomes_api",
                             action: "update",
                             id: @outcome.id.to_s,
@@ -705,7 +723,8 @@ describe "Outcomes API", type: :request do
               expect(@outcome.calculation_method).to eq(method)
               expect(@outcome.calculation_int).to eq(int)
 
-              json = api_call(:put, "/api/v1/outcomes/#{@outcome.id}",
+              json = api_call(:put,
+                              "/api/v1/outcomes/#{@outcome.id}",
                               { controller: "outcomes_api",
                                 action: "update",
                                 id: @outcome.id.to_s,
@@ -742,7 +761,8 @@ describe "Outcomes API", type: :request do
         end
 
         it "fails when updating mastery points" do
-          api_call(:put, "/api/v1/outcomes/#{@outcome.id}",
+          api_call(:put,
+                   "/api/v1/outcomes/#{@outcome.id}",
                    { controller: "outcomes_api",
                      action: "update",
                      id: @outcome.id.to_s,
@@ -753,7 +773,8 @@ describe "Outcomes API", type: :request do
         end
 
         it "fails when updating ratings" do
-          api_call(:put, "/api/v1/outcomes/#{@outcome.id}",
+          api_call(:put,
+                   "/api/v1/outcomes/#{@outcome.id}",
                    { controller: "outcomes_api",
                      action: "update",
                      id: @outcome.id.to_s,
@@ -768,7 +789,8 @@ describe "Outcomes API", type: :request do
         end
 
         it "fails when updating calculation values" do
-          api_call(:put, "/api/v1/outcomes/#{@outcome.id}",
+          api_call(:put,
+                   "/api/v1/outcomes/#{@outcome.id}",
                    { controller: "outcomes_api",
                      action: "update",
                      id: @outcome.id.to_s,
@@ -777,6 +799,133 @@ describe "Outcomes API", type: :request do
                      calculation_int: 65 })
           assert_forbidden
           expect(JSON.parse(response.body)["error"]).to eq "Individual outcome calculation values cannot be modified."
+        end
+      end
+    end
+
+    context "with the outcomes_new_decaying_average_calculation FF enabled" do
+      before :once do
+        @account.enable_feature!(:outcomes_new_decaying_average_calculation)
+      end
+
+      describe "show" do
+        it "returns the outcome json" do
+          json = api_call(:get,
+                          "/api/v1/outcomes/#{@outcome.id}",
+                          controller: "outcomes_api",
+                          action: "show",
+                          id: @outcome.id.to_s,
+                          format: "json")
+          expect(json).to eq({
+                               "id" => @outcome.id,
+                               "context_id" => @account.id,
+                               "context_type" => "Account",
+                               "calculation_int" => 65,
+                               "calculation_method" => "decaying_average",
+                               "title" => @outcome.title,
+                               "display_name" => nil,
+                               "friendly_description" => nil,
+                               "url" => api_v1_outcome_path(id: @outcome.id),
+                               "vendor_guid" => "vendorguid9000",
+                               "can_edit" => true,
+                               "has_updateable_rubrics" => false,
+                               "description" => @outcome.description,
+                               "assessed" => false,
+                               "mastery_points" => @outcome.mastery_points,
+                               "points_possible" => @outcome.points_possible,
+                               "ratings" => @outcome.rubric_criterion[:ratings].map(&:stringify_keys)
+                             })
+        end
+
+        it "returns updated calculation_method name" do
+          @outcome.calculation_method = "standard_decaying_average"
+          @outcome.save!
+
+          expect(@outcome.calculation_method).to eq("standard_decaying_average")
+          json = api_call(:get,
+                          "/api/v1/outcomes/#{@outcome.id}",
+                          controller: "outcomes_api",
+                          action: "show",
+                          id: @outcome.id.to_s,
+                          format: "json")
+          expect(json["calculation_method"]).to eq("standard_decaying_average")
+        end
+      end
+
+      describe "update" do
+        it "updates the outcome" do
+          api_call(:put,
+                   "/api/v1/outcomes/#{@outcome.id}",
+                   { controller: "outcomes_api",
+                     action: "update",
+                     id: @outcome.id.to_s,
+                     format: "json" },
+                   { title: "Updated Outcome",
+                     description: "Description of updated outcome",
+                     mastery_points: 5,
+                     ratings: [
+                       { points: 10, description: "Exceeds Expectations" },
+                       { points: 5, description: "Meets Expectations" },
+                       { points: 0, description: "Does Not Meet Expectations" }
+                     ] })
+          @outcome.reload
+          expect(@outcome.title).to eq "Updated Outcome"
+          expect(@outcome.description).to eq "Description of updated outcome"
+          expect(@outcome.data[:rubric_criterion]).to eq({
+                                                           description: "Updated Outcome",
+                                                           mastery_points: 5,
+                                                           points_possible: 10,
+                                                           ratings: [
+                                                             { points: 10, description: "Exceeds Expectations" },
+                                                             { points: 5, description: "Meets Expectations" },
+                                                             { points: 0, description: "Does Not Meet Expectations" }
+                                                           ]
+                                                         })
+        end
+
+        it "calculation_method to decaying_average" do
+          api_call(:put,
+                   "/api/v1/outcomes/#{@outcome.id}",
+                   { controller: "outcomes_api",
+                     action: "update",
+                     id: @outcome.id.to_s,
+                     format: "json" },
+                   { calculation_method: "decaying_average",
+                     calculation_int: 70 })
+
+          @outcome.reload
+          expect(@outcome.calculation_method).to eq "decaying_average"
+          expect(@outcome.calculation_int).to eq(70)
+        end
+
+        it "calculation_method to standard_decaying_average" do
+          api_call(:put,
+                   "/api/v1/outcomes/#{@outcome.id}",
+                   { controller: "outcomes_api",
+                     action: "update",
+                     id: @outcome.id.to_s,
+                     format: "json" },
+                   { calculation_method: "standard_decaying_average",
+                     calculation_int: 75 })
+
+          @outcome.reload
+          expect(@outcome.calculation_method).to eq "standard_decaying_average"
+          expect(@outcome.calculation_int).to eq(75)
+        end
+
+        it "calculation_method to weighted_average will translate to decaying_average" do
+          api_call(:put,
+                   "/api/v1/outcomes/#{@outcome.id}",
+                   { controller: "outcomes_api",
+                     action: "update",
+                     id: @outcome.id.to_s,
+                     format: "json" },
+                   { calculation_method: "weighted_average",
+                     calculation_int: 75 })
+
+          @outcome.reload
+          expect(@outcome.calculation_method).to eq "decaying_average"
+          expect(@outcome.calculation_int).to eq(75)
         end
       end
     end
@@ -800,7 +949,8 @@ describe "Outcomes API", type: :request do
     describe "show" do
       context "properly reports whether it has been assessed" do
         it "reports not being assessed" do
-          json = api_call(:get, "/api/v1/outcomes/#{@outcome.id}",
+          json = api_call(:get,
+                          "/api/v1/outcomes/#{@outcome.id}",
                           controller: "outcomes_api",
                           action: "show",
                           id: @outcome.id.to_s,
@@ -810,7 +960,8 @@ describe "Outcomes API", type: :request do
 
         it "reports being assessed" do
           assess_outcome(@outcome)
-          json = api_call(:get, "/api/v1/outcomes/#{@outcome.id}",
+          json = api_call(:get,
+                          "/api/v1/outcomes/#{@outcome.id}",
                           controller: "outcomes_api",
                           action: "show",
                           id: @outcome.id.to_s,
@@ -822,7 +973,8 @@ describe "Outcomes API", type: :request do
       context "properly reports whether it has updateable rubrics" do
         it "reports with no updateable rubrics" do
           assess_outcome(@outcome)
-          json = api_call(:get, "/api/v1/outcomes/#{@outcome.id}",
+          json = api_call(:get,
+                          "/api/v1/outcomes/#{@outcome.id}",
                           controller: "outcomes_api",
                           action: "show",
                           id: @outcome.id.to_s,
@@ -832,7 +984,8 @@ describe "Outcomes API", type: :request do
 
         it "reports with updateable rubrics" do
           assess_outcome(@outcome, false)
-          json = api_call(:get, "/api/v1/outcomes/#{@outcome.id}",
+          json = api_call(:get,
+                          "/api/v1/outcomes/#{@outcome.id}",
                           controller: "outcomes_api",
                           action: "show",
                           id: @outcome.id.to_s,
@@ -859,24 +1012,26 @@ describe "Outcomes API", type: :request do
       end
 
       it "does not allow student to return aligned assignments" do
-        json = api_call(:get, "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
+        json = api_call(:get,
+                        "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
                         controller: "outcomes_api",
                         action: "outcome_alignments",
                         course_id: @course.id.to_s,
                         student_id: @student.id.to_s,
                         format: "json")
-        expect(json.map { |j| j["assignment_id"] }.sort).to eq([])
+        expect(json.pluck("assignment_id").sort).to eq([])
       end
 
       it "allows teacher to return aligned assignments for a student" do
         @user = @teacher
-        json = api_call(:get, "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
+        json = api_call(:get,
+                        "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
                         controller: "outcomes_api",
                         action: "outcome_alignments",
                         course_id: @course.id.to_s,
                         student_id: @student.id.to_s,
                         format: "json")
-        expect(json.map { |j| j["assignment_id"] }.sort).to eq([@assignment.id, @quiz.assignment_id].sort)
+        expect(json.pluck("assignment_id").sort).to eq([@assignment.id, @quiz.assignment_id].sort)
       end
     end
 
@@ -911,7 +1066,8 @@ describe "Outcomes API", type: :request do
       end
 
       it "returns aligned assignments and assessments for a student" do
-        json = api_call(:get, "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
+        json = api_call(:get,
+                        "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
                         controller: "outcomes_api",
                         action: "outcome_alignments",
                         course_id: @course.id.to_s,
@@ -923,7 +1079,8 @@ describe "Outcomes API", type: :request do
 
       it "allows teacher to return aligned assignments for a student" do
         @user = @teacher
-        json = api_call(:get, "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
+        json = api_call(:get,
+                        "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
                         controller: "outcomes_api",
                         action: "outcome_alignments",
                         course_id: @course.id.to_s,
@@ -934,7 +1091,8 @@ describe "Outcomes API", type: :request do
 
       it "allows observer to return aligned assignments for a student" do
         @user = @observer
-        json = api_call(:get, "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
+        json = api_call(:get,
+                        "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
                         controller: "outcomes_api",
                         action: "outcome_alignments",
                         course_id: @course.id.to_s,
@@ -950,20 +1108,22 @@ describe "Outcomes API", type: :request do
         bank = quiz.quiz_questions[0].assessment_question.assessment_question_bank
         outcome.align(bank, course)
         generate_quiz_submission(quiz, student: @student)
-        json = api_call(:get, "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
+        json = api_call(:get,
+                        "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
                         controller: "outcomes_api",
                         action: "outcome_alignments",
                         course_id: @course.id.to_s,
                         student_id: @student.id.to_s,
                         format: "json")
-        expect(json.map { |j| j["learning_outcome_id"] }.uniq).to eq([@outcome.id])
+        expect(json.pluck("learning_outcome_id").uniq).to eq([@outcome.id])
       end
 
       it "does not return assignments that a student does not have visibility for" do
         assignment_model({ course: @course, only_visible_to_overrides: true })
         section = @course.course_sections.create!(name: "test section")
         create_section_override_for_assignment(@assignment, course_section: section)
-        json = api_call(:get, "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
+        json = api_call(:get,
+                        "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
                         controller: "outcomes_api",
                         action: "outcome_alignments",
                         course_id: @course.id.to_s,
@@ -973,12 +1133,269 @@ describe "Outcomes API", type: :request do
       end
 
       it "requires a student_id to be present" do
-        json = api_call(:get, "/api/v1/courses/#{@course.id}/outcome_alignments",
+        json = api_call(:get,
+                        "/api/v1/courses/#{@course.id}/outcome_alignments",
                         controller: "outcomes_api",
                         action: "outcome_alignments",
                         course_id: @course.id.to_s,
                         format: "json")
         expect(json["message"]).to eq("student_id is required")
+      end
+
+      describe "#find_outcomes_service_assignment_alignments" do
+        def mock_get_outcome_alignments(outcome, artifact_type, artifact_id, alignments, associated_asset_id, associated_asset_type)
+          if alignments.nil?
+            alignments = [
+              {
+                id: 30,
+                artifact_type:,
+                artifact_id:,
+                alignment_set_id: 36,
+                aligned_at: "2022-11-03T15:37:19.343Z",
+                created_at: "2022-11-03T15:35:53.240Z",
+                updated_at: "2022-11-03T15:37:25.566Z",
+                deleted_at: nil,
+                context_id: nil,
+                associated_asset_id:,
+                associated_asset_type:
+              }
+            ]
+          end
+
+          {
+            id: "12",
+            guid: nil,
+            group: false,
+            label: "",
+            title: "Outcome title",
+            description: "",
+            external_id: outcome.id,
+            alignments:
+          }
+        end
+
+        def mock_get_lmgb_results(student, outcome, artifact_type, artifact_id, metadata, associated_asset_id, associated_asset_type)
+          if metadata.nil?
+            metadata = {
+              quiz_metadata: {
+                quiz_id: "1",
+                title: "Quiz title",
+                points_possible: 1.0,
+                points: 1.0
+              },
+              question_metadata: [{
+                quiz_item_id: "1",
+                title: "Question title",
+                points_possible: 1.0,
+                points: 1.0
+              }]
+            }
+          end
+
+          {
+            user_uuid: student.uuid,
+            percent_score: 1.0,
+            points: 1.0,
+            points_possible: 1.0,
+            external_outcome_id: outcome.id,
+            submitted_at: "2022-09-16T04:17:11.637Z",
+            attempts: [{
+              id: 1,
+              authoritative_result_id: 1,
+              points: 1.0,
+              points_possible: 1.0,
+              event_created_at: "2022-09-16T04:17:11.637Z",
+              event_updated_at: "2022-09-16T04:17:11.637Z",
+              deleted_at: nil,
+              created_at: "2022-09-16T04:17:18.153Z",
+              updated_at: "2022-09-16T04:17:18.153Z",
+              submitted_at: "2022-09-16T04:17:18.153Z",
+              metadata:
+            }],
+            associated_asset_type:,
+            associated_asset_id:,
+            artifact_type:,
+            artifact_id:,
+            mastery: nil
+          }
+        end
+
+        it "returns empty array for alignments when FF is disabled" do
+          @course.disable_feature!(:outcome_service_results_to_canvas)
+          expect_any_instance_of(OutcomesApiController).to receive(:find_outcomes_service_assignment_alignments).with(any_args).and_return([])
+          json = api_call(:get,
+                          "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
+                          controller: "outcomes_api",
+                          action: "outcome_alignments",
+                          course_id: @course.id.to_s,
+                          student_id: @student.id.to_s,
+                          format: "json")
+          expect(json.filter_map { |j| j["assignment_id"] }.sort).to eq([@assignment1.id, @assignment2.id, @quiz.assignment_id].sort)
+        end
+
+        context "outcome_service_results_to_canvas FF is enabled" do
+          before do
+            @course.enable_feature!(:outcome_service_results_to_canvas)
+          end
+
+          describe "returns empty array" do
+            it "no alignments found in os" do
+              # returns empty array for both os calls
+              expect_any_instance_of(OutcomesApiController).to receive(:get_lmgb_results).with(any_args).and_return([])
+              expect_any_instance_of(OutcomesApiController).to receive(:get_outcome_alignments).with(any_args).and_return([])
+              json = api_call(:get,
+                              "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
+                              controller: "outcomes_api",
+                              action: "outcome_alignments",
+                              course_id: @course.id.to_s,
+                              student_id: @student.id.to_s,
+                              format: "json")
+              expect(json.filter_map { |j| j["assignment_id"] }.sort).to eq([@assignment1.id, @assignment2.id, @quiz.assignment_id].sort)
+            end
+
+            describe "has alignments but not asset information" do
+              it "asset info is nil in os outcome alignment & os results" do
+                # both calls return nil for associated asset id & type
+                expect_any_instance_of(OutcomesApiController).to receive(:get_lmgb_results).with(any_args).and_return(
+                  [mock_get_lmgb_results(@student, @outcome, "quizzes.quiz", "1", nil, nil, nil)]
+                )
+                expect_any_instance_of(OutcomesApiController).to receive(:get_outcome_alignments).with(any_args).and_return(
+                  [mock_get_outcome_alignments(@outcome, "quizzes.quiz", "1", nil, nil, nil)]
+                )
+                json = api_call(:get,
+                                "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
+                                controller: "outcomes_api",
+                                action: "outcome_alignments",
+                                course_id: @course.id.to_s,
+                                student_id: @student.id.to_s,
+                                format: "json")
+                expect(json.filter_map { |j| j["assignment_id"] }.sort).to eq([@assignment1.id, @assignment2.id, @quiz.assignment_id].sort)
+              end
+            end
+          end
+
+          describe "aligning asset information found in os outcome alignment" do
+            # right now quizzes are the only one that will have asset alignment
+            # once item banks and item alignment issues are solved, this will need
+            # to be revisited
+            it "returns new quiz alignment" do
+              # only need to call alignment mock and return new quiz in alignments
+              new_quiz = new_quizzes_assignment(course: @course, title: "New Quiz")
+              expect_any_instance_of(OutcomesApiController).to receive(:get_outcome_alignments).with(any_args).and_return(
+                [mock_get_outcome_alignments(@outcome, "quizzes.quiz", "1", nil, new_quiz.id, "canvas.assignment.quizzes")]
+              )
+              expect_any_instance_of(OutcomesApiController).to receive(:get_lmgb_results).with(any_args).and_return(
+                []
+              )
+              json = api_call(:get,
+                              "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
+                              controller: "outcomes_api",
+                              action: "outcome_alignments",
+                              course_id: @course.id.to_s,
+                              student_id: @student.id.to_s,
+                              format: "json")
+              expect(json.filter_map { |j| j["assignment_id"] }.sort).to eq([@assignment1.id, @assignment2.id, @quiz.assignment_id, new_quiz.id].sort)
+            end
+          end
+
+          describe "finds asset info from get_lmgb_results results when outcome alignment is missing asset info" do
+            it "returns quiz alignment for question" do
+              # mock alignment with question as the artifact type and id
+              # mock results with the attempt question metadata matching the alignment artifact type and id
+              new_quiz = new_quizzes_assignment(course: @course, title: "New Quiz")
+
+              # student, outcome, artifact_type, artifact_id, metadata, associated_asset_id, associated_asset_type
+              expect_any_instance_of(OutcomesApiController).to receive(:get_lmgb_results).with(any_args).and_return(
+                [mock_get_lmgb_results(@student, @outcome, "quizzes.quiz", "1", nil, new_quiz.id, "canvas.assignment.quizzes")]
+              )
+              # outcome, artifact_type, artifact_id, alignments, associated_asset_id, associated_asset_type
+              expect_any_instance_of(OutcomesApiController).to receive(:get_outcome_alignments).with(any_args).and_return(
+                [mock_get_outcome_alignments(@outcome, "quizzes.item", "1", nil, nil, nil)]
+              )
+              json = api_call(:get,
+                              "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
+                              controller: "outcomes_api",
+                              action: "outcome_alignments",
+                              course_id: @course.id.to_s,
+                              student_id: @student.id.to_s,
+                              format: "json")
+              expect(json.filter_map { |j| j["assignment_id"] }.sort).to eq([@assignment1.id, @assignment2.id, @quiz.assignment_id, new_quiz.id].sort)
+            end
+
+            it "returns quiz alignment" do
+              # mock alignment with the quiz as the artifact type and id with nil asset
+              # mock results with the artifact type and id matching the alignment artifact type and id
+              new_quiz = new_quizzes_assignment(course: @course, title: "New Quiz")
+
+              # student, outcome, artifact_type, artifact_id, metadata, associated_asset_id, associated_asset_type
+              expect_any_instance_of(OutcomesApiController).to receive(:get_lmgb_results).with(any_args).and_return(
+                [mock_get_lmgb_results(@student, @outcome, "quizzes.quiz", "1", nil, new_quiz.id, "canvas.assignment.quizzes")]
+              )
+              # outcome, artifact_type, artifact_id, alignments, associated_asset_id, associated_asset_type
+              expect_any_instance_of(OutcomesApiController).to receive(:get_outcome_alignments).with(any_args).and_return(
+                [mock_get_outcome_alignments(@outcome, "quizzes.quiz", "1", nil, nil, nil)]
+              )
+              json = api_call(:get,
+                              "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
+                              controller: "outcomes_api",
+                              action: "outcome_alignments",
+                              course_id: @course.id.to_s,
+                              student_id: @student.id.to_s,
+                              format: "json")
+              expect(json.filter_map { |j| j["assignment_id"] }.sort).to eq([@assignment1.id, @assignment2.id, @quiz.assignment_id, new_quiz.id].sort)
+            end
+          end
+
+          describe "when outcome is aligned to quiz and question" do
+            it "returns only one new quiz outcome alignment" do
+              # mock alignments has two alignments one with a quiz and an item both with nil
+              # mock os results has a result attempt containing the quiz and question
+              new_quiz = new_quizzes_assignment(course: @course, title: "New Quiz")
+              alignments = [
+                {
+                  id: 30,
+                  artifact_type: "quizzes.quiz",
+                  artifact_id: "1",
+                  alignment_set_id: 36,
+                  aligned_at: "2022-11-03T15:37:19.343Z",
+                  created_at: "2022-11-03T15:35:53.240Z",
+                  updated_at: "2022-11-03T15:37:25.566Z",
+                  deleted_at: nil,
+                  context_id: nil,
+                  associated_asset_id: new_quiz.id,
+                  associated_asset_type: "canvas.assignment.quizzes"
+                },
+                {
+                  id: 31,
+                  artifact_type: "quizzes.item",
+                  artifact_id: "1",
+                  alignment_set_id: 36,
+                  aligned_at: "2022-11-03T15:37:19.343Z",
+                  created_at: "2022-11-03T15:35:53.240Z",
+                  updated_at: "2022-11-03T15:37:25.566Z",
+                  deleted_at: nil,
+                  context_id: nil,
+                  associated_asset_id: nil,
+                  associated_asset_type: nil
+                }
+              ]
+              expect_any_instance_of(OutcomesApiController).to receive(:get_outcome_alignments).with(any_args).and_return(
+                [mock_get_outcome_alignments(@outcome, "quizzes.quiz", "1", alignments, new_quiz.id, "canvas.assignment.quizzes")]
+              )
+              expect_any_instance_of(OutcomesApiController).to receive(:get_lmgb_results).with(any_args).and_return(
+                [mock_get_lmgb_results(@student, @outcome, "quizzes.quiz", "1", nil, new_quiz.id, "canvas.assignment.quizzes")]
+              )
+              json = api_call(:get,
+                              "/api/v1/courses/#{@course.id}/outcome_alignments?student_id=#{@student.id}",
+                              controller: "outcomes_api",
+                              action: "outcome_alignments",
+                              course_id: @course.id.to_s,
+                              student_id: @student.id.to_s,
+                              format: "json")
+              expect(json.filter_map { |j| j["assignment_id"] }.sort).to eq([@assignment1.id, @assignment2.id, @quiz.assignment_id, new_quiz.id].sort)
+            end
+          end
+        end
       end
     end
 
@@ -996,12 +1413,14 @@ describe "Outcomes API", type: :request do
 
           let(:update_outcome_api) do
             lambda do |attrs|
-              api_call(:put, "/api/v1/outcomes/#{@outcome.id}",
+              api_call(:put,
+                       "/api/v1/outcomes/#{@outcome.id}",
                        { controller: "outcomes_api",
                          action: "update",
                          id: @outcome.id.to_s,
                          format: "json" },
-                       attrs, {},
+                       attrs,
+                       {},
                        { expected_status: 400 })
             end
           end
@@ -1023,7 +1442,8 @@ describe "Outcomes API", type: :request do
             expect(@outcome).to be_assessed
             expect(@outcome.calculation_method).to eq("decaying_average")
 
-            json = api_call(:put, "/api/v1/outcomes/#{@outcome.id}",
+            json = api_call(:put,
+                            "/api/v1/outcomes/#{@outcome.id}",
                             { controller: "outcomes_api",
                               action: "update",
                               id: @outcome.id.to_s,
@@ -1045,7 +1465,8 @@ describe "Outcomes API", type: :request do
             expect(@outcome.calculation_method).to eq("decaying_average")
             expect(@outcome.calculation_int).to eq(62)
 
-            json = api_call(:put, "/api/v1/outcomes/#{@outcome.id}",
+            json = api_call(:put,
+                            "/api/v1/outcomes/#{@outcome.id}",
                             { controller: "outcomes_api",
                               action: "update",
                               id: @outcome.id.to_s,
@@ -1067,11 +1488,15 @@ describe "Outcomes API", type: :request do
             new_title = "some new title"
             new_display_name = "some display name"
             new_desc = "some new description or something"
-            api_call(:put, "/api/v1/outcomes/#{@outcome.id}",
-                     { controller: "outcomes_api", action: "update",
-                       id: @outcome.id.to_s, format: "json" },
+            api_call(:put,
+                     "/api/v1/outcomes/#{@outcome.id}",
+                     { controller: "outcomes_api",
+                       action: "update",
+                       id: @outcome.id.to_s,
+                       format: "json" },
                      { title: new_title, description: new_desc, display_name: new_display_name },
-                     {}, { expected_status: 200 })
+                     {},
+                     { expected_status: 200 })
             @outcome.reload
             expect(@outcome.title).to eq new_title
             expect(@outcome.display_name).to eq new_display_name
@@ -1093,11 +1518,15 @@ describe "Outcomes API", type: :request do
             it "allows updating rating descriptions even when assessed" do
               new_ratings = [{ description: "some new desc1", points: 5 },
                              { description: "some new desc2", points: 1 }]
-              api_call(:put, "/api/v1/outcomes/#{@outcome2.id}",
-                       { controller: "outcomes_api", action: "update",
-                         id: @outcome2.id.to_s, format: "json" },
+              api_call(:put,
+                       "/api/v1/outcomes/#{@outcome2.id}",
+                       { controller: "outcomes_api",
+                         action: "update",
+                         id: @outcome2.id.to_s,
+                         format: "json" },
                        { ratings: new_ratings },
-                       {}, { expected_status: 200 })
+                       {},
+                       { expected_status: 200 })
               @outcome2.reload
               expect(@outcome2.rubric_criterion[:ratings]).to eq new_ratings
             end
@@ -1105,21 +1534,29 @@ describe "Outcomes API", type: :request do
             it "allows updating rating points" do
               new_ratings = [{ description: "some new desc1", points: 5 },
                              { description: "some new desc2", points: 3 }]
-              api_call(:put, "/api/v1/outcomes/#{@outcome2.id}",
-                       { controller: "outcomes_api", action: "update",
-                         id: @outcome2.id.to_s, format: "json" },
+              api_call(:put,
+                       "/api/v1/outcomes/#{@outcome2.id}",
+                       { controller: "outcomes_api",
+                         action: "update",
+                         id: @outcome2.id.to_s,
+                         format: "json" },
                        { ratings: new_ratings },
-                       {}, { expected_status: 200 })
+                       {},
+                       { expected_status: 200 })
               @outcome2.reload
               expect(@outcome2.rubric_criterion[:ratings]).to eq new_ratings
             end
 
             it "allows updating mastery points" do
-              api_call(:put, "/api/v1/outcomes/#{@outcome2.id}",
-                       { controller: "outcomes_api", action: "update",
-                         id: @outcome2.id.to_s, format: "json" },
+              api_call(:put,
+                       "/api/v1/outcomes/#{@outcome2.id}",
+                       { controller: "outcomes_api",
+                         action: "update",
+                         id: @outcome2.id.to_s,
+                         format: "json" },
                        { mastery_points: 7 },
-                       {}, { expected_status: 200 })
+                       {},
+                       { expected_status: 200 })
               @outcome2.reload
               expect(@outcome2.rubric_criterion[:mastery_points]).to eq 7
             end

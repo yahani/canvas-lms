@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2017 - present Instructure, Inc.
  *
@@ -17,76 +18,87 @@
  */
 
 import React, {Component} from 'react'
-import {bool, func, instanceOf, number, oneOf, shape, string} from 'prop-types'
-import {ApplyTheme} from '@instructure/ui-themeable'
-import {Button} from '@instructure/ui-buttons'
+import {InstUISettingsProvider} from '@instructure/emotion'
+import {IconButton} from '@instructure/ui-buttons'
 import {IconExpandStartLine} from '@instructure/ui-icons'
 import {Text} from '@instructure/ui-text'
-import {TextInput} from '@instructure/ui-text-input'
 import {useScope as useI18nScope} from '@canvas/i18n'
-
 import AssignmentGradeInput from '../AssignmentGradeInput/index'
 import InvalidGradeIndicator from '../InvalidGradeIndicator'
 import SimilarityIndicator from '../SimilarityIndicator'
+import type {Submission} from '../../../../../../../api.d' // !!!! FIXME
+import type {CamelizedAssignment, GradeEntryMode} from '@canvas/grading/grading.d'
 
 const I18n = useI18nScope('gradebook')
 
-const themeOverrides = {
-  [Button.theme]: {
+const componentOverrides = {
+  IconButton: {
     iconPadding: '0 3px',
-    smallHeight: '23px'
+    smallHeight: '23px',
   },
-  [TextInput.theme]: {
-    smallHeight: '27px'
-  }
+  TextInput: {
+    smallHeight: '27px',
+  },
 }
 
-export default class AssignmentRowCell extends Component {
-  static propTypes = {
-    assignment: shape({
-      id: string.isRequired,
-      pointsPossible: number
-    }).isRequired,
-    editorOptions: shape({
-      column: shape({
-        assignmentId: string.isRequired
-      }).isRequired,
-      grid: shape({}).isRequired,
-      item: shape({
-        id: string.isRequired
-      }).isRequired
-    }).isRequired,
-    enterGradesAs: oneOf(['gradingScheme', 'passFail', 'percent', 'points']).isRequired,
-    gradingScheme: instanceOf(Array).isRequired,
-    onGradeSubmission: func.isRequired,
-    onToggleSubmissionTrayOpen: func.isRequired,
-    pendingGradeInfo: shape({
-      enteredAs: string,
-      excused: bool.isRequired,
-      grade: string,
-      score: number,
-      valid: bool.isRequired
-    }),
-    submission: shape({
-      assignmentId: string.isRequired,
-      enteredGrade: string,
-      enteredScore: number,
-      excused: bool.isRequired,
-      id: string,
-      similarityInfo: shape({
-        similarityScore: number,
-        status: string.isRequired
-      }),
-      userId: string.isRequired
-    }).isRequired,
-    submissionIsUpdating: bool.isRequired
+type Props = {
+  enterGradesAs: GradeEntryMode
+
+  assignment: CamelizedAssignment
+
+  editorOptions: {
+    column: {
+      assignmentId: string
+    }
+    grid: {}
+    item: {
+      id: string
+    }
   }
+
+  gradingScheme: [name: string, value: number][]
+
+  onGradeSubmission: (submission: Submission, grade: string) => void
+
+  onToggleSubmissionTrayOpen: (assignmentId: string, userId: string) => void
+
+  pendingGradeInfo: {
+    enteredAs: string
+    excused: boolean
+    grade: string
+    score: number
+    valid: boolean
+  } | null
+
+  submission: Submission
+
+  submissionIsUpdating: boolean
+}
+
+export default class AssignmentRowCell extends Component<Props> {
+  bindContainerRef: (ref: HTMLDivElement | null) => void
+
+  contentContainer: HTMLDivElement | null = null
+
+  bindStartContainerIndicatorRef: (ref: HTMLButtonElement | null) => void
+
+  startContainerIndicator: HTMLButtonElement | null = null
+
+  bindGradeInput: (ref: AssignmentGradeInput | null) => void
+
+  gradeInput: AssignmentGradeInput | null = null
+
+  bindToggleTrayButtonRef: (ref: Element | null) => void
+
+  trayButton: Element | null = null
+
+  submissionIsUpdating: boolean = false
 
   static defaultProps = {
-    pendingGradeInfo: null
+    pendingGradeInfo: null,
   }
 
-  constructor(props) {
+  constructor(props: Props) {
     super(props)
 
     this.bindContainerRef = ref => {
@@ -106,25 +118,33 @@ export default class AssignmentRowCell extends Component {
   }
 
   componentDidMount() {
-    if (!this.props.submissionIsUpdating && this.trayButton !== document.activeElement) {
+    if (
+      !this.props.submissionIsUpdating &&
+      this.trayButton !== document.activeElement &&
+      this.gradeInput instanceof AssignmentGradeInput
+    ) {
       this.gradeInput.focus()
     }
   }
 
-  componentDidUpdate(prevProps) {
+  componentDidUpdate(prevProps: Props) {
     const submissionFinishedUpdating =
       prevProps.submissionIsUpdating && !this.props.submissionIsUpdating
 
-    if (submissionFinishedUpdating && this.trayButton !== document.activeElement) {
+    if (
+      submissionFinishedUpdating &&
+      this.trayButton !== document.activeElement &&
+      this.gradeInput instanceof AssignmentGradeInput
+    ) {
       // the cell was reactivated while the grade was updating
       // set the focus on the input by default
       this.gradeInput.focus()
     }
   }
 
-  handleKeyDown = event => {
+  handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const indicatorHasFocus = this.startContainerIndicator === document.activeElement
-    const inputHasFocus = this.contentContainer.contains(document.activeElement)
+    const inputHasFocus = this.contentContainer?.contains(document.activeElement)
     const trayButtonHasFocus = this.trayButton === document.activeElement
 
     if (this.gradeInput) {
@@ -161,19 +181,23 @@ export default class AssignmentRowCell extends Component {
   }
 
   focus() {
-    this.gradeInput.focus()
+    if (this.gradeInput instanceof AssignmentGradeInput) {
+      this.gradeInput.focus()
+    }
   }
 
   gradeSubmission() {
-    this.props.onGradeSubmission(this.props.submission, this.gradeInput.gradeInfo)
+    if (this.gradeInput instanceof AssignmentGradeInput) {
+      this.props.onGradeSubmission(this.props.submission, this.gradeInput.gradeInfo)
+    }
   }
 
-  isValueChanged() {
-    return this.gradeInput.hasGradeChanged()
+  isValueChanged(): boolean {
+    return this.gradeInput?.hasGradeChanged() || false
   }
 
   render() {
-    let pointsPossible = null
+    let pointsPossible: null | string = null
     if (this.props.enterGradesAs === 'points' && this.props.assignment.pointsPossible) {
       pointsPossible = `/${I18n.n(this.props.assignment.pointsPossible)}`
     }
@@ -184,13 +208,13 @@ export default class AssignmentRowCell extends Component {
     const showSimilarityIcon = !gradeIsInvalid && similarityInfo != null
 
     return (
-      <ApplyTheme theme={themeOverrides}>
+      <InstUISettingsProvider theme={{componentOverrides}}>
         <div className={`Grid__GradeCell ${this.props.enterGradesAs}`}>
           <div className="Grid__GradeCell__StartContainer">
             {gradeIsInvalid && (
               <InvalidGradeIndicator elementRef={this.bindStartContainerIndicatorRef} />
             )}
-            {showSimilarityIcon && (
+            {showSimilarityIcon && similarityInfo && (
               <SimilarityIndicator
                 elementRef={this.bindStartContainerIndicatorRef}
                 similarityInfo={similarityInfo}
@@ -218,18 +242,18 @@ export default class AssignmentRowCell extends Component {
             )}
 
             <div className="Grid__GradeCell__Options">
-              <Button
+              <IconButton
                 elementRef={this.bindToggleTrayButtonRef}
                 onClick={this.handleToggleTrayButtonClick}
                 size="small"
-                variant="icon"
-              >
-                <IconExpandStartLine title={I18n.t('Open submission tray')} />
-              </Button>
+                renderIcon={IconExpandStartLine}
+                color="secondary"
+                screenReaderLabel={I18n.t('Open submission tray')}
+              />
             </div>
           </div>
         </div>
-      </ApplyTheme>
+      </InstUISettingsProvider>
     )
   }
 }

@@ -17,6 +17,7 @@
  */
 
 import $ from 'jquery'
+import 'jquery-migrate'
 import TimeBlockListManager from '@canvas/calendar/TimeBlockListManager'
 import moment from 'moment'
 
@@ -24,7 +25,7 @@ QUnit.module('TimeBlockListManager', {
   setup() {},
   teardown() {
     $('#ui-datepicker-div').empty()
-  }
+  },
 })
 
 test('constructor', () => {
@@ -32,7 +33,10 @@ test('constructor', () => {
   const d2 = moment(new Date(2011, 12, 27, 9, 30))
   const d3 = moment(new Date(2011, 12, 27, 10, 0))
   const d4 = moment(new Date(2011, 12, 27, 11, 30))
-  const manager = new TimeBlockListManager([[d1, d2], [d3, d4]])
+  const manager = new TimeBlockListManager([
+    [d1, d2],
+    [d3, d4],
+  ])
   equal(manager.blocks.length, 2)
   equal(manager.blocks[0].start.format(), d1.format())
   equal(manager.blocks[0].end.format(), d2.format())

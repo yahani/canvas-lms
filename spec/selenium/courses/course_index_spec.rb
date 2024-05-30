@@ -18,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 require_relative "../../helpers/k5_common"
-require_relative "./pages/course_index_page"
+require_relative "pages/course_index_page"
 
 describe "course index" do
   include_context "in-process server selenium tests"
@@ -107,6 +107,35 @@ describe "course index" do
       ["K5 Course (Current)", "K5 Course (Past)", "K5 Course (Future)"].each do |name|
         expect(row_with_text(name)).not_to contain_css(star)
       end
+    end
+
+    it "includes the course title in the star's text" do
+      get "/courses"
+
+      expect(fj('.course-list-favoritable:contains("Click to add Classic Course (Current) to the courses menu.")')).to be_displayed
+      expect(fj('.course-list-favoritable:contains("Classic Course (Past) cannot be added to the courses menu unless the course is active.")')).to be_displayed
+      expect(fj('.course-list-favoritable:contains("Click to add Classic Course (Future) to the courses menu.")')).to be_displayed
+    end
+
+    it "favorites a course" do
+      get "/courses"
+
+      course_name = "Classic Course (Current)"
+      expect(row_with_text(course_name)).not_to contain_css(".icon-star")
+      favorite_icon(course_name).click
+      wait_for_ajaximations
+      expect(row_with_text(course_name)).to contain_css(".icon-star")
+    end
+
+    it "unfavorites a course" do
+      @user.favorites.create!(context: @current_courses[0])
+      get "/courses"
+
+      course_name = "Classic Course (Current)"
+      expect(row_with_text(course_name)).to contain_css(".icon-star")
+      favorite_icon(course_name).click
+      wait_for_ajaximations
+      expect(row_with_text(course_name)).not_to contain_css(".icon-star")
     end
   end
 

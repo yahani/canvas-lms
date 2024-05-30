@@ -29,22 +29,22 @@ module CoursePacesCommonPageObject
   def create_assignment(course, assignment_title, description, points_possible, publish_status)
     course.assignments.create!(
       title: assignment_title,
-      description: description,
-      points_possible: points_possible,
+      description:,
+      points_possible:,
       submission_types: "online_text_entry",
       workflow_state: publish_status
     )
   end
 
   def create_course_module(module_title, workflow_state = "active")
-    @course.context_modules.create!(name: module_title, workflow_state: workflow_state)
+    @course.context_modules.create!(name: module_title, workflow_state:)
   end
 
   def create_dated_assignment(course, assignment_title, assignment_due_at, points_possible = 100)
     course.assignments.create!(
       title: assignment_title,
       grading_type: "points",
-      points_possible: points_possible,
+      points_possible:,
       due_at: assignment_due_at,
       submission_types: "online_text_entry"
     )
@@ -55,8 +55,8 @@ module CoursePacesCommonPageObject
     course.discussion_topics.create!(user: @teacher,
                                      title: discussion_title,
                                      message: "Discussion topic message",
-                                     assignment: assignment,
-                                     workflow_state: workflow_state)
+                                     assignment:,
+                                     workflow_state:)
   end
 
   def create_quiz(course, quiz_title)
@@ -93,12 +93,27 @@ module CoursePacesCommonPageObject
     Setting.set("course_pace_publish_interval", "0")
 
     course_pace_model(course: @course, end_date: Time.zone.now.advance(days: 30))
-    course_pace_module = create_course_module(module_title)
-    course_pace_assignment = create_assignment(@course, assignment_title, "Assignment 1", 10, "published")
-    course_pace_module.add_item(id: course_pace_assignment.id, type: "assignment")
+    create_course_pace_module_with_assignment(module_title, assignment_title)
+    @course_pace
+  end
+
+  def create_course_pace_module_with_assignment(module_title, assignment_title)
+    @course_pace_module = create_course_module(module_title)
+    @course_pace_assignment = create_assignment(@course, assignment_title, assignment_title, 10, "published")
+    @course_pace_module.add_item(id: @course_pace_assignment.id, type: "assignment")
     @course_pace.course_pace_module_items.last.update! duration: 2
     run_jobs # Run the autopublish job
-    @course_pace
+    @course_pace_module
+  end
+
+  def create_section_pace(section)
+    course_section_pace = section_pace_model(section:)
+    course_section_pace.publish
+  end
+
+  def create_student_pace(student_enrollment)
+    student_pace = student_enrollment_pace_model(student_enrollment:)
+    student_pace.publish
   end
 
   def disable_course_paces_in_course
@@ -125,9 +140,19 @@ module CoursePacesCommonPageObject
     date
   end
 
+  def format_course_pacing_date(date)
+    format_date_for_view(date, "%a, %b %-d, %Y")
+  end
+
+  def date_of_next(day)
+    date  = Date.parse(day)
+    delta = (date > Date.today) ? 0 : 7
+    date + delta
+  end
+
   def teacher_setup
     feature_setup
-    @course_name = "Course Paces Course"
+    @course_name = "course paces course"
     course_with_teacher(
       account: @account,
       active_course: 1,
@@ -135,9 +160,13 @@ module CoursePacesCommonPageObject
       course_name: @course_name,
       name: "CoursePace Teacher"
     )
-    @course.start_at = "2022-04-25"
-    @course.conclude_at = "2022-05-25"
+    @course.start_at = date_of_next("Monday") - 7.days
+    @course.conclude_at = date_of_next("Monday") + 7.days
     @course.restrict_enrollments_to_course_dates = true
     @course.save!
+  end
+
+  def visit_course_paces_page(course_id_override: false)
+    get "/courses/#{course_id_override || @course.id}/course_pacing"
   end
 end

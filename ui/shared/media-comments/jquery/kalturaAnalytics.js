@@ -15,9 +15,10 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
+import {encodeQueryString} from '@canvas/query-string-encoding'
 import $ from 'jquery'
-import _ from 'underscore'
 import 'jquery.cookie'
+import {clone, throttle} from 'lodash'
 
 // A class to setup kaltura analytics listeners on a mediaElement player
 // for a specific video being played
@@ -39,19 +40,19 @@ class KalturaAnalytics {
       'event:objectType': 'KalturaStatsEvent',
       'event:partnerId': this.pluginSettings.partner_id,
       'event:uiconfId': this.pluginSettings.kcw_ui_conf,
-      'event:queryStringReferrer': window.location.href
+      'event:queryStringReferrer': window.location.href,
     }
   }
 
   // Builds the url to send the analytic event and adds it to the processing queue
   queueAnalyticEvent = eventId => {
-    const data = _.clone(this.defaultData)
+    const data = clone(this.defaultData)
     data['event:eventType'] = eventId
     data['event:duration'] = this.mediaElement.duration
-    data['event:currentPoint'] = parseInt(this.mediaElement.currentTime * 1000)
+    data['event:currentPoint'] = parseInt(this.mediaElement.currentTime * 1000, 10)
     data['event:eventTimestamp'] = new Date().getTime()
 
-    return this.queueApiCall(this.apiUrl + $.param(data))
+    return this.queueApiCall(this.apiUrl + encodeQueryString(data))
   }
 
   // kaltura expects a persistent analytic session token for the user
@@ -94,14 +95,14 @@ class KalturaAnalytics {
       // there is no reliable way to know when a remote url has loaded in an
       // iframe, so just send them every 4 seconds
       const queue = []
-      const f = ((iframe, queue) =>
-        function() {
+      const f = ((iframe_, queue_) =>
+        function () {
           let url
-          if ((url = queue.shift())) {
-            return (iframe.src = url)
+          if ((url = queue_.shift())) {
+            return (iframe_.src = url)
           }
         })(iframe, queue)
-      this.iframes[i] = {iframe, queue, pinger: _.throttle(f, 4000)}
+      this.iframes[i] = {iframe, queue, pinger: throttle(f, 4000)}
     }
     return this.iframes
   }
@@ -127,7 +128,7 @@ class KalturaAnalytics {
       this.mediaElement.pauseObserved = false
       this.mediaElement.endedObserved = false
       if (this.mediaElement.endedOnce) {
-        this.queueAnalyticEvent(mediaId, 16) // Replay
+        this.queueAnalyticEvent(this.mediaId, 16) // Replay
         this.mediaElement.endedOnce = false
       }
       return this.queueAnalyticEvent(3)
@@ -156,13 +157,13 @@ class KalturaAnalytics {
     let _isFullScreen = false
     return this.mediaElement.addEventListener(
       'playing',
-      e => {
+      _e => {
         if (this.mediaElement.listeningToPlaying) return
 
-        const interval = setInterval(() => {
+        setInterval(() => {
           if (
             this.mediaElement.paused ||
-            isNaN(this.mediaElement.duration) ||
+            Number.isNaN(Number(this.mediaElement.duration)) ||
             !this.mediaElement.duration
           )
             return
@@ -180,10 +181,10 @@ class KalturaAnalytics {
             0.25 * this.mediaElement.duration,
             0.5 * this.mediaElement.duration,
             0.75 * this.mediaElement.duration,
-            0.98 * this.mediaElement.duration // :)
+            0.98 * this.mediaElement.duration, // :)
           ]
           const {currentTime} = this.mediaElement
-          if (!isNaN(currentTime) && currentTime > 0) {
+          if (!Number.isNaN(Number(currentTime)) && currentTime > 0) {
             let j = stopPoints.length - 1
 
             while (j >= 0) {
@@ -211,7 +212,7 @@ class KalturaAnalytics {
   }
 }
 
-export default function(mediaId, mediaElement, pluginSettings) {
+export default function (mediaId, mediaElement, pluginSettings) {
   if (pluginSettings && pluginSettings.do_analytics) {
     const ka = new KalturaAnalytics(mediaId, mediaElement, pluginSettings)
     ka.addListeners()

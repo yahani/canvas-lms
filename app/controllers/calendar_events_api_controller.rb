@@ -18,7 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "atom"
 require "rrule"
 
 # @API Calendar Events
@@ -66,7 +65,7 @@ require "rrule"
 #           "type": "string"
 #         },
 #         "context_code": {
-#           "description": "the context code of the calendar this event belongs to (course, user or group)",
+#           "description": "the context code of the calendar this event belongs to (course, group, user, or account)",
 #           "example": "course_123",
 #           "type": "string"
 #         },
@@ -187,12 +186,26 @@ require "rrule"
 #           "type": "boolean"
 #         },
 #         "series_uuid": {
-#           "description": "Identifies the recurring event series this event may belong to",
+#           "description": "Identifies the recurring event series this event may belong to.",
 #           "type": "uuid"
 #         },
 #         "rrule": {
 #           "description": "An iCalendar RRULE for defining how events in a recurring event series repeat.",
 #           "type": "string"
+#         },
+#         "series_head": {
+#            "description": "Boolean indicating if is the first event in the series of recurring events.",
+#            "type": "boolean"
+#         },
+#         "series_natural_language": {
+#            "description": "A natural language expression of how events occur in the series.",
+#            "type": "string",
+#            "example": "Daily 5 times"
+#         },
+#         "blackout_date": {
+#           "description": "Boolean indicating whether this has blackout date.",
+#           "example": true,
+#           "type": "boolean"
 #         }
 #       }
 #     }
@@ -285,6 +298,20 @@ require "rrule"
 #           "description": "Boolean indicating whether this has important dates.",
 #           "example": true,
 #           "type": "boolean"
+#         },
+#         "rrule": {
+#           "description": "An iCalendar RRULE for defining how events in a recurring event series repeat.",
+#           "type": "string",
+#           "example": "FREQ=DAILY;INTERVAL=1;COUNT=5"
+#         },
+#         "series_head": {
+#            "description": "Trueif this is the first event in the series of recurring events.",
+#            "type": "boolean"
+#         },
+#         "series_natural_language": {
+#            "description": "A natural language expression of how events occur in the series.",
+#            "type": "string",
+#            "example": "Daily 5 times"
 #         }
 #       }
 #     }
@@ -292,6 +319,7 @@ require "rrule"
 class CalendarEventsApiController < ApplicationController
   include Api::V1::CalendarEvent
   include CalendarConferencesHelper
+  include ::RruleHelper
 
   before_action :require_user, except: %w[public_feed index]
   before_action :get_calendar_context, only: :create
@@ -322,16 +350,21 @@ class CalendarEventsApiController < ApplicationController
   #   Defaults to false (uses start_date, end_date, and undated criteria).
   #   If true, all events are returned, ignoring start_date, end_date, and undated criteria.
   # @argument context_codes[] [String]
-  #   List of context codes of courses/groups/users whose events you want to see.
+  #   List of context codes of courses, groups, users, or accounts whose events you want to see.
   #   If not specified, defaults to the current user (i.e personal calendar,
   #   no course/group events). Limited to 10 context codes, additional ones are
   #   ignored. The format of this field is the context type, followed by an
   #   underscore, followed by the context id. For example: course_42
   # @argument excludes[] [Array]
   #   Array of attributes to exclude. Possible values are "description", "child_events" and "assignment"
+  # @argument includes[] [Array]
+  #   Array of optional attributes to include. Possible values are "web_conference" and "series_natural_language"
   # @argument important_dates [Boolean]
   #   Defaults to false.
   #   If true, only events with important dates set to true will be returned.
+  # @argument blackout_date [Boolean]
+  #   Defaults to false.
+  #   If true, only events with blackout date set to true will be returned.
   #
   # @returns [CalendarEvent]
   def index
@@ -360,7 +393,7 @@ class CalendarEventsApiController < ApplicationController
   #   Defaults to false (uses start_date, end_date, and undated criteria).
   #   If true, all events are returned, ignoring start_date, end_date, and undated criteria.
   # @argument context_codes[] [String]
-  #   List of context codes of courses/groups/users whose events you want to see.
+  #   List of context codes of courses, groups, users, or accounts whose events you want to see.
   #   If not specified, defaults to the current user (i.e personal calendar,
   #   no course/group events). Limited to 10 context codes, additional ones are
   #   ignored. The format of this field is the context type, followed by an
@@ -373,9 +406,14 @@ class CalendarEventsApiController < ApplicationController
   # @argument exclude_submission_types[] [Array]
   #   When type is "assignment", specifies the submission types to be excluded from the returned
   #   assignments. Ignored if type is not "assignment".
+  # @argument includes[] [Array]
+  #   Array of optional attributes to include. Possible values are "web_conference" and "series_natural_language"
   # @argument important_dates [Boolean]
   #   Defaults to false
   #   If true, only events with important dates set to true will be returned.
+  # @argument blackout_date [Boolean]
+  #   Defaults to false
+  #   If true, only events with blackout date set to true will be returned.
   #
   # @returns [CalendarEvent]
   def user_index
@@ -427,13 +465,14 @@ class CalendarEventsApiController < ApplicationController
         ActiveRecord::Associations.preload(calendar_events, [:context, :parent_event])
         ActiveRecord::Associations.preload(assignments, Api::V1::Assignment::PRELOADS)
         ActiveRecord::Associations.preload(assignments.map(&:context), %i[account grading_period_groups enrollment_term])
+        log_event_count(events.count)
 
         json = events.map do |event|
           subs = submissions[event.id] if submissions
           sub = subs.max_by(&:submitted_at) if subs
           event_json(event, user, session, { include: includes, excludes: params[:excludes], submission: sub })
         end
-        render json: json
+        render json:
       else
         render json: { errors: @errors.as_json }, status: :bad_request
       end
@@ -445,8 +484,8 @@ class CalendarEventsApiController < ApplicationController
   # Create and return a new calendar event
   #
   # @argument calendar_event[context_code] [Required, String]
-  #   Context code of the course/group/user whose calendar this event should be
-  #   added to.
+  #   Context code of the course, group, user, or account whose calendar
+  #   this event should be added to.
   # @argument calendar_event[title] [String]
   #   Short title for the calendar event.
   # @argument calendar_event[description] [String]
@@ -483,11 +522,12 @@ class CalendarEventsApiController < ApplicationController
   #   Defaults to false.  If set to `true`, an increasing counter number will be appended to the event title
   #   when the event is duplicated.  (e.g. Event 1, Event 2, Event 3, etc)
   # @argument calendar_event[rrule] [string]
-  #   If the calendar_series flag is enabled,
-  #   this parameter replaces the calendar_event's duplicate parameter to
-  #   create a series of recurring events.
+  #   The recurrence rule to create a series of recurring events.
   #   Its value is the {https://icalendar.org/iCalendar-RFC-5545/3-8-5-3-recurrence-rule.html iCalendar RRULE}
-  #   defining how the event repeats, though unending series not supported.
+  #   defining how the event repeats. Unending series not supported.
+  # @argument calendar_event[blackout_date] [Boolean]
+  #   If the blackout_date is true, this event represents a holiday or some
+  #   other special day that does not count in course pacing.
   #
   # @example_request
   #
@@ -508,7 +548,12 @@ class CalendarEventsApiController < ApplicationController
       params_for_create[:description] = process_incoming_html_content(params_for_create[:description])
     end
     if params_for_create.key?(:web_conference)
-      params_for_create[:web_conference] = find_or_initialize_conference(@context, params_for_create[:web_conference])
+      web_conference_params = params_for_create[:web_conference]
+      unless web_conference_params.empty?
+        web_conference_params[:start_at] = params_for_create[:start_at]
+        web_conference_params[:end_at] = params_for_create[:end_at]
+      end
+      params_for_create[:web_conference] = find_or_initialize_conference(@context, web_conference_params)
     end
 
     @event = @context.calendar_events.build(params_for_create)
@@ -516,9 +561,10 @@ class CalendarEventsApiController < ApplicationController
     @event.validate_context! if @context.is_a?(AppointmentGroup)
 
     if authorized_action(@event, @current_user, :create)
+      event_type_tag = nil
       rrule = params_for_create[:rrule]
       # Create multiple events if necessary
-      if rrule.present? && Account.site_admin.feature_enabled?(:calendar_series)
+      if rrule.present?
         start_at = Time.parse(params_for_create[:start_at]) if params_for_create[:start_at]
         rr = validate_and_parse_rrule(
           rrule,
@@ -528,6 +574,7 @@ class CalendarEventsApiController < ApplicationController
         return false if rr.nil?
 
         events = create_event_series(params_for_create, rr)
+        event_type_tag = "series"
       else
         events = []
         dup_options = get_duplicate_params(params[:calendar_event])
@@ -535,14 +582,17 @@ class CalendarEventsApiController < ApplicationController
         if dup_options[:count] > RECURRING_EVENT_LIMIT
           InstStatsd::Statsd.gauge("calendar_events_api.recurring.count_exceeding_limit", dup_options[:count])
           return render json: {
-            message: t("only a maximum of %{limit} events can be created",
-                       limit: RECURRING_EVENT_LIMIT)
-          }, status: :bad_request
+                          message: t("only a maximum of %{limit} events can be created",
+                                     limit: RECURRING_EVENT_LIMIT)
+                        },
+                        status: :bad_request
         elsif dup_options[:count] > 0
           InstStatsd::Statsd.gauge("calendar_events_api.recurring.count", dup_options[:count])
           events += create_event_and_duplicates(dup_options)
+          event_type_tag = "recurring"
         else
           events = [@event]
+          event_type_tag = "single"
         end
       end
 
@@ -554,12 +604,17 @@ class CalendarEventsApiController < ApplicationController
           render json: error.errors, status: :bad_request
           raise ActiveRecord::Rollback
         else
+          statsd_event_create_tags = @current_user.participating_enrollments.pluck(:type).uniq.map { |type| "enrollment_type:#{type}" }.append("calendar_event_type:#{event_type_tag}")
+          InstStatsd::Statsd.increment("calendar.calendar_event.create", tags: statsd_event_create_tags)
+
           original_event = events.shift
           render json: event_json(
             original_event,
             @current_user,
-            session, { duplicates: events, include: includes("web_conference") }
-          ), status: :created
+            session,
+            { duplicates: events, include: includes(["web_conference", "series_natural_language"]) }
+          ),
+                 status: :created
         end
       end
     end
@@ -610,7 +665,8 @@ class CalendarEventsApiController < ApplicationController
         end
         raise CalendarEvent::ReservationError, "invalid participant" unless participant
 
-        reservation = @event.reserve_for(participant, @current_user,
+        reservation = @event.reserve_for(participant,
+                                         @current_user,
                                          cancel_existing: value_to_boolean(params[:cancel_existing]),
                                          comments: params["comments"])
         render json: event_json(reservation, @current_user, session)
@@ -631,11 +687,13 @@ class CalendarEventsApiController < ApplicationController
   def participants
     get_event
     if authorized_action(@event, @current_user, :read_child_events)
+      return render json: [].to_json unless @event.appointment_group?
+
       participants = Api.paginate(@event.child_event_participants_scope.order(:id), self, api_v1_calendar_event_participants_url)
       json = participants.map do |user|
         user_display_json(user)
       end
-      render json: json
+      render json:
     end
   end
 
@@ -644,7 +702,7 @@ class CalendarEventsApiController < ApplicationController
   # Update and return a calendar event
   #
   # @argument calendar_event[context_code] [Optional, String]
-  #   Context code of the course/group/user to move this event to.
+  #   Context code of the course, group, user, or account to move this event to.
   #   Scheduler appointments and events with section-specific times cannot be moved between calendars.
   # @argument calendar_event[title] [String]
   #   Short title for the calendar event.
@@ -673,15 +731,18 @@ class CalendarEventsApiController < ApplicationController
   # @argument calendar_event[child_event_data][X][context_code] [String]
   #   Context code(s) corresponding to the section-level start and end time(s).
   # @argument calendar_event[rrule] [Optional, String]
-  #   Valid if the calendar_series feature is enabled and the event whose
-  #   ID is in the URL is part of a series.
+  #   Valid if the event whose ID is in the URL is part of a series.
   #   This defines the shape of the recurring event series after it's updated.
-  #   Its value is the iCalendar RRULE, though unending series not supported.
+  #   Its value is the iCalendar RRULE. Unending series are not supported.
   # @argument which [Optional, String, "one"|"all"|"following"]
-  #   Valid if the calendar_series feature is enabled and the event whose
-  #   ID is in the URL is part of a series.
+  #   Valid if the event whose ID is in the URL is part of a series.
   #   Update just the event whose ID is in in the URL, all events
   #   in the series, or the given event and all those following.
+  #   Some updates may create a new series. For example, changing the start time
+  #   of this and all following events from the middle of a series.
+  # @argument calendar_event[blackout_date] [Boolean]
+  #   If the blackout_date is true, this event represents a holiday or some
+  #   other special day that does not count in course pacing.
   #
   # @example_request
   #
@@ -721,13 +782,21 @@ class CalendarEventsApiController < ApplicationController
         params_for_update[:description] = process_incoming_html_content(params_for_update[:description])
       end
       if params_for_update.key?(:web_conference)
-        web_conference = find_or_initialize_conference(@event.context, params_for_update[:web_conference])
+        web_conference_params = params_for_update[:web_conference]
+        unless web_conference_params.empty?
+          web_conference_params[:start_at] = params_for_update[:start_at]
+          web_conference_params[:end_at] = params_for_update[:end_at]
+        end
+        web_conference = find_or_initialize_conference(@event.context, web_conference_params)
         return unless authorize_user_for_conference(@current_user, web_conference)
 
         params_for_update[:web_conference] = web_conference
       end
 
-      if @event[:series_uuid] && Account.site_admin.feature_enabled?(:calendar_series)
+      if @event[:series_uuid].nil? && params_for_update[:rrule].present?
+        series_event = change_to_series_event(@event, params_for_update)
+        return update_from_series(series_event, params_for_update, "all")
+      elsif @event[:series_uuid].present?
         return update_from_series(@event, params_for_update, params[:which])
       end
 
@@ -746,8 +815,7 @@ class CalendarEventsApiController < ApplicationController
   # @argument cancel_reason [String]
   #   Reason for deleting/canceling the event.
   # @argument which [Optional, String, "one"|"all"|"following"]
-  #   Valid if the calendar_series feature is enabled and the
-  #   event whose ID is in the URL is part of a series.
+  #   Valid if the event whose ID is in the URL is part of a series.
   #   Delete just the event whose ID is in in the URL, all events
   #   in the series, or the given event and all those following.
   #
@@ -760,7 +828,7 @@ class CalendarEventsApiController < ApplicationController
   #        -H "Authorization: Bearer <token>"
   def destroy
     get_event
-    if @event.series_uuid.present? && Account.site_admin.feature_enabled?(:calendar_series)
+    if @event.series_uuid.present?
       destroy_from_series
       return
     end
@@ -782,6 +850,8 @@ class CalendarEventsApiController < ApplicationController
     events = find_which_series_events(target_event: @event, which: params[:which], for_update: false)
     return if events.blank?
 
+    front_half_events = []
+
     events.each do |event|
       return false unless authorized_action(event, @current_user, :delete) && check_for_past_signup(@event.parent_event)
     end
@@ -801,6 +871,26 @@ class CalendarEventsApiController < ApplicationController
           raise ActiveRecord::Rollback
         end
       end
+
+      if params[:which] == "following"
+        # the remaining series just got shorter. reflect that in the rrrule
+        front_half_events = (find_which_series_events(target_event: @event, which: "all", for_update: false) - events).to_a
+        unless front_half_events.empty?
+          params_for_update_front_half = ActionController::Parameters.new(rrule: update_rrule_count_or_until(@event[:rrule], front_half_events.length)).permit(:rrule)
+          front_half_events.each do |event|
+            event.updating_user = @current_user
+            unless event.grants_any_right?(@current_user, session, :update)
+              error = { message: t("Failed updating an event in the series, update not saved"), status: :unauthorized }
+              raise ActiveRecord::Rollback
+            end
+
+            unless event.update(params_for_update_front_half)
+              error = { message: t("Failed updating an event in the series, update not saved") }
+              raise ActiveRecord::Rollback
+            end
+          end
+        end
+      end
     end
     CalendarEvent.skip_touch_context(false)
 
@@ -808,10 +898,11 @@ class CalendarEventsApiController < ApplicationController
 
     @event.context.touch # assume all events in the series belong to the same context
 
-    json = events.map do |event|
-      event_json(event, @current_user, session)
+    json = (events + front_half_events).map do |event|
+      event.reload
+      event_json(event, @current_user, session, include: includes(["web_conference", "series_natural_language"]))
     end
-    render json: json
+    render json:
   end
 
   # updating event data in a series has some tricky bits
@@ -835,6 +926,8 @@ class CalendarEventsApiController < ApplicationController
   #       - use the start_at from the target_event
   #       - limit the dtstart dates generated by the rrule to the
   #         number of affected events.
+  #       - update the RRULE for the events left behind in the original series
+  #         to reflect it's new shorter length.
   #  4. If the RRULE changed, only which=="all" or "following" apply
   #     a. if which="all",
   #        - regenerate the list of dtstarts using the first event's start_at
@@ -842,54 +935,63 @@ class CalendarEventsApiController < ApplicationController
   #     b. if which="following",
   #        - start a new series for the affected events.
   #        - the same as "all", but for the subset of affected events
+  #        - will split the series in two, creating a new series for the updated
+  #          events, and updating the original series to reflect it's new shorter length.
   #   5. If the date-time and RRULE changed, deal with that too.
   #
   def update_from_series(target_event, params_for_update, which)
     which ||= "one"
-    params_for_update[:rrule] ||= target_event.rrule
-    rrule = params_for_update[:rrule]
+    rrule = params_for_update.key?(:rrule) ? params_for_update[:rrule] : target_event.rrule
     rrule_changed = rrule != target_event[:rrule]
+    # If a nil RRULE is explicitly passed in params and the event had a valid RRULE the series will be converted to a single event
+    change_to_single_event = rrule_changed && params_for_update.key?(:rrule) && params_for_update[:rrule].blank?
+    params_for_update[:rrule] ||= rrule
     params_for_update[:series_uuid] ||= target_event.series_uuid
     params_for_update[:start_at] ||= target_event.start_at.iso8601
     params_for_update[:end_at] ||= target_event.end_at.iso8601
+    params_for_update[:context] = Context.find_by_asset_string(params_for_update[:context_code]) if params_for_update[:context_code]
+    params_for_update.delete(:context_code)
 
     if which == "one" && rrule.present? && rrule_changed
-      render json: { message: t("You may not update one event with a new rrule.") }, status: :bad_request
-      return
-    end
-    if which == "all" && Date.parse(params_for_update[:start_at]) != target_event.start_at.to_date
-      render json: { message: t("You may not change the start date when changing all events in the series") }, status: :bad_request
+      render json: { message: t("You may not update one event with a new schedule.") }, status: :bad_request
       return
     end
 
-    if which == "one"
+    all_date_change_ok = false
+    if which == "all" && Time.parse(params_for_update[:start_at]).utc.to_date != target_event.start_at&.utc&.to_date
+      if target_event.series_head?
+        all_date_change_ok = true
+      else
+        render json: { message: t("You may not change the start date when changing all events in the series") }, status: :bad_request
+        return
+      end
+    end
+
+    if which == "one" && !change_to_single_event
       if target_event.workflow_state == "locked"
         render json: { message: t("You may not update a locked event") }, status: :bad_request
         return
       elsif target_event.update(params_for_update)
-        render json: event_json(target_event, @current_user, session, include: includes("web_conference"))
+        render json: event_json(target_event, @current_user, session, include: includes(["web_conference", "series_natural_language"]))
       else
         render json: { message: t("Update failed") }, status: bad_request
       end
       return
     end
 
-    all_events = find_which_series_events(target_event: target_event, which: "all", for_update: true)
-    events = which == "following" ? all_events.where("start_at >= ?", target_event.start_at) : all_events
-    if events.blank?
-      # i don't believe we can get here, but cya
-      render json: { message: t("No events were found to update") }, status: :bad_request
-      return
-    end
+    all_events = find_which_series_events(target_event:, which: "all", for_update: true)
+    adjusted_all_events = all_events.empty? ? [target_event] : all_events
+    events = (which == "following") ? adjusted_all_events.where("start_at >= ?", target_event.start_at) : adjusted_all_events
 
     tz = @current_user.time_zone || ActiveSupport::TimeZone.new("UTC")
     target_start = Time.parse(params_for_update[:start_at]).in_time_zone(tz)
     target_end = Time.parse(params_for_update[:end_at]).in_time_zone(tz)
-    if which == "all"
+    if which == "all" && !all_date_change_ok
       # the target_event not be the first event in the series. We need to find it
       # as the anchor for the series dates
       start_date0 = events[0].start_at.in_time_zone(tz).to_date
       end_date0 = events[0].end_at.in_time_zone(tz).to_date
+
       first_start_at = Time.new(start_date0.year, start_date0.month, start_date0.day, target_start.hour, target_start.min, target_start.sec, tz)
       first_end_at = Time.new(end_date0.year, end_date0.month, end_date0.day, target_end.hour, target_end.min, target_end.sec, tz)
     else
@@ -900,28 +1002,41 @@ class CalendarEventsApiController < ApplicationController
     end
     duration = first_end_at - first_start_at
 
-    rr = validate_and_parse_rrule(
-      rrule,
-      dtstart: first_start_at,
-      tzid: tz&.tzinfo&.name || "UTC"
-    )
-    return false if rr.nil?
+    # An RRULE is not present if the series will be converted to a single event
+    rr = nil
+    if rrule.present?
+      rr = validate_and_parse_rrule(
+        rrule,
+        dtstart: first_start_at,
+        tzid: tz&.tzinfo&.name || "UTC"
+      )
+      return false if rr.nil?
+    end
 
+    params_for_update_front_half = nil
+    front_half_events = []
     if (all_events.length > events.length && date_time_changed) || rrule_changed
       # updating date-time for half a series starts a new series
-      params_for_update[:series_uuid] = SecureRandom.uuid if all_events.length > events.length
+      if all_events.length > events.length
+        params_for_update[:rrule] = update_rrule_count(rrule, events.length) unless rrule_changed
+        params_for_update[:series_uuid] = SecureRandom.uuid
+        new_series_head = true
+
+        front_half_events = (all_events - events).to_a
+        params_for_update_front_half = ActionController::Parameters.new(rrule: update_rrule_count_or_until(all_events[0]["rrule"], all_events.length - events.length)).permit(:rrule)
+      end
     else
       params_for_update[:series_uuid] = target_event[:series_uuid]
     end
 
     events = events.to_a
-    update_limit = rrule_changed ? RECURRING_EVENT_LIMIT : events.length
+    update_limit = rrule_changed ? RruleHelper::RECURRING_EVENT_LIMIT : events.length
 
     error = nil
     CalendarEvent.skip_touch_context
     CalendarEvent.transaction do
-      dtstart_list = rr.all(limit: update_limit)
-      if events.length > dtstart_list.length
+      dtstart_list = rr.present? ? rr.all(limit: update_limit) : []
+      if rr.present? && events.length > dtstart_list.length
         # truncate the list of events we're updating to how many
         # we'll end up with given the (possible updated) rrule
         events.drop(dtstart_list.length).each do |event|
@@ -936,6 +1051,10 @@ class CalendarEventsApiController < ApplicationController
           end
         end
         events = events.take(dtstart_list.length)
+      end
+
+      if new_series_head
+        events[0].series_head = true
       end
 
       dtstart_list.each_with_index do |dtstart, i|
@@ -966,29 +1085,67 @@ class CalendarEventsApiController < ApplicationController
           end
         end
       end
+
+      # For convert series to single event, all the series event will be removed except the target event
+      if change_to_single_event
+        params_for_update[:series_head] = false
+        params_for_update[:series_uuid] = nil
+        params_for_update[:rrule] = nil
+        unless target_event.update(params_for_update)
+          error = { message: t("Failed updating an event in the series, update not saved") }
+          raise ActiveRecord::Rollback
+        end
+
+        (events - [target_event]).each do |event|
+          unless event.grants_any_right?(@current_user, session, :delete)
+            error = { message: t("Failed deleting an event from the series, update not saved"), status: :unauthorized }
+            raise ActiveRecord::Rollback
+          end
+
+          unless event.destroy
+            error = { message: t("Failed deleting an event from the series, update not saved") }
+            raise ActiveRecord::Rollback
+          end
+        end
+        events = [target_event]
+      end
+
+      # if we updated this-and-all-following, we had to update the front half's rrule
+      front_half_events.each do |event|
+        event.updating_user = @current_user
+        unless event.grants_any_right?(@current_user, session, :update)
+          error = { message: t("Failed updating an event in the series, update not saved"), status: :unauthorized }
+          raise ActiveRecord::Rollback
+        end
+
+        unless event.update(params_for_update_front_half)
+          error = { message: t("Failed updating an event in the series, update not saved") }
+          raise ActiveRecord::Rollback
+        end
+      end
     end
     CalendarEvent.skip_touch_context(false)
 
     if error
       status = error[:status] || :bad_request
       error.delete(:status)
-      return render json: error, status: status
+      return render json: error, status:
     end
 
     target_event.context.touch
-
-    json = events.map do |event|
+    json = (front_half_events + events).map do |event|
       event_json(
         event,
         @current_user,
         session,
-        { include: includes("web_conference") }
+        { include: includes(["web_conference", "series_natural_language"]) }
       )
     end
-    render json: json
+    render json:
   end
 
   def find_which_series_events(target_event:, which:, for_update:)
+    which ||= "one"
     #  from the model: locked events may only be deleted, they cannot be edited directly
     workflow_state_not = for_update ? ["deleted", "locked"] : ["deleted"]
     events = nil
@@ -1006,9 +1163,17 @@ class CalendarEventsApiController < ApplicationController
                .where.not(workflow_state: workflow_state_not)
                .order(:id)
     else
-      render json: { error: t("Invalid parameter which='%{which}'", which: which) }, status: :bad_request
+      render json: { error: t("Invalid parameter which='%{which}'", which:) }, status: :bad_request
     end
     events
+  end
+
+  def change_to_series_event(event, params_for_update)
+    event.series_uuid = SecureRandom.uuid
+    event.series_head = true
+    event.start_at = params_for_update[:start_at] if params_for_update[:start_at]
+    event.end_at = params_for_update[:end_at] if params_for_update[:end_at]
+    event
   end
 
   def public_feed
@@ -1021,8 +1186,8 @@ class CalendarEventsApiController < ApplicationController
       # if the feed url included the information on the requesting user,
       # we can properly filter calendar events to the user's course sections
       @type = :feed
-      @start_date = Setting.get("calendar_feed_previous_days", "30").to_i.days.ago
-      @end_date = Setting.get("calendar_feed_upcoming_days", "366").to_i.days.from_now
+      @start_date = 30.days.ago
+      @end_date = 366.days.from_now
 
       get_options(nil)
 
@@ -1058,10 +1223,12 @@ class CalendarEventsApiController < ApplicationController
           next if event_context.nil?
 
           appointment_user = event_context.users.find { |user| user.id == appointment.user_id }
-          unless appointment_user.nil?
-            appointments.push({ user: appointment_user.name, comments: appointment.comments,
-                                parent_id: appointment.parent_calendar_event_id, course_name: event_context.name })
-          end
+          next if appointment_user.nil?
+
+          appointments.push({ user: appointment_user.name,
+                              comments: appointment.comments,
+                              parent_id: appointment.parent_calendar_event_id,
+                              course_name: event_context.name })
         end
         @events.concat appointment_groups
       end
@@ -1071,7 +1238,7 @@ class CalendarEventsApiController < ApplicationController
       get_all_pertinent_contexts
       GuardRail.activate(:secondary) do
         @contexts.each do |context|
-          @assignments = context.assignments.active.to_a if context.respond_to?("assignments")
+          @assignments = context.assignments.active.to_a if context.respond_to?(:assignments)
           # no overrides to apply without a current user
           @events.concat context.calendar_events.active.to_a
           @events.concat @assignments || []
@@ -1111,9 +1278,9 @@ class CalendarEventsApiController < ApplicationController
         @events.each do |event|
           ics_event =
             if event.is_a?(CalendarEvent)
-              event.to_ics(in_own_calendar: false, preloaded_attachments: preloaded_attachments, user: @current_user, user_events: appointments)
+              event.to_ics(in_own_calendar: false, preloaded_attachments:, user: @current_user, user_events: appointments)
             else
-              event.to_ics(in_own_calendar: false, preloaded_attachments: preloaded_attachments, user: @current_user)
+              event.to_ics(in_own_calendar: false, preloaded_attachments:, user: @current_user)
             end
           calendar.add_event(ics_event) if ics_event
         end
@@ -1121,16 +1288,14 @@ class CalendarEventsApiController < ApplicationController
         render plain: calendar.to_ical
       end
       format.atom do
-        feed = Atom::Feed.new do |f|
-          f.title = t :feed_title, "%{course_or_group_name} Calendar Feed", course_or_group_name: @context.name
-          f.links << Atom::Link.new(href: calendar_url_for(@context), rel: "self")
-          f.updated = Time.now
-          f.id = calendar_url_for(@context)
+        title = t :feed_title, "%{course_or_group_name} Calendar Feed", course_or_group_name: @context.name
+        link = calendar_url_for(@context)
+
+        feed_xml = AtomFeedHelper.render_xml(title:, link:, entries: @events) do |e|
+          { exclude_description: !!e.try(:locked_for?, @current_user) }
         end
-        @events.each do |e|
-          feed.entries << e.to_atom
-        end
-        render plain: feed.to_xml
+
+        render plain: feed_xml
       end
     end
   end
@@ -1148,7 +1313,9 @@ class CalendarEventsApiController < ApplicationController
         name: context.nickname_for(@current_user),
         asset_string: context.asset_string,
         color: @current_user.custom_colors[context.asset_string],
-        selected: selected_contexts.include?(context.asset_string)
+        selected: selected_contexts.include?(context.asset_string),
+        allow_observers_in_appointment_groups: context.is_a?(Course) && context.account.allow_observers_in_appointment_groups?,
+        can_create_appointment_groups: context.is_a?(Course) && context.grants_right?(@current_user, session, :manage_calendar)
       }
 
       if context.is_a?(Course)
@@ -1158,6 +1325,7 @@ class CalendarEventsApiController < ApplicationController
             name: section.name,
             asset_string: section.asset_string,
             selected: selected_contexts.include?(section.asset_string),
+            can_create_appointment_groups: section.grants_right?(@current_user, session, :manage_calendar)
           }
         end
       end
@@ -1170,6 +1338,35 @@ class CalendarEventsApiController < ApplicationController
 
   def save_selected_contexts
     @current_user.set_preference(:selected_calendar_contexts, params[:selected_contexts])
+    render json: { status: "ok" }
+  end
+
+  # @API Save enabled account calendars
+  #
+  # Creates and updates the enabled_account_calendars and mark_feature_as_seen user preferences
+  #
+  # @argument mark_feature_as_seen [Optional, Boolean]
+  #   Flag to mark account calendars feature as seen
+  #
+  # @argument enabled_account_calendars[] [Optional, Array]
+  #   An array of account Ids to remember in the calendars list of the user
+  #
+  # @example_request
+  #
+  #   curl 'https://<canvas>/api/v1/calendar_events/save_enabled_account_calendars' \
+  #        -X POST \
+  #        -F 'mark_feature_as_seen=true' \
+  #        -F 'enabled_account_calendars[]=1' \
+  #        -F 'enabled_account_calendars[]=2' \
+  #        -H "Authorization: Bearer <token>"
+  def save_enabled_account_calendars
+    @current_user.set_preference(:account_calendar_events_seen, value_to_boolean(params[:mark_feature_as_seen])) if params.key?(:mark_feature_as_seen)
+
+    if params.key?(:enabled_account_calendars)
+      @current_user.set_preference(:enabled_account_calendars, params[:enabled_account_calendars])
+      InstStatsd::Statsd.count("account_calendars.modal.enabled_calendars", params[:enabled_account_calendars].length)
+    end
+
     render json: { status: "ok" }
   end
 
@@ -1218,7 +1415,7 @@ class CalendarEventsApiController < ApplicationController
       updated_section_ids = []
       timetable_data.each do |section_id, timetables|
         timetable_data[section_id] = Array(timetables)
-        section = section_id == "all" ? nil : api_find(@context.active_course_sections, section_id)
+        section = (section_id == "all") ? nil : api_find(@context.active_course_sections, section_id)
         updated_section_ids << section.id if section
 
         builder = Courses::TimetableEventBuilder.new(course: @context, course_section: section)
@@ -1370,6 +1567,7 @@ class CalendarEventsApiController < ApplicationController
     @all_events = value_to_boolean(params[:all_events])
     @undated = value_to_boolean(params[:undated])
     @important_dates = value_to_boolean(params[:important_dates])
+    @blackout_date = value_to_boolean(params[:blackout_date])
     if !@all_events && !@undated
       validate_dates
       @start_date ||= Time.zone.now.beginning_of_day
@@ -1377,7 +1575,7 @@ class CalendarEventsApiController < ApplicationController
       @end_date = @start_date.end_of_day if @end_date < @start_date
     end
 
-    @type ||= params[:type] == "assignment" ? :assignment : :event
+    @type ||= (params[:type] == "assignment") ? :assignment : :event
 
     @context ||= user
 
@@ -1386,6 +1584,7 @@ class CalendarEventsApiController < ApplicationController
       joined_codes = codes&.join(",")
       get_all_pertinent_contexts(
         include_groups: true,
+        include_accounts: true,
         cross_shard: true,
         only_contexts: joined_codes,
         include_contexts: joined_codes
@@ -1403,6 +1602,7 @@ class CalendarEventsApiController < ApplicationController
         context = Context.find_by_asset_string(c)
         @public_to_auth = true if context.is_a?(Course) && user && (context.public_syllabus_to_auth || context.public_syllabus || context.is_public || context.is_public_to_auth_users)
         @contexts.push context if context.is_a?(Course) && (context.is_public || context.public_syllabus || @public_to_auth)
+        @contexts.push context if context.is_a?(Account) && user.associated_accounts.active.where(id: context.id, account_calendar_visible: true).exists?
       end
 
       # filter the contexts to only the requested contexts
@@ -1452,7 +1652,7 @@ class CalendarEventsApiController < ApplicationController
       if exclude_submission_types.any?
         scope = scope.where.not(submission_types: exclude_submission_types)
       elsif submission_types.any?
-        scope = scope.where(submission_types: submission_types)
+        scope = scope.where(submission_types:)
       end
       scope = scope.send(*date_scope_and_args(:due_between_with_overrides)) unless @all_events
       scope = scope.with_important_dates if @important_dates
@@ -1525,6 +1725,7 @@ class CalendarEventsApiController < ApplicationController
         relation = yield relation if block_given?
         relation = relation.send(*date_scope_and_args) unless @all_events
         relation = relation.with_important_dates if @important_dates
+        relation = relation.with_blackout_date if @blackout_date
         if includes.include?("web_conference")
           relation = relation.preload(:web_conference)
         end
@@ -1534,6 +1735,7 @@ class CalendarEventsApiController < ApplicationController
       scope = scope.for_context_codes(@context_codes)
       scope = scope.send(*date_scope_and_args) unless @all_events
       scope = scope.with_important_dates if @important_dates
+      scope = scope.with_blackout_date if @blackout_date
     end
     scope
   end
@@ -1566,7 +1768,7 @@ class CalendarEventsApiController < ApplicationController
         assignments << assignment unless @important_dates && assignment.important_dates && assignment.due_at.nil?
       else
         dates_list = assignment.all_dates_visible_to(user,
-                                                     courses_user_has_been_enrolled_in: courses_user_has_been_enrolled_in)
+                                                     courses_user_has_been_enrolled_in:)
 
         if dates_list.empty?
           assignments << assignment
@@ -1694,32 +1896,32 @@ class CalendarEventsApiController < ApplicationController
   end
 
   ###### recurring event series #######
-  # once the calendar_series flag is turned on in prod
-  # the above code for duplicate events can be removed
-  # along with the flag
+  # once duplicate events are implemented for section events,
+  # the above code can be removed
   #####################################
   def create_event_series(event_attributes, rrule)
     @context ||= @current_user
     if @current_user
       get_all_pertinent_contexts(include_groups: true)
     end
-
     event_attributes[:series_uuid] = SecureRandom.uuid
 
     first_start_at = Time.parse(event_attributes[:start_at]) if event_attributes[:start_at]
     first_end_at = Time.parse(event_attributes[:end_at]) if event_attributes[:end_at]
     duration = first_end_at - first_start_at if first_start_at && first_end_at
-    dtstart_list = rrule.all(limit: RECURRING_EVENT_LIMIT)
+    dtstart_list = rrule.all(limit: RruleHelper::RECURRING_EVENT_LIMIT)
 
     InstStatsd::Statsd.gauge("calendar_events_api.recurring.count", dtstart_list.length)
 
-    dtstart_list.map do |dtstart|
+    events = dtstart_list.map do |dtstart|
       event_attributes = set_series_params(event_attributes, dtstart, duration)
       event = @context.calendar_events.build(event_attributes)
       event.validate_context! if @context.is_a?(AppointmentGroup)
       event.updating_user = @current_user
       event
     end
+    events[0][:series_head] = true
+    events
   end
 
   def set_series_params(event_attributes, dtstart, duration)
@@ -1747,54 +1949,36 @@ class CalendarEventsApiController < ApplicationController
     # Let's do a quick check here first and abandon the request if too large.
     # We still need to check later because the RRULE could be "until some date"
     # and not an explicit count.
-    rrule_fields = Hash[*rrule.split(/[;=]/)]
-    count = rrule_fields.fetch("COUNT", 1).to_i
-
-    if count <= 0
-      render json: { message: t("COUNT must be greater than 0") }, status: :bad_request
-      return nil
-    end
-
-    if count > RECURRING_EVENT_LIMIT
-      InstStatsd::Statsd.gauge("calendar_events_api.recurring.count_exceeding_limit", count)
-      render json: {
-        message: t("COUNT must be %{limit} or less",
-                   limit: RECURRING_EVENT_LIMIT)
-      }, status: :bad_request
-      return nil
-    end
-
-    # We do not support never ending series because each event in the series
-    # must get created in the db to support the paginated calendar_events api
-    bounded = rrule_fields.fetch("UNTIL", false) || rrule_fields.fetch("COUNT", false)
-    unless bounded
-      render json: {
-        message: t("The series recurrence rule must include a %{COUNT} or %{UNTIL}",
-                   COUNT: "COUNT", UNTIL: "UNTIL")
-      }, status: :bad_request
+    rrule_fields = rrule_parse(rrule)
+    begin
+      rrule_validate_common_opts(rrule_fields)
+    rescue RruleValidationError => e
+      render json: { message: e.message }, status: :bad_request
       return nil
     end
 
     begin
       rr = RRule::Rule.new(
         rrule,
-        dtstart: dtstart,
-        tzid: tzid
+        dtstart:,
+        tzid:
       )
     rescue => e
       render json: {
-        message: t("Failed parsing the event's recurrence rule: %{e}", e: e)
-      }, status: :bad_request
+               message: t("Failed parsing the event's recurrence rule: %{e}", e:)
+             },
+             status: :bad_request
       return nil
     end
     # If RRULE generates a lot of events, rr.count can take a very long time to compute.
     # Asking it for 1 too many results is fast and gets the job done
-    if rr.all(limit: RECURRING_EVENT_LIMIT + 1).length > RECURRING_EVENT_LIMIT
+    if rr.all(limit: RruleHelper::RECURRING_EVENT_LIMIT + 1).length > RruleHelper::RECURRING_EVENT_LIMIT
       InstStatsd::Statsd.gauge("calendar_events_api.recurring.count_exceeding_limit", rr.count)
       render json: {
-        message: t("A maximum of %{limit} events may be created",
-                   limit: RECURRING_EVENT_LIMIT)
-      }, status: :bad_request
+               message: t("A maximum of %{limit} events may be created",
+                          limit: RruleHelper::RECURRING_EVENT_LIMIT)
+             },
+             status: :bad_request
       return nil
     end
     rr
@@ -1865,5 +2049,31 @@ class CalendarEventsApiController < ApplicationController
 
   def includes(keys = params[:include])
     (Array(keys) + DEFAULT_INCLUDES).uniq - (params[:excludes] || [])
+  end
+
+  def log_event_count(event_count)
+    # Sometimes the API returns more events than the per_page limit because an assignment
+    # event might have multiple assignment overrides, and overrides aren't counted toward
+    # the limit. We're tracking to see how often this happens.
+    per_page = Api.per_page_for(self)
+    if event_count > per_page
+      InstStatsd::Statsd.increment("calendar.events_api.per_page_exceeded.count")
+      InstStatsd::Statsd.count("calendar.events_api.per_page_exceeded.value", event_count)
+    end
+  end
+
+  def update_rrule_count(old_rrule, new_count)
+    old_rrule.sub(/(COUNT=)(\d+)/, "\\1#{new_count}")
+  end
+
+  def update_rrule_count_or_until(old_rrule, new_count)
+    if old_rrule.include?("COUNT")
+      update_rrule_count(old_rrule, new_count)
+    else
+      # I feel a little hinky about replacing UNTIL with a COUNT
+      # We could use rr.all(limie: new_count) and grab the last
+      # one's date as the UNTIL, but this is simpler and I like simple
+      old_rrule.gsub(/UNTIL=[^;]+/, "COUNT=#{new_count}")
+    end
   end
 end

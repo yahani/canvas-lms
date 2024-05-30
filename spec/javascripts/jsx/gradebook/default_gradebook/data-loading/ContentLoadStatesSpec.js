@@ -18,7 +18,7 @@
 
 import {
   createGradebook,
-  setFixtureHtml
+  setFixtureHtml,
 } from 'ui/features/gradebook/react/default_gradebook/__tests__/GradebookSpecHelper'
 
 QUnit.module('Gradebook Data Loading: Content Load States', suiteHooks => {
@@ -88,19 +88,6 @@ QUnit.module('Gradebook Data Loading: Content Load States', suiteHooks => {
       gradebook.setAssignmentGroupsLoaded(true)
       gradebook.setAssignmentGroupsLoaded(false)
       strictEqual(gradebook.contentLoadStates.assignmentGroupsLoaded, false)
-    })
-  })
-
-  QUnit.module('#setCustomColumnsLoaded()', () => {
-    test('optionally sets custom columns as "loaded"', () => {
-      gradebook.setCustomColumnsLoaded(true)
-      strictEqual(gradebook.contentLoadStates.customColumnsLoaded, true)
-    })
-
-    test('optionally sets custom columns as "not loaded"', () => {
-      gradebook.setCustomColumnsLoaded(true)
-      gradebook.setCustomColumnsLoaded(false)
-      strictEqual(gradebook.contentLoadStates.customColumnsLoaded, false)
     })
   })
 

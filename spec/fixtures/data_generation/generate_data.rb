@@ -29,7 +29,7 @@ require_relative "../../factories/course_factory"
 require_relative "../../factories/user_factory"
 require_relative "../../factories/quiz_factory"
 require_relative "../../factories/outcome_factory"
-require "securerandom"
+
 require "optparse"
 
 # rubocop:disable Specs/ScopeIncludes
@@ -51,17 +51,17 @@ def teacher_in_course(user, course_name)
     account: @root_account,
     active_course: 1,
     active_enrollment: 1,
-    course_name: course_name,
+    course_name:,
     course_code: SecureRandom.alphanumeric(10),
-    user: user
+    user:
   )
 end
 
 def student_in_course(user, course)
   course_with_student(
     active_all: 1,
-    course: course,
-    user: user
+    course:,
+    user:
   )
 end
 
@@ -91,7 +91,7 @@ def course_with_teacher_enrolled
 end
 
 def course_with_students_enrolled
-  student_list = []
+  @student_list = []
   @enrollment_list = []
   @number_of_students.times do
     index = SecureRandom.alphanumeric(10)
@@ -110,16 +110,16 @@ def course_with_students_enrolled
     )
     @user.email = email
     @user.accept_terms
-    student_list << @user
+    @student_list << @user
   end
-  student_list
+  @student_list
 end
 
 def create_assignment(course, title, points_possible = 10)
   course.assignments.create!(
     title: "#{title} #{SecureRandom.alphanumeric(10)}",
     description: "General Assignment",
-    points_possible: points_possible,
+    points_possible:,
     submission_types: "online_text_entry",
     workflow_state: "published"
   )
@@ -132,8 +132,7 @@ def create_discussion(course, creator, workflow_state = "published")
     title: "Discussion Topic #{SecureRandom.alphanumeric(10)}",
     message: "Discussion topic message",
     assignment: discussion_assignment,
-    workflow_state: workflow_state,
-    todo_date: 1.day.from_now(Time.zone.now)
+    workflow_state:
   )
 end
 
@@ -178,7 +177,7 @@ def create_wiki_page(course)
 end
 
 def create_module(course, workflow_state = "active")
-  course.context_modules.create!(name: "Module #{SecureRandom.alphanumeric(10)}", workflow_state: workflow_state)
+  course.context_modules.create!(name: "Module #{SecureRandom.alphanumeric(10)}", workflow_state:)
 end
 
 def create_outcome(course, outcome_description, outcome__short_description = "Another Outcome")
@@ -192,12 +191,24 @@ def create_outcome(course, outcome_description, outcome__short_description = "An
   outcome
 end
 
+def print_student_info
+  puts "Student IDs are:"
+  @student_list.map do |n|
+    puts "  #{n.name}: #{n.id}"
+  end
+end
+
+def print_standard_course_info
+  puts "Course ID is #{@course.id}"
+  puts "Teacher ID is #{@teacher.id}"
+  print_student_info
+end
+
 def generate_course_with_students
   puts "Generate Course with Students"
   course_with_enrollments
 
-  puts "Course ID is #{@course.id}"
-  puts "Teacher ID is #{@teacher.id}"
+  print_standard_course_info
 end
 
 def generate_fully_loaded_course(number_of_items = 2)
@@ -214,8 +225,7 @@ def generate_fully_loaded_course(number_of_items = 2)
     course_module1.add_item(id: assignment.id, type: "assignment")
   end
 
-  puts "Course ID is #{@course.id}"
-  puts "Teacher ID is #{@teacher.id}"
+  print_standard_course_info
 end
 
 def generate_k5_dashboard
@@ -237,17 +247,19 @@ def generate_k5_dashboard
 
   puts "Homeroom Course ID is #{homeroom.id}"
   puts "Teacher ID is #{@teacher.id}"
+  print_student_info
 end
 
 def generate_bp_course_and_associations
   puts "Generate Blueprint Course and Associated Course"
   course_with_teacher_enrolled
+  @blueprint_course = @course
   @main_teacher = @teacher
   @template = MasterCourses::MasterTemplate.set_as_master_course(@course)
   @minion = @template.add_child_course!(course_factory(account: @root_account, course_name: "Minion", active_all: true)).child_course
   @minion.enroll_teacher(@main_teacher).accept!
 
-  puts "Blueprint Course ID is #{@course.id}"
+  puts "Blueprint Course ID is #{@blueprint_course.id}"
   puts "Associated Course ID is #{@minion.id}"
   puts "Teacher ID is #{@teacher.id}"
 end
@@ -261,8 +273,7 @@ def generate_course_and_submissions
     assignment.grade_student(student, grader: @teacher, score: 75, points_deducted: 0)
   end
 
-  puts "Course ID is #{@course.id}"
-  puts "Teacher ID is #{@teacher.id}"
+  print_standard_course_info
   puts "Assignment ID is #{assignment.id}"
 end
 
@@ -318,8 +329,7 @@ def generate_mastery_path_course
   ]
   @rule = @course.conditional_release_rules.create!(trigger_assignment: @trigger_assignment, scoring_ranges: ranges)
 
-  puts "Course ID is #{@course.id}"
-  puts "Teacher ID is #{@teacher.id}"
+  print_standard_course_info
   puts "Trigger Assignment ID is #{@trigger_assignment.id}"
 end
 
@@ -346,8 +356,7 @@ def generate_course_with_outcome_rubric
   assignment = create_assignment(@course, "Rubric Assignment")
   rubric.associate_with(assignment, @course, purpose: "grading", use_for_grading: true)
 
-  puts "Course ID is #{@course.id}"
-  puts "Teacher ID is #{@teacher.id}"
+  print_standard_course_info
   puts "Assignment ID is #{assignment.id}"
   puts "Rubric ID is #{rubric.id}"
 end
@@ -367,8 +376,7 @@ def generate_course_assignment_groups
   assignment2.assignment_group = assignment_group2
   assignment2.save!
 
-  puts "Course ID is #{@course.id}"
-  puts "Teacher ID is #{@teacher.id}"
+  print_standard_course_info
   puts "Assignment 1 ID is #{assignment1.id}"
   puts "Assignment 2 ID is #{assignment2.id}"
   puts "Assignment Group 1 ID is #{assignment_group1.id}"
@@ -406,8 +414,7 @@ def generate_course_pace_course
   module1.add_item(id: discussion1.id, type: "discussion_topic")
   module1.add_item(id: quiz1.id, type: "quiz")
 
-  puts "Course ID is #{@course.id}"
-  puts "Teacher ID is #{@teacher.id}"
+  print_standard_course_info
   puts "Assignment 1 ID is #{assignment1.id}"
   puts "Assignment 2 ID is #{assignment2.id}"
   puts "Discussion ID is #{discussion1.id}"
@@ -475,7 +482,7 @@ rescue OptionParser::InvalidOption => e
 end
 @course_name = options.key?(:course_name) ? options[:course_name] : "Play Course"
 @number_of_students = options.key?(:num_students) ? options[:num_students] : 3
-root_account_id = options.key?(:account_id) ? options[:account_id] : 1
+root_account_id = options.key?(:account_id) ? options[:account_id] : 2
 
 if (@root_account = Account.find_by(id: root_account_id)).nil?
   puts "Invalid Root Account Id: #{root_account_id}"

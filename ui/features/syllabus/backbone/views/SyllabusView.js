@@ -25,7 +25,7 @@
 //
 
 import $ from 'jquery'
-import _ from 'underscore'
+import {reduce, each} from 'lodash'
 import Backbone from '@canvas/backbone'
 import template from '../../jst/Syllabus.handlebars'
 
@@ -144,7 +144,7 @@ export default class SyllabusView extends Backbone.View {
       }
 
       let override = null
-      _.each(json.assignment_overrides != null ? json.assignment_overrides : [], ov => {
+      each(json.assignment_overrides != null ? json.assignment_overrides : [], ov => {
         if (override == null) {
           override = {}
         }
@@ -172,7 +172,7 @@ export default class SyllabusView extends Backbone.View {
           date: start_date,
           orig_date: orig_start_date,
           passed: start_date && start_date < today,
-          events: []
+          events: [],
         }
 
         memo.push(lastDate)
@@ -201,7 +201,7 @@ export default class SyllabusView extends Backbone.View {
         last: true,
         override,
         json,
-        workflow_state: json.workflow_state
+        workflow_state: json.workflow_state,
       }
 
       lastDate.events.push(lastEvent)
@@ -221,7 +221,7 @@ export default class SyllabusView extends Backbone.View {
     }
 
     // Get the dates and events
-    const dates = _.reduce(super.toJSON(...arguments), dateCollator, [])
+    const dates = reduce(super.toJSON(...arguments), dateCollator, [])
 
     // Remove extraneous override information for single events
     let overrides_present = false
@@ -231,6 +231,7 @@ export default class SyllabusView extends Backbone.View {
         events[0].override = null
       } else {
         for (const event of Array.from(events)) {
+          // eslint-disable-next-line no-bitwise
           overrides_present |= event.override !== null
         }
       }
@@ -239,7 +240,7 @@ export default class SyllabusView extends Backbone.View {
     // Return the dates and events in a handlebars friendly way
     return {
       dates,
-      overrides_present
+      overrides_present,
     }
   }
 }

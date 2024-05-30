@@ -17,8 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require "set"
-
 module Canvas
   module Cdn
     class Registry
@@ -42,7 +40,22 @@ module Canvas
         end
 
         def scripts_for(bundle)
-          @manifest.fetch(bundle, []).map { |s| realpath(s) }
+          if @manifest.key?(bundle)
+            [realpath(@manifest[bundle])]
+          else
+            []
+          end
+        end
+
+        def entries
+          # contains -entry- in filename, ends in .js, but doesn't end in .map.js
+          all_entries = @manifest.values.grep(/-entry-.*\.js$/).grep_v(/\.map\.js$/).map { |x| realpath(x) }
+
+          # partition entries into main and others
+          main_entry, other_entries = all_entries.partition { |x| x.include? "main-entry" }
+
+          # load other entries first, then main entry
+          other_entries + main_entry
         end
 
         private

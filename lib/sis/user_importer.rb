@@ -20,6 +20,8 @@
 
 module SIS
   class UserImporter < BaseImporter
+    BATCH_SIZE = 100
+
     def process(messages, login_only: false)
       importer = Work.new(@batch, @root_account, @logger, messages)
       User.skip_updating_account_associations do
@@ -27,7 +29,7 @@ module SIS
           Pseudonym.process_as_sis(@sis_options) do
             yield importer
             while importer.any_left_to_process?
-              importer.process_batch(login_only: login_only)
+              importer.process_batch(login_only:)
             end
           end
         end
@@ -41,9 +43,12 @@ module SIS
     end
 
     class Work
-      attr_accessor :success_count, :users_to_set_sis_batch_ids,
-                    :pseudos_to_set_sis_batch_ids, :users_to_add_account_associations,
-                    :users_to_update_account_associations, :roll_back_data
+      attr_accessor :success_count,
+                    :users_to_set_sis_batch_ids,
+                    :pseudos_to_set_sis_batch_ids,
+                    :users_to_add_account_associations,
+                    :users_to_update_account_associations,
+                    :roll_back_data
 
       def initialize(batch, root_account, logger, messages)
         @batch = batch
@@ -74,7 +79,7 @@ module SIS
         end
 
         @batched_users << user
-        process_batch(login_only: login_only) if @batched_users.size >= Setting.get("sis_user_batch_size", "100").to_i
+        process_batch(login_only:) if @batched_users.size >= BATCH_SIZE
       end
 
       def any_left_to_process?
@@ -147,70 +152,74 @@ module SIS
             next
           end
 
-          if pseudo
-            if login_only
-              message = I18n.t("An existing Canvas user with the SIS ID %{user_id} or login of %{login} already exists, skipping", user_id: user_row.user_id, login: user_row.login_id)
-              @messages << SisBatch.build_error(user_row.csv, message, sis_batch: @batch, row: user_row.lineno, row_info: user_row.row)
-              next
-            end
-            if pseudo.sis_user_id && pseudo.sis_user_id != user_row.user_id
-              if @batch.options[:update_sis_id_if_login_claimed]
-                pseudo.sis_user_id = user_row.user_id
-              else
-                message = I18n.t("An existing Canvas user with the SIS ID %{user_id} has already claimed %{other_user_id}'s user_id requested login information, skipping", user_id: pseudo.sis_user_id, other_user_id: user_row.user_id)
+          begin
+            if pseudo
+              if login_only
+                message = I18n.t("An existing Canvas user with the SIS ID %{user_id} or login of %{login} already exists, skipping", user_id: user_row.user_id, login: user_row.login_id)
                 @messages << SisBatch.build_error(user_row.csv, message, sis_batch: @batch, row: user_row.lineno, row_info: user_row.row)
                 next
               end
-            end
-            if pseudo_by_login && ((pseudo != pseudo_by_login && status != "deleted") ||
-              !Pseudonym.where("LOWER(?)=LOWER(?)", pseudo.unique_id, user_row.login_id).exists?)
-              id_message = pseudo_by_login.sis_user_id ? "SIS ID" : "Canvas ID"
-              user_id = pseudo_by_login.sis_user_id || pseudo_by_login.user_id
-              message = I18n.t("An existing Canvas user with the %{user_id} has already claimed %{other_user_id}'s user_id requested login information, skipping", user_id: "#{id_message} #{user_id}", other_user_id: user_row.user_id)
-              @messages << SisBatch.build_error(user_row.csv, message, sis_batch: @batch, row: user_row.lineno, row_info: user_row.row)
-              next
-            end
+              if pseudo.sis_user_id && pseudo.sis_user_id != user_row.user_id
+                if @batch.options[:update_sis_id_if_login_claimed]
+                  pseudo.sis_user_id = user_row.user_id
+                else
+                  message = I18n.t("An existing Canvas user with the SIS ID %{user_id} has already claimed %{other_user_id}'s user_id requested login information, skipping", user_id: pseudo.sis_user_id, other_user_id: user_row.user_id)
+                  @messages << SisBatch.build_error(user_row.csv, message, sis_batch: @batch, row: user_row.lineno, row_info: user_row.row)
+                  next
+                end
+              end
+              if pseudo_by_login && ((pseudo != pseudo_by_login && status != "deleted") ||
+                !Pseudonym.where("LOWER(?)=LOWER(?)", pseudo.unique_id, user_row.login_id).exists?)
+                id_message = pseudo_by_login.sis_user_id ? "SIS ID" : "Canvas ID"
+                user_id = pseudo_by_login.sis_user_id || pseudo_by_login.user_id
+                message = I18n.t("An existing Canvas user with the %{user_id} has already claimed %{other_user_id}'s user_id requested login information, skipping", user_id: "#{id_message} #{user_id}", other_user_id: user_row.user_id)
+                @messages << SisBatch.build_error(user_row.csv, message, sis_batch: @batch, row: user_row.lineno, row_info: user_row.row)
+                next
+              end
+              user = if force_new_user?(user_row, pseudo)
+                       new_user(user_row, pseudo)
+                     else
+                       pseudo.user
+                     end
 
-            user = pseudo.user
-            unless user.stuck_sis_fields.include?(:name)
-              user.name = infer_user_name(user_row, user.name)
-            end
-            unless user.stuck_sis_fields.include?(:sortable_name)
-              user.sortable_name = infer_sortable_name(user_row, user.sortable_name)
-            end
-            if !user.stuck_sis_fields.include?(:short_name) && user_row.short_name.present?
-              user.short_name = user_row.short_name
-            end
-          elsif login_only
-            if user_row.root_account_id.present?
-              root_account = root_account_from_id(user_row.root_account_id, user_row)
-              next unless root_account
+              unless user.stuck_sis_fields.include?(:name)
+                user.name = infer_user_name(user_row, user.name)
+              end
+              unless user.stuck_sis_fields.include?(:sortable_name)
+                user.sortable_name = infer_sortable_name(user_row, user.sortable_name)
+              end
+              if !user.stuck_sis_fields.include?(:short_name) && user_row.short_name.present?
+                user.short_name = user_row.short_name
+              end
+            elsif login_only
+              if user_row.root_account_id.present?
+                root_account = root_account_from_id(user_row.root_account_id, user_row)
+                next unless root_account
+              else
+                root_account = @root_account
+              end
+              pseudo = existing_login(user_row, root_account)
+              if pseudo.nil?
+                message = I18n.t("Could not find the existing user for login with SIS ID %{user_id}, skipping", user_id: user_row.user_id)
+                @messages << SisBatch.build_error(user_row.csv, message, sis_batch: @batch, row: user_row.lineno, row_info: user_row.row)
+                next
+              elsif pseudo.attributes.slice(*user_row.login_hash.keys) != user_row.login_hash
+                message = I18n.t("An existing user does not match existing user ids provided for login with SIS ID %{user_id}, skipping", user_id: user_row.user_id)
+                @messages << SisBatch.build_error(user_row.csv, message, sis_batch: @batch, row: user_row.lineno, row_info: user_row.row)
+                next
+              else
+                user = pseudo.user
+                pseudo = Pseudonym.new
+              end
             else
-              root_account = @root_account
-            end
-            pseudo = existing_login(user_row, root_account)
-            if pseudo.nil?
-              message = I18n.t("Could not find the existing user for login with SIS ID %{user_id}, skipping", user_id: user_row.user_id)
-              @messages << SisBatch.build_error(user_row.csv, message, sis_batch: @batch, row: user_row.lineno, row_info: user_row.row)
-              next
-            elsif pseudo.attributes.slice(*user_row.login_hash.keys) != user_row.login_hash
-              message = I18n.t("An existing user does not match existing user ids provided for login with SIS ID %{user_id}, skipping", user_id: user_row.user_id)
-              @messages << SisBatch.build_error(user_row.csv, message, sis_batch: @batch, row: user_row.lineno, row_info: user_row.row)
-              next
-            else
-              user = pseudo.user
+              user = nil
               pseudo = Pseudonym.new
+              user = other_user(user_row, pseudo) if user_row.integration_id.present?
+              user = new_user(user_row, pseudo) if user.blank? || force_new_user?(user_row, pseudo)
             end
-          else
-            user = nil
-            pseudo = Pseudonym.new
-            user = other_user(user_row, pseudo) if user_row.integration_id.present?
-            unless user
-              user = User.new
-              user.name = infer_user_name(user_row)
-              user.sortable_name = infer_sortable_name(user_row)
-              user.short_name = user_row.short_name if user_row.short_name.present?
-            end
+          rescue ImportError => e
+            @messages << SisBatch.build_error(user_row.csv, e.message, sis_batch: @batch, row: user_row.lineno, row_info: user_row.row)
+            next
           end
 
           is_new_user_with_password_notification = user.new_record? && user_row.email.present? && user_row.canvas_password_notification.present? && user_row.authentication_provider_id == "canvas"
@@ -233,7 +242,7 @@ module SIS
           end
 
           if user_row.declared_user_type.present?
-            pseudo.declared_user_type = user_row.declared_user_type == "<delete>" ? nil : user_row.declared_user_type
+            pseudo.declared_user_type = (user_row.declared_user_type == "<delete>") ? nil : user_row.declared_user_type
           end
 
           if status == "deleted" && !user.new_record?
@@ -344,7 +353,7 @@ module SIS
                            CommunicationChannel.where("workflow_state='active' OR user_id=?", user)
                          end
               cc_scope = cc_scope.email.by_path(user_row.email)
-              limit = Setting.get("merge_candidate_search_limit", "100").to_i
+              limit = 10
               ccs = cc_scope.limit(limit + 1).to_a
               if ccs.count > limit
                 ccs = cc_scope.where(user_id: user).to_a # don't bother with merge candidates anymore
@@ -371,7 +380,7 @@ module SIS
             cc.pseudonym_id = pseudo.id
             cc.path = user_row.email
             cc.bounce_count = 0 if cc.path_changed?
-            cc.workflow_state = status == "deleted" ? "retired" : "active"
+            cc.workflow_state = (status == "deleted") ? "retired" : "active"
             newly_active = cc.path_changed? || (cc.active? && cc.workflow_state_changed?)
             if cc.changed?
               if cc.valid? && cc.save_without_broadcasting
@@ -428,7 +437,6 @@ module SIS
           end
           maybe_write_roll_back_data
           if is_new_user_with_password_notification
-            pseudo.unique_id = user_row.email
             cc.workflow_state = "unconfirmed"
             if pseudo.save_without_broadcasting && cc.save_without_broadcasting
               pseudo.send_registration_notification!
@@ -448,6 +456,16 @@ module SIS
           login
         end
       end
+
+      def new_user(user_row, _pseudo)
+        User.new.tap do |user|
+          user.name = infer_user_name(user_row)
+          user.sortable_name = infer_sortable_name(user_row)
+          user.short_name = user_row.short_name if user_row.short_name.present?
+        end
+      end
+
+      def force_new_user?(_user_row, _pseudo); end
 
       def other_user(_user_row, _pseudo); end
 
@@ -517,9 +535,9 @@ module SIS
 
       def generate_user_warning(message, user_id, login_id)
         generate_readable_error_message(
-          message: message,
-          user_id: user_id,
-          login_id: login_id
+          message:,
+          user_id:,
+          login_id:
         )
       end
 
@@ -531,8 +549,8 @@ module SIS
       def generate_readable_error_message(options)
         response = ERRORS_TO_REASONS.fetch(options[:message]) { DEFAULT_REASON }
         reason = format(response, options)
-        "Could not save the user with user_id: '#{options[:user_id]}'." \
-          " #{reason}"
+        "Could not save the user with user_id: '#{options[:user_id]}'. " \
+          "#{reason}"
       end
     end
   end

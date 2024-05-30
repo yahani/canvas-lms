@@ -18,7 +18,7 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
 import Spinner from 'spin.js'
 import '@canvas/jquery/jquery.ajaxJSON'
 import '@canvas/jquery/jquery.instructure_misc_helpers'
@@ -109,7 +109,7 @@ INST.lookupPrerequisites = function () {
       )
       $link.prev('a').hide()
     },
-    data => {
+    _data => {
       spinner.stop()
       $('.module_prerequisites_fallback').show()
     }

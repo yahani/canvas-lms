@@ -17,24 +17,30 @@
  */
 
 import Ember from 'ember'
-import {scoreToGrade} from '@canvas/grading/GradingSchemeHelper'
+import {scoreToGrade} from '@instructure/grading-utils'
 import GradeFormatHelper from '@canvas/grading/GradeFormatHelper'
 
 const FinalGradeOverrideComponent = Ember.Component.extend({
   inputValue: null,
   internalInputValue: null,
 
-  inputDescription: function() {
+  inputDescription: function () {
     const percentage = this.get('finalGradeOverride.percentage')
     const gradingStandard = this.get('gradingStandard')
 
     if (percentage == null || !gradingStandard) {
       return null
     }
+    if (gradingStandard) {
+      if (this.get('gradingStandardPointsBased')) {
+        // points based grading schemes never show percentages
+        return null
+      }
+    }
     return GradeFormatHelper.formatGrade(percentage, {gradingType: 'percent'})
-  }.property('finalGradeOverride', 'gradingStandard'),
+  }.property('finalGradeOverride', 'gradingStandard', 'gradingStandardPointsBased'),
 
-  finalGradeOverrideChanged: function() {
+  finalGradeOverrideChanged: function () {
     const percentage = this.get('finalGradeOverride.percentage')
     const gradingStandard = this.get('gradingStandard')
 
@@ -58,7 +64,7 @@ const FinalGradeOverrideComponent = Ember.Component.extend({
     this.sendAction('onEditFinalGradeOverride', this.get('inputValue'))
     // Always show a valid grade in the input on blur.
     this.set('inputValue', this.get('internalInputValue'))
-  }
+  },
 })
 
 export default FinalGradeOverrideComponent

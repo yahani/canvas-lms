@@ -20,13 +20,12 @@
 require_relative "concerns/advantage_services_shared_context"
 require_relative "concerns/advantage_services_shared_examples"
 require_relative "concerns/lti_services_shared_examples"
-require_dependency "lti/ims/results_controller"
 
 describe Lti::IMS::ResultsController do
   include_context "advantage services context"
 
   let(:assignment) do
-    opts = { course: course, points_possible: 5 }
+    opts = { course:, points_possible: 5 }
     if tool.present?
       opts[:submission_types] = "external_tool"
       opts[:external_tool_tag_attributes] = {
@@ -39,7 +38,7 @@ describe Lti::IMS::ResultsController do
   end
   let(:context) { course }
   let(:unknown_context_id) { (Course.maximum(:id) || 0) + 1 }
-  let(:json) { JSON.parse(response.body) }
+  let(:json) { response.parsed_body }
   let(:params_overrides) do
     {
       course_id: context_id,
@@ -50,7 +49,7 @@ describe Lti::IMS::ResultsController do
 
   let(:result) do
     lti_result_model(
-      assignment: assignment,
+      assignment:,
       line_item: assignment.line_items.first,
       result_score: 0.5,
       result_maximum: 1
@@ -64,7 +63,7 @@ describe Lti::IMS::ResultsController do
       3.times do
         lti_result_model(
           line_item: result.line_item,
-          assignment: assignment,
+          assignment:,
           result_score: 0.5,
           result_maximum: 1
         )
@@ -82,6 +81,14 @@ describe Lti::IMS::ResultsController do
     it "formats the results correctly" do
       send_request
       expect { Lti::Result.find(json.first["id"].split("/").last.to_i) }.not_to raise_error
+    end
+
+    it "uses the Account#domain in the line item id" do
+      expect_any_instance_of(Account).to receive(:environment_specific_domain).at_least(:once).and_return("canonical.host")
+      send_request
+      expect(json.first["id"]).to start_with(
+        "http://canonical.host/api/lti/courses/#{course.id}/line_items/"
+      )
     end
 
     context "with user_id in params" do
@@ -102,7 +109,7 @@ describe Lti::IMS::ResultsController do
 
         it "returns the user result" do
           send_request
-          expect(json.map { |res| res["userId"] }).to eq [result.user.lti_id]
+          expect(json.pluck("userId")).to eq [result.user.lti_id]
         end
       end
 
@@ -125,7 +132,7 @@ describe Lti::IMS::ResultsController do
       end
 
       context "with user not in course" do
-        let(:params_overrides) { super().merge(user_id: student_in_course(course: course, active_all: true).user.id) }
+        let(:params_overrides) { super().merge(user_id: student_in_course(course:, active_all: true).user.id) }
 
         it "returns empty array" do
           send_request
@@ -134,7 +141,7 @@ describe Lti::IMS::ResultsController do
       end
 
       context "with user not a student" do
-        let(:params_overrides) { super().merge(user_id: ta_in_course(course: course, active_all: true).user.id) }
+        let(:params_overrides) { super().merge(user_id: ta_in_course(course:, active_all: true).user.id) }
 
         it "returns empty array" do
           send_request
@@ -204,7 +211,7 @@ describe Lti::IMS::ResultsController do
     end
 
     context "when result requested not in line_item" do
-      let(:params_overrides) { super().merge(id: result.id, line_item_id: line_item_model(assignment: assignment, with_resource_link: true).id) }
+      let(:params_overrides) { super().merge(id: result.id, line_item_id: line_item_model(assignment:, with_resource_link: true).id) }
 
       it "returns a 404" do
         send_request

@@ -17,7 +17,7 @@
  */
 
 import axios from '@canvas/axios'
-import makePromisePool from 'make-promise-pool'
+import makePromisePool from '@canvas/make-promise-pool'
 
 const MAX_CONCURRENT_REQS = 5
 
@@ -29,7 +29,7 @@ export function deletePages(contextName, contextId, pageUrls) {
       return axios.delete(url)
     },
     {
-      poolSize: MAX_CONCURRENT_REQS
+      poolSize: MAX_CONCURRENT_REQS,
     }
   )
 }

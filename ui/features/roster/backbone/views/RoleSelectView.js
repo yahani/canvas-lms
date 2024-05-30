@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
-import SelectView from './SelectView.coffee'
+import SelectView from './SelectView'
 
 import template from '../../jst/roleSelect.handlebars'
 
@@ -32,11 +32,9 @@ export default class RoleSelectView extends SelectView {
   toJSON() {
     return {
       roles: this.rolesCollection.toJSON(),
-      selectedRole: (this.el.selectedOptions != null
-      ? this.el.selectedOptions.length
-      : undefined)
+      selectedRole: (this.el.selectedOptions != null ? this.el.selectedOptions.length : undefined)
         ? this.el.selectedOptions[0].value
-        : ''
+        : '',
     }
   }
 }

@@ -33,11 +33,13 @@ export const ADDRESS_BOOK_RECIPIENTS = gql`
     $search: String
     $afterUser: String
     $afterContext: String
+    $courseContextCode: String!
   ) {
     legacyNode(_id: $userID, type: User) {
       ... on User {
         id
         recipients(context: $context, search: $search) {
+          sendMessagesAll
           contextsConnection(first: 20, after: $afterContext) {
             nodes {
               id
@@ -52,16 +54,12 @@ export const ADDRESS_BOOK_RECIPIENTS = gql`
               _id
               id
               name
-              commonCoursesConnection {
+              shortName
+              observerEnrollmentsConnection(contextCode: $courseContextCode) {
                 nodes {
-                  _id
-                  id
-                  state
-                  type
-                  course {
-                    name
-                    id
+                  associatedUser {
                     _id
+                    name
                   }
                 }
               }
@@ -77,6 +75,92 @@ export const ADDRESS_BOOK_RECIPIENTS = gql`
   ${PageInfo.fragment}
 `
 
+// This query is used for the compose modal
+export const ADDRESS_BOOK_RECIPIENTS_WITH_COMMON_COURSES = gql`
+  query GetAddressBookRecipients(
+    $userID: ID!
+    $context: String
+    $search: String
+    $afterUser: String
+    $afterContext: String
+    $courseContextCode: String!
+  ) {
+    legacyNode(_id: $userID, type: User) {
+      ... on User {
+        id
+        recipients(context: $context, search: $search) {
+          sendMessagesAll
+          contextsConnection(first: 20, after: $afterContext) {
+            nodes {
+              id
+              name
+              userCount
+            }
+            pageInfo {
+              ...PageInfo
+            }
+          }
+          usersConnection(first: 20, after: $afterUser) {
+            nodes {
+              _id
+              id
+              name
+              shortName
+              commonCoursesConnection {
+                nodes {
+                  _id
+                  id
+                  state
+                  type
+                  course {
+                    name
+                    id
+                    _id
+                  }
+                }
+              }
+              observerEnrollmentsConnection(contextCode: $courseContextCode) {
+                nodes {
+                  associatedUser {
+                    _id
+                    name
+                  }
+                }
+              }
+            }
+            pageInfo {
+              ...PageInfo
+            }
+          }
+        }
+      }
+    }
+  }
+  ${PageInfo.fragment}
+`
+
+export const TOTAL_RECIPIENTS = gql`
+  query GetTotalRecipients($userID: ID!, $context: String) {
+    legacyNode(_id: $userID, type: User) {
+      ... on User {
+        id
+        totalRecipients(context: $context)
+      }
+    }
+  }
+`
+
+export const USER_INBOX_LABELS_QUERY = gql`
+  query GetUserInboxLabels($userID: ID!) {
+    legacyNode(_id: $userID, type: User) {
+      ... on User {
+        id
+        inboxLabels
+      }
+    }
+  }
+`
+
 export const CONVERSATIONS_QUERY = gql`
   query GetConversationsQuery(
     $userID: ID!
@@ -90,7 +174,7 @@ export const CONVERSATIONS_QUERY = gql`
         id
         conversationsConnection(
           scope: $scope # e.g. archived
-          filter: $filter # e.g. [course_1, user_1]
+          filter: $filter # e.g. [user_1, course_1]
           first: 20
           after: $afterConversation
         ) {
@@ -103,6 +187,7 @@ export const CONVERSATIONS_QUERY = gql`
                   ...ConversationMessage
                 }
               }
+              conversationMessagesCount
             }
           }
           pageInfo {
@@ -173,14 +258,21 @@ export const REPLY_CONVERSATION_QUERY = gql`
     $conversationID: ID!
     $participants: [ID!]
     $createdBefore: DateTime
+    $first: Int
   ) {
     legacyNode(_id: $conversationID, type: Conversation) {
       ... on Conversation {
         id
         _id
         contextName
+        contextAssetString
+        contextType
         subject
-        conversationMessagesConnection(participants: $participants, createdBefore: $createdBefore) {
+        conversationMessagesConnection(
+          participants: $participants
+          createdBefore: $createdBefore
+          first: $first
+        ) {
           nodes {
             ...ConversationMessage
           }
@@ -196,14 +288,16 @@ export const VIEWABLE_SUBMISSIONS_QUERY = gql`
     $sort: SubmissionCommentsSortOrderType
     $allComments: Boolean = true
     $afterSubmission: String
+    $filter: [String!]
   ) {
     legacyNode(_id: $userID, type: User) {
       ... on User {
         _id
         id
-        viewableSubmissionsConnection(first: 20, after: $afterSubmission) {
+        viewableSubmissionsConnection(first: 20, after: $afterSubmission, filter: $filter) {
           nodes {
             _id
+            readState
             commentsConnection(sortOrder: $sort, filter: {allComments: $allComments}) {
               nodes {
                 ...SubmissionComment
@@ -253,4 +347,21 @@ export const SUBMISSION_COMMENTS_QUERY = gql`
   }
   ${SubmissionComment.fragment}
   ${PageInfo.fragment}
+`
+
+export const RECIPIENTS_OBSERVERS_QUERY = gql`
+  query GetRecipientsObservers($userID: ID!, $contextCode: String!, $recipientIds: [String!]!) {
+    legacyNode(_id: $userID, type: User) {
+      ... on User {
+        id
+        recipientsObservers(contextCode: $contextCode, recipientIds: $recipientIds) {
+          nodes {
+            id
+            name
+            _id
+          }
+        }
+      }
+    }
+  }
 `

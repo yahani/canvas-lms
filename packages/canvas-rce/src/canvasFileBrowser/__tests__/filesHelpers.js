@@ -16,6 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+import {PENDING_MEDIA_ENTRY_ID} from '../FileBrowser'
+
 const folderFor = (context, overrides, bookmark) => {
   const id = overrides?.id || 26
   return {
@@ -30,10 +32,10 @@ const folderFor = (context, overrides, bookmark) => {
         contextType: context.type,
         contextId: context.id,
         canUpload: true,
-        ...overrides
-      }
+        ...overrides,
+      },
     ],
-    bookmark
+    bookmark,
   }
 }
 
@@ -49,7 +51,7 @@ const filesFor = (folder, overrides, bookmark) => ({
       folderId: folder.id,
       thumbnailUrl:
         'http://canvas.docker/images/thumbnails/172/KEI31pWCjvr1yK3xOT0pwLUGnzxTQ0HEVjiCKqhQ',
-      ...overrides
+      ...overrides,
     },
     {
       id: 173,
@@ -59,7 +61,7 @@ const filesFor = (folder, overrides, bookmark) => ({
       url: 'http://canvas.docker/files/173/download?download_frd=1',
       embed: {type: 'image'},
       folderId: folder.id,
-      ...overrides
+      ...overrides,
     },
     {
       id: 174,
@@ -69,7 +71,7 @@ const filesFor = (folder, overrides, bookmark) => ({
       url: 'http://canvas.docker/files/174/download?download_frd=1',
       embed: {type: 'file'},
       folderId: folder.id,
-      ...overrides
+      ...overrides,
     },
     {
       id: 175,
@@ -79,7 +81,7 @@ const filesFor = (folder, overrides, bookmark) => ({
       url: 'http://canvas.docker/files/175/download?download_frd=1',
       embed: {type: 'file'},
       folderId: folder.id,
-      ...overrides
+      ...overrides,
     },
     {
       id: 176,
@@ -89,7 +91,7 @@ const filesFor = (folder, overrides, bookmark) => ({
       url: 'http://canvas.docker/files/176/download?download_frd=1',
       embed: {type: 'file'},
       folderId: folder.id,
-      ...overrides
+      ...overrides,
     },
     {
       id: 177,
@@ -99,7 +101,7 @@ const filesFor = (folder, overrides, bookmark) => ({
       url: 'http://canvas.docker/files/177/download?download_frd=1',
       embed: {type: 'file'},
       folderId: folder.id,
-      ...overrides
+      ...overrides,
     },
     {
       id: 178,
@@ -109,7 +111,7 @@ const filesFor = (folder, overrides, bookmark) => ({
       url: 'http://canvas.docker/files/178/download?download_frd=1',
       embed: {type: 'file'},
       folderId: folder.id,
-      ...overrides
+      ...overrides,
     },
     {
       id: 179,
@@ -119,7 +121,7 @@ const filesFor = (folder, overrides, bookmark) => ({
       url: 'http://canvas.docker/files/179/download?download_frd=1',
       embed: {type: 'video'},
       folderId: folder.id,
-      ...overrides
+      ...overrides,
     },
     {
       id: 180,
@@ -129,10 +131,33 @@ const filesFor = (folder, overrides, bookmark) => ({
       url: 'http://canvas.docker/files/180/download?download_frd=1',
       embed: {type: 'audio'},
       folderId: folder.id,
-      ...overrides
-    }
+      ...overrides,
+    },
+    {
+      id: 181,
+      uuid: 'JEI31pWCjvr1yK3xOT0pwLUGnzxTQ0HEVjiCKqhQ',
+      type: 'audio/mp4',
+      name: 'im-still-pending.mp4',
+      url: 'http://canvas.docker/files/181/download?download_frd=1',
+      embed: {type: 'audio'},
+      folderId: folder.id,
+      mediaEntryId: PENDING_MEDIA_ENTRY_ID,
+      ...overrides,
+    },
+    {
+      id: 182,
+      uuid: 'KEI31pWCjvr1yK3xOT0pwLUGnzxTQ0HEVjiCKqhQ',
+      type: 'image/svg+xml',
+      name: 'icon-maker-icon.svg',
+      url: 'http://canvas.docker/files/182/download?download_frd=1',
+      embed: {type: 'image'},
+      folderId: folder.id,
+      thumbnailUrl: 'http://canvas.docker/files/182/download?download_frd=1',
+      mediaEntryId: null,
+      ...overrides,
+    },
   ],
-  bookmark
+  bookmark,
 })
 
 export const apiSource = () => ({
@@ -155,10 +180,9 @@ export const apiSource = () => ({
       const filesFolder = folderFor({type: 'course', id: 1}).folders[0]
       responseData = filesFor(filesFolder, {folderId: parseInt(folderId, 10)})
     }
-
     onSuccess(responseData)
     return Promise.resolve(responseData)
   }),
   fetchFilesForFolder: jest.fn().mockRejectedValue(),
-  fetchSubFolders: jest.fn().mockResolvedValue()
+  fetchSubFolders: jest.fn().mockResolvedValue(),
 })

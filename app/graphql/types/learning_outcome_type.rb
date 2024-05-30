@@ -101,6 +101,14 @@ module Types
       Account.site_admin.grants_right?(current_user, session, :manage_global_outcomes)
     end
 
+    field :can_archive, Boolean, null: false do
+      argument :context_id, ID, required: true
+      argument :context_type, String, required: true
+    end
+    def can_archive(context_id:, context_type:)
+      outcome.context_type == context_type && outcome.context_id == context_id.to_i
+    end
+
     field :assessed, Boolean, null: false
     def assessed
       AssessedLoader.load(outcome)
@@ -131,13 +139,18 @@ module Types
       argument :context_type, String, required: true
     end
     def alignments(context_id:, context_type:)
-      Loaders::OutcomeAlignmentLoader.for(context_id, context_type).load(outcome)
+      context = get_context(context_id, context_type)
+      Loaders::OutcomeAlignmentLoader.for(context).load(outcome) if context&.grants_right?(current_user, session, :manage_outcomes)
     end
 
     private
 
     def outcome_context_promise
       Loaders::AssociationLoader.for(LearningOutcome, :context).load(outcome)
+    end
+
+    def get_context(context_id, context_type)
+      context_type.constantize.active.find_by(id: context_id) if ["Course", "Account"].include?(context_type)
     end
   end
 end

@@ -23,7 +23,7 @@ class WebConference < ActiveRecord::Base
   include TextHelper
   attr_readonly :context_id, :context_type
   belongs_to :context, polymorphic: %i[course group account]
-  has_one :calendar_event, inverse_of: :web_conference, dependent: :nullify
+  has_one :calendar_event, -> { order("updated_at desc") }, inverse_of: :web_conference, dependent: :nullify
   has_many :web_conference_participants
   has_many :users, through: :web_conference_participants
   has_many :invitees, -> { where(web_conference_participants: { participation_type: "invitee" }) }, through: :web_conference_participants, source: :user
@@ -32,6 +32,7 @@ class WebConference < ActiveRecord::Base
 
   validates :description, length: { maximum: maximum_text_length, allow_blank: true }
   validates :conference_type, :title, :context_id, :context_type, :user_id, presence: true
+  validates :title, length: { within: 0..255 }
   validate :lti_tool_valid, if: -> { conference_type == "LtiConference" }
 
   MAX_DURATION = 99_999_999
@@ -47,7 +48,7 @@ class WebConference < ActiveRecord::Base
 
   scope :for_context_codes, ->(context_codes) { where(context_code: context_codes) }
 
-  scope :with_config_for, ->(context:) { where(conference_type: WebConference.conference_types(context).map { |ct| ct["conference_type"] }) }
+  scope :with_config_for, ->(context:) { where(conference_type: WebConference.conference_types(context).pluck("conference_type")) }
 
   scope :live, -> { where("web_conferences.started_at BETWEEN (NOW() - interval '1 day') AND NOW() AND (web_conferences.ended_at IS NULL OR web_conferences.ended_at > NOW())") }
 
@@ -176,8 +177,8 @@ class WebConference < ActiveRecord::Base
   # regenerated)
   def external_url_for(key, user, url_id = nil)
     (external_urls[key.to_sym] &&
-      respond_to?("#{key}_external_url") &&
-      send("#{key}_external_url", user, url_id)) || []
+      respond_to?(:"#{key}_external_url") &&
+      send(:"#{key}_external_url", user, url_id)) || []
   end
 
   def self.external_urls
@@ -204,9 +205,11 @@ class WebConference < ActiveRecord::Base
   set_broadcast_policy do |p|
     p.dispatch :web_conference_invitation
     p.to do
-      @new_participants.select do |participant|
+      notification_recipients = @new_participants.select do |participant|
         context.membership_for_user(participant).try(:active?)
       end
+      @new_participants = []
+      notification_recipients
     end
     p.whenever { context_is_available? && @new_participants && !@new_participants.empty? }
     p.data { course_broadcast_data }
@@ -238,7 +241,7 @@ class WebConference < ActiveRecord::Base
     return unless user
 
     p = web_conference_participants.where(user_id: user).first
-    p ||= web_conference_participants.build(user: user)
+    p ||= web_conference_participants.build(user:)
     p.participation_type = type unless type == "attendee" && p.participation_type == "initiator"
     (@new_participants ||= []) << user if p.new_record?
     # Once anyone starts attending the conference, mark it as started.
@@ -255,6 +258,7 @@ class WebConference < ActiveRecord::Base
     new_invitees.uniq.each do |u|
       add_invitee(u)
     end
+    save
   end
 
   def recording_ready!
@@ -308,7 +312,9 @@ class WebConference < ActiveRecord::Base
     self.conference_type ||= config && config[:conference_type]
     self.context_code = "#{context_type.underscore}_#{context_id}" rescue nil
     self.added_user_ids ||= ""
-    self.title ||= context.is_a?(Course) ? t("#web_conference.default_name_for_courses", "Course Web Conference") : t("#web_conference.default_name_for_groups", "Group Web Conference")
+    if title.blank?
+      self.title = context.is_a?(Course) ? t("#web_conference.default_name_for_courses", "Course Web Conference") : t("#web_conference.default_name_for_groups", "Group Web Conference")
+    end
     self.start_at ||= self.started_at
     self.end_at ||= ended_at
     self.end_at ||= self.start_at + duration.minutes if self.start_at && duration
@@ -451,6 +457,12 @@ class WebConference < ActiveRecord::Base
     has_advanced_settings? ? 1 : 0
   end
 
+  def has_calendar_event
+    return 0 if calendar_event.nil?
+
+    (calendar_event.workflow_state == "deleted") ? 0 : 1
+  end
+
   scope :after, ->(date) { where("web_conferences.start_at IS NULL OR web_conferences.start_at>?", date) }
 
   set_policy do
@@ -506,7 +518,7 @@ class WebConference < ActiveRecord::Base
   end
 
   def config
-    @config ||= WebConference.config(context: context, class_name: self.class.to_s)
+    @config ||= WebConference.config(context:, class_name: self.class.to_s)
   end
 
   def valid_config?
@@ -530,8 +542,8 @@ class WebConference < ActiveRecord::Base
   def as_json(options = {})
     url = options.delete(:url)
     join_url = options.delete(:join_url)
-    options.reverse_merge!(only: %w[id title description conference_type duration started_at ended_at user_ids context_id context_type context_code])
-    result = super(options.merge(include_root: false, methods: %i[has_advanced_settings long_running user_settings recordings]))
+    options.reverse_merge!(only: %w[id title description conference_type duration started_at ended_at user_ids context_id context_type context_code start_at end_at])
+    result = super(options.merge(include_root: false, methods: %i[has_advanced_settings invitees_ids attendees_ids has_calendar_event long_running user_settings recordings]))
     result["url"] = url
     result["join_url"] = join_url
     result
@@ -539,6 +551,14 @@ class WebConference < ActiveRecord::Base
 
   def user_ids
     web_conference_participants.pluck(:user_id)
+  end
+
+  def invitees_ids
+    invitees.pluck(:id)
+  end
+
+  def attendees_ids
+    attendees.pluck(:id)
   end
 
   def self.conference_types(context)
@@ -560,7 +580,7 @@ class WebConference < ActiveRecord::Base
   end
 
   def self.lti_tools(context)
-    ContextExternalTool.all_tools_for(context, placements: :conference_selection) || []
+    Lti::ContextToolFinder.new(context, placements: :conference_selection).all_tools_sorted_array
   end
 
   def self.plugins
@@ -568,7 +588,7 @@ class WebConference < ActiveRecord::Base
   end
 
   def self.enabled_plugin_conference_names
-    WebConference.plugin_types.map { |wt| wt["name"] }
+    WebConference.plugin_types.pluck("name")
   end
 
   def self.conference_tab_name
@@ -587,10 +607,10 @@ class WebConference < ActiveRecord::Base
 
       plugin.settings.merge(
         conference_type: plugin.id.classify,
-        class_name: (plugin.base || "#{plugin.id.classify}Conference"),
+        class_name: plugin.base || "#{plugin.id.classify}Conference",
         user_setting_fields: klass.user_setting_fields,
         name: plugin.name,
-        plugin: plugin
+        plugin:
       ).with_indifferent_access
     end
   end
@@ -614,5 +634,9 @@ class WebConference < ActiveRecord::Base
     when Account
       self.root_account_id = context.resolved_root_account_id
     end
+  end
+
+  def self.max_invitees_sync_size
+    Setting.get("max_invitees_sync_size", 100).to_i
   end
 end

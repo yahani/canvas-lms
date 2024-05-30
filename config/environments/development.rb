@@ -21,12 +21,12 @@ class HostUrlContainer
   mattr_accessor :host_url
   def self.===(host)
     # rubocop:disable Style/CaseEquality
-    host_url.===(host)
+    host_url === (host)
     # rubocop:enable Style/CaseEquality
   end
 end
 
-environment_configuration(defined?(config) && config) do |config|
+Rails.application.configure do
   # Settings specified here will take precedence over those in config/application.rb
 
   # In the development environment your application's code is reloaded on
@@ -45,21 +45,17 @@ environment_configuration(defined?(config) && config) do |config|
   config.action_mailer.raise_delivery_errors = true
 
   # allow debugging only in development environment by default
-  #
-  # Option to DISABLE_RUBY_DEBUGGING is helpful IDE-based debugging.
-  # The ruby debug gems conflict with the IDE-based debugger gem.
-  # Set this option in your dev environment to disable.
-  unless ENV["DISABLE_RUBY_DEBUGGING"] || RUBY_ENGINE != "ruby"
-    require "byebug"
+  if RUBY_ENGINE == "ruby"
+    require "debug/prelude"
     if ENV["REMOTE_DEBUGGING_ENABLED"]
-      require "byebug/core"
-      Byebug.start_server("0.0.0.0", 0)
-      puts "Byebug listening on 0.0.0.0:#{Byebug.actual_port}" # rubocop:disable Rails/Output
-      byebug_port_file = File.join(Dir.tmpdir, "byebug.port")
-      File.write(byebug_port_file, Byebug.actual_port)
-
-      require "debase"
-      require "ruby-debug-ide"
+      # rubocop:disable Lint/Debugger
+      if defined?(PhusionPassenger)
+        # only initialize in forked child process (to prevent EADDRINUSE)
+        PhusionPassenger.on_event(:starting_worker_process) { require "debug/open_nonstop" }
+      else
+        require "debug/open_nonstop"
+      end
+      # rubocop:enable Lint/Debugger
     end
   end
 

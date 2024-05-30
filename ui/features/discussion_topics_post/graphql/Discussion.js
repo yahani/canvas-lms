@@ -25,7 +25,6 @@ import {DiscussionPermissions} from './DiscussionPermissions'
 import gql from 'graphql-tag'
 import {User} from './User'
 import {DiscussionEntry} from './DiscussionEntry'
-import {DiscussionEntryDraft} from './DiscussionEntryDraft'
 import {PageInfo} from './PageInfo'
 import {ChildTopic} from './ChildTopic'
 import {RootTopic} from './RootTopic'
@@ -57,6 +56,12 @@ export const Discussion = {
       lockAt
       availableForUser
       userCount
+      editor {
+        ...User
+      }
+      author {
+        ...User
+      }
       entryCounts {
         unreadCount
         repliesCount
@@ -83,6 +88,7 @@ export const Discussion = {
         ...RootTopic
       }
     }
+    ${User.fragment}
     ${Attachment.fragment}
     ${Assignment.fragment}
     ${DiscussionPermissions.fragment}
@@ -119,7 +125,7 @@ export const Discussion = {
     userCount: number,
     entryCounts: shape({
       unreadCount: number,
-      repliesCount: number
+      repliesCount: number,
     }),
     author: User.shape,
     anonymousAuthor: AnonymousUser.shape,
@@ -132,12 +138,12 @@ export const Discussion = {
     groupSet: GroupSet.shape,
     rootTopic: RootTopic.shape,
     rootEntriesTotalPages: number,
-    entriesTotalPages: number
+    entriesTotalPages: number,
   }),
 
   mock: ({
-    id = 'RGlzY3Vzc2lvbi0x',
-    _id = '1',
+    id = 'Discussion-default-mock',
+    _id = 'Discussion-default-mock',
     title = 'X-Men Powers Discussion',
     message = 'This is a Discussion Topic Message',
     createdAt = '2020-11-23T11:40:44-07:00',
@@ -163,7 +169,7 @@ export const Discussion = {
     entryCounts = {
       unreadCount: 2,
       repliesCount: 56,
-      __typename: 'DiscussionEntryCounts'
+      __typename: 'DiscussionEntryCounts',
     },
     author = User.mock({_id: '1', displayName: 'Charles Xavier'}),
     anonymousAuthor = null,
@@ -179,13 +185,8 @@ export const Discussion = {
     discussionEntriesConnection = {
       nodes: [DiscussionEntry.mock()],
       pageInfo: PageInfo.mock(),
-      __typename: 'DiscussionEntriesConnection'
+      __typename: 'DiscussionEntriesConnection',
     },
-    discussionEntryDraftsConnection = {
-      nodes: [DiscussionEntryDraft.mock()],
-      pageInfo: PageInfo.mock(),
-      __typename: 'DiscussionEntryDraftsConnection'
-    }
   } = {}) => ({
     id,
     _id,
@@ -224,14 +225,13 @@ export const Discussion = {
     searchEntryCount,
     entriesTotalPages,
     discussionEntriesConnection,
-    discussionEntryDraftsConnection,
-    __typename: 'Discussion'
-  })
+    __typename: 'Discussion',
+  }),
 }
 
 export const DefaultMocks = {
   Discussion: () => ({
     _id: '1',
-    title: 'This is a Title'
-  })
+    title: 'This is a Title',
+  }),
 }

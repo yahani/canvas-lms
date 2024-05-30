@@ -17,6 +17,7 @@
  */
 
 import $ from 'jquery'
+import 'jquery-migrate'
 import RCELoader from '@canvas/rce/serviceRCELoader'
 import editorUtils from 'helpers/editorUtils'
 import fakeENV from 'helpers/fakeENV'
@@ -37,7 +38,7 @@ QUnit.module('loadRCE', {
     window.tinyMCE = this.originalTinyMCE
     fakeENV.teardown()
     return editorUtils.resetRCE()
-  }
+  },
 })
 
 // loading RCE
@@ -67,19 +68,21 @@ QUnit.module('loadOnTarget', {
     fakeENV.setup()
     ENV.context_asset_string = 'courses_1'
     fixtures.setup()
-    this.$div = fixtures.create('<div><textarea id="theTarget" name="elementName" /></div>')
+    this.$div = fixtures.create(
+      '<div><textarea id="theTarget" name="elementName"></textarea></div>'
+    )
     this.$textarea = fixtures.find('#theTarget')
     this.editor = {
       mceInstance() {
         return {
           on(eventType, callback) {
             callback()
-          }
+          },
         }
       },
       tinymceOn(eventType, callback) {
         callback()
-      }
+      },
     }
     this.rce = {renderIntoDiv: sinon.stub().callsArgWith(2, this.editor)}
     sinon.stub(RCELoader, 'loadRCE').callsArgWith(0, this.rce)
@@ -91,7 +94,7 @@ QUnit.module('loadOnTarget', {
     fixtures.teardown()
     RCELoader.loadRCE.restore()
     fakeENV.teardown()
-  }
+  },
 })
 
 // target finding
@@ -149,7 +152,7 @@ test('adds the elements name attribute to mirroredAttrs', function () {
 
 test('adds onFocus to props', function () {
   const opts = {
-    onFocus() {}
+    onFocus() {},
   }
   const props = RCELoader.createRCEProps(this.$textarea.get(0), opts)
   equal(props.onFocus, opts.onFocus)
@@ -178,4 +181,43 @@ test('ensures yielded editor has call and focus methods', function (assert) {
     done()
   }
   RCELoader.loadOnTarget(this.$div, {}, cb)
+})
+
+test('populates externalToolsConfig without context_external_tool_resource_selection_url', () => {
+  window.ENV = {
+    LTI_LAUNCH_FRAME_ALLOWANCES: ['test allow'],
+    a2_student_view: true,
+    MAX_MRU_LTI_TOOLS: 892,
+  }
+
+  deepEqual(RCELoader.createRCEProps({}, {}).externalToolsConfig, {
+    ltiIframeAllowances: ['test allow'],
+    isA2StudentView: true,
+    maxMruTools: 892,
+    resourceSelectionUrlOverride: null,
+  })
+})
+
+test('populates externalToolsConfig with context_external_tool_resource_selection_url', () => {
+  window.ENV = {
+    LTI_LAUNCH_FRAME_ALLOWANCES: ['test allow'],
+    a2_student_view: true,
+    MAX_MRU_LTI_TOOLS: 892,
+  }
+
+  const a = document.createElement('a')
+  try {
+    a.id = 'context_external_tool_resource_selection_url'
+    a.href = 'http://www.example.com'
+    document.body.appendChild(a)
+
+    deepEqual(RCELoader.createRCEProps({}, {}).externalToolsConfig, {
+      ltiIframeAllowances: ['test allow'],
+      isA2StudentView: true,
+      maxMruTools: 892,
+      resourceSelectionUrlOverride: 'http://www.example.com',
+    })
+  } finally {
+    a.remove()
+  }
 })

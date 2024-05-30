@@ -19,16 +19,18 @@
 #
 
 class Loaders::DiscussionEntryLoader < GraphQL::Batch::Loader
-  def initialize(current_user:, search_term: nil, sort_order: :desc, filter: nil, root_entries: false, relative_entry_id: nil, before_relative_entry: true, include_relative_entry: true)
+  def initialize(current_user:, search_term: nil, sort_order: :desc, filter: nil, root_entries: false, relative_entry_id: nil, before_relative_entry: true, include_relative_entry: true, user_search_id: nil, unread_before: nil)
     super()
     @current_user = current_user
     @search_term = search_term
     @sort_order = sort_order
     @filter = filter
     @root_entries = root_entries
+    @user_search_id = user_search_id
     @relative_entry_id = relative_entry_id
     @before_entry = before_relative_entry
     @include_entry = include_relative_entry
+    @unread_before = unread_before
   end
 
   def perform(objects)
@@ -59,7 +61,7 @@ class Loaders::DiscussionEntryLoader < GraphQL::Batch::Loader
       if @search_term.present?
         # search results cannot look at the messages from deleted
         # discussion_entries, so they need to be excluded.
-        scope = if object.is_a?(DiscussionTopic) && object.anonymous_state != "full_anonymity"
+        scope = if object.is_a?(DiscussionTopic) && object.anonymous_state != "full_anonymity" && object.anonymous_state != "partial_anonymity"
                   scope.active.joins(:user).where(UserSearch.like_condition("message"), pattern: UserSearch.like_string_for(@search_term))
                        .or(scope.joins(:user).where(UserSearch.like_condition("users.name"), pattern: UserSearch.like_string_for(@search_term)))
                 else
@@ -86,8 +88,9 @@ class Loaders::DiscussionEntryLoader < GraphQL::Batch::Loader
       end
 
       # unread filter is used like search results and need to exclude deleted entries
-      scope = scope.active.unread_for_user(@current_user) if @filter == "unread"
+      scope = scope.active.unread_for_user_before(@current_user, @unread_before) if @filter == "unread"
       scope = scope.where(workflow_state: "deleted") if @filter == "deleted"
+      scope = scope.where(user_id: @user_search_id) unless @user_search_id.nil?
       scope = scope.preload(:user, :editor)
       fulfill(object, scope)
     rescue ActiveRecord::RecordNotFound
@@ -102,11 +105,13 @@ class Loaders::DiscussionEntryLoader < GraphQL::Batch::Loader
       object.discussion_entries
     elsif object.is_a?(DiscussionEntry)
       if object.root_entry_id.nil?
-        object.root_discussion_replies
-      elsif object.legacy?
-        object.legacy_subentries
+        if @user_search_id
+          object.flattened_discussion_subentries
+        else
+          object.root_discussion_replies
+        end
       else
-        DiscussionEntry.none
+        object.discussion_subentries
       end
     end
   end

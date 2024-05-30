@@ -24,10 +24,13 @@ class AppCenterController < ApplicationController
   def map_tools_to_apps!(context, apps)
     return unless apps
 
-    ContextExternalTool.all_tools_for(context).each do |tool|
-      app = nil
-      app_center_id = tool.app_center_id || tool.tool_id
-      app = apps.find { |a| app_center_id == a["short_name"] } if app_center_id
+    app_mapping = apps.each_with_object({}) do |app, hash|
+      shortname = app["short_name"]
+      hash[shortname] ||= app if shortname
+    end
+
+    Lti::ContextToolFinder.all_tools_scope_union(context).each do |tool|
+      app = app_mapping[tool.app_center_id || tool.tool_id]
       app["is_installed"] = true if app
     end
   end
@@ -43,7 +46,7 @@ class AppCenterController < ApplicationController
   def index
     per_page = Api.per_page_for(self, default: 72, max: 72)
     endpoint_scope = (@context.is_a?(Account) ? "account" : "course")
-    base_url = send("api_v1_#{endpoint_scope}_app_center_apps_url")
+    base_url = send(:"api_v1_#{endpoint_scope}_app_center_apps_url")
     response = app_api.get_apps(page, per_page) || {}
     if response["lti_apps"]
       collection = PaginatedCollection.build do |pager|

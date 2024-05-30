@@ -17,13 +17,14 @@
  */
 
 import $ from 'jquery'
-import GradebookHelpers from 'ui/features/screenreader_gradebook/helpers.js'
-import GradebookConstants from 'ui/features/screenreader_gradebook/constants.js'
+import 'jquery-migrate'
+import GradebookHelpers from 'ui/features/screenreader_gradebook/helpers'
+import GradebookConstants from 'ui/features/screenreader_gradebook/constants'
 
 QUnit.module('GradebookHelpers#noErrorsOnPage', {
   setup() {
     sandbox.stub($, 'find')
-  }
+  },
 })
 
 test('noErrorsOnPage returns true when the dom has no errors', () => {
@@ -47,7 +48,7 @@ test('textareaIsGreaterThanMaxLength is true at greater than the max allowed len
 QUnit.module('GradebookHelpers#maxLengthErrorShouldBeShown', {
   setup() {
     sandbox.stub($, 'find')
-  }
+  },
 })
 
 test('maxLengthErrorShouldBeShown is false when text length is exactly the max allowed length', () =>

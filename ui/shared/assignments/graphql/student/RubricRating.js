@@ -26,6 +26,7 @@ export const RubricRating = {
       description
       long_description: longDescription
       points
+      rubricId
     }
   `,
 
@@ -33,12 +34,27 @@ export const RubricRating = {
     id: string.isRequired,
     description: string.isRequired,
     long_description: string,
-    points: number
-  })
+    points: number,
+    rubricId: string,
+  }),
+
+  mock: ({
+    _id = '1',
+    description = 'Rating Description',
+    long_description = 'Rating Long Description',
+    points = 1,
+    rubricId = '1',
+  } = {}) => ({
+    _id,
+    description,
+    long_description,
+    points,
+    rubricId,
+  }),
 }
 
 export const DefaultMocks = {
   RubricRating: () => ({
-    _id: '1'
-  })
+    _id: '1',
+  }),
 }

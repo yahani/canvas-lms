@@ -17,8 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_dependency "importers"
-
 module Importers
   class LtiResourceLinkImporter < Importer
     self.item_class = Lti::ResourceLink
@@ -49,7 +47,7 @@ module Importers
       resource_link_for_course = Lti::ResourceLink.find_or_initialize_for_context_and_lookup_uuid(
         context: migration.context,
         lookup_uuid: lti_resource_link["lookup_uuid"],
-        url: lti_resource_link["launch_url"],
+        url: lti_resource_link["resource_link_url"],
         context_external_tool_launch_url: lti_resource_link["launch_url"]
       )
       resource_link_for_course.custom =

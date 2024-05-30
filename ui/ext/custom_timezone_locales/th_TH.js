@@ -16,12 +16,11 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-// eslint-disable-next-line import/no-commonjs
 module.exports = {
   name: 'th_TH',
   day: {
     abbrev: ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'],
-    full: ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์']
+    full: ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'],
   },
   month: {
     abbrev: [
@@ -36,7 +35,7 @@ module.exports = {
       'ก.ย.',
       'ต.ค.',
       'พ.ย.',
-      'ธ.ค.'
+      'ธ.ค.',
     ],
     full: [
       'มกราคม',
@@ -50,13 +49,13 @@ module.exports = {
       'กันยายน',
       'ตุลาคม',
       'พฤศจิกายน',
-      'ธันวาคม'
-    ]
+      'ธันวาคม',
+    ],
   },
   meridiem: ['', ''],
   date: '%Y-%m-%d',
   time24: '%H:%M:%S %z',
   dateTime: '%b %-d ที่ %l:%M%P',
   time12: '',
-  full: '%b %-d, %Y %-l:%M%P'
+  full: '%b %-d, %Y %-l:%M%P',
 }

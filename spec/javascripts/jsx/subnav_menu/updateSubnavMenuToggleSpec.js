@@ -17,6 +17,7 @@
  */
 
 import $ from 'jquery'
+import 'jquery-migrate'
 
 import updateSubnavMenuToggle from '../../../../ui/shared/courses/jquery/updateSubnavMenuToggle'
 
@@ -28,12 +29,12 @@ QUnit.module('SubnavMenuToggle', {
       id: 'courseMenuToggle',
       className: 'Button Button--link Button--small ic-app-course-nav-toggle',
       ariaLabel: 'Hide Navigation Menu',
-      ariaLive: 'polite'
+      ariaLive: 'polite',
     }).appendTo(container)
   },
   teardown() {
     container.empty()
-  }
+  },
 })
 
 test('it should toggle the aria-label text correctly for show and hide on click', () => {

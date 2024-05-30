@@ -72,13 +72,20 @@ function postUploadFailed(err) {
  *   To get this off of an input element: `input.files[0]`
  *   To get this off of a drop event: `e.dataTransfer.files[0]`
  */
-export function uploadFile(preflightUrl, preflightData, file, ajaxLib = axios, onProgress) {
+export function uploadFile(
+  preflightUrl,
+  preflightData,
+  file,
+  ajaxLib = axios,
+  onProgress,
+  ignoreResult = false
+) {
   if (!file && !preflightData.url) {
     throw new Error('expected either a file to upload or a url to clone', {file, preflightData})
   } else if (file && preflightData.url) {
     throw new Error("can't upload with both a file object and a url to clone", {
       file,
-      preflightData
+      preflightData,
     })
   }
 
@@ -95,7 +102,7 @@ export function uploadFile(preflightUrl, preflightData, file, ajaxLib = axios, o
   return ajaxLib
     .post(preflightUrl, preflightData)
     .catch(preflightFailed)
-    .then(response => completeUpload(response.data, file, {ajaxLib, onProgress}))
+    .then(response => completeUpload(response.data, file, {ajaxLib, onProgress, ignoreResult}))
 }
 
 /*
@@ -154,7 +161,7 @@ export function completeUpload(preflightResponse, file, options = {}) {
     responseType: isToS3 ? 'document' : 'json',
     onUploadProgress: options.onProgress,
     withCredentials: !isToS3,
-    ...ajaxLibOptions
+    ...ajaxLibOptions,
   })
 
   // finalize upload
@@ -213,7 +220,7 @@ export function submissionCommentAttachmentsUpload(files, courseId, assignmentId
   const uploadPromises = files.map(currentFile => {
     const preflightFileData = {
       name: currentFile.name,
-      content_type: currentFile.type
+      content_type: currentFile.type,
     }
     return uploadFile(preflightFileUploadUrl, preflightFileData, currentFile)
   })
@@ -226,7 +233,7 @@ export function submissionCommentAttachmentsUpload(files, courseId, assignmentId
  *
  * @returns an array of attachment objects.
  */
-export function uploadFiles(files, uploadUrl) {
+export function uploadFiles(files, uploadUrl, options = {}) {
   // We differentiate between a normal file and an lti content item
   // based on the existence of a url attribute on the object. Then we invoke
   // the uploadFile function with different parameters based on whether its a
@@ -234,7 +241,16 @@ export function uploadFiles(files, uploadUrl) {
   // providing are determined by the file uploads api whose documentation can
   // be found at /doc/api/file_uploads.md
   const uploadPromises = files.map(file => {
-    if (file.url) {
+    if (options.conversations) {
+      const attachmentInformation = {}
+      attachmentInformation['attachment[folder_id]'] = ENV.CONVERSATIONS.ATTACHMENTS_FOLDER_ID
+      attachmentInformation['attachment[intent]'] = 'message'
+      attachmentInformation['attachment[filename]'] = file.name
+      attachmentInformation['attachment[context_code]'] = `user_${ENV.current_user_id}`
+      attachmentInformation['attachment[on_duplicate]'] = `rename`
+
+      return uploadFile(uploadUrl, attachmentInformation, file)
+    } else if (file.url) {
       // I believe this code is dead now, everything calling it seems to be
       // using files from a file input (the LTI path now uses uploadFiles in
       // AttemptTab), should we remove it?
@@ -242,14 +258,14 @@ export function uploadFiles(files, uploadUrl) {
         url: file.url,
         name: file.text,
         content_type: file.mediaType,
-        submit_assignment: false
+        submit_assignment: false,
       })
     } else {
       return uploadFile(
         uploadUrl,
         {
           name: file.name,
-          content_type: file.type
+          content_type: file.type,
         },
         file
       )

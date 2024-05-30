@@ -17,30 +17,16 @@
 
 import $ from 'jquery'
 import {useScope as useI18nScope} from '@canvas/i18n'
+import {postMessageExternalContentCancel} from '@canvas/external-tools/messages'
 
 const I18n = useI18nScope('external_content.cancel')
 
-let parentWindow
-window.parentWindow = window.parent
-window.callback = ENV.service
-while (parentWindow && !parentWindow[callback]) {
-  parentWindow = parentWindow.parent
-}
-parentWindow.$(parentWindow).trigger('externalContentCancel')
-if (parentWindow[callback] && parentWindow[callback].cancel) {
-  parentWindow[callback].cancel()
-  setTimeout(
-    () =>
-      $('#dialog_message').text(
-        I18n.t('popup_success', 'Canceled. This popup should close on its own...')
-      ),
-    1000
-  )
-} else {
-  $('#dialog_message').text(
-    I18n.t(
-      'popup_failure',
-      "Cannot find the parent window, you'll need to close this popup manually."
-    )
-  )
-}
+const parentWindow = window.opener || window.parent
+postMessageExternalContentCancel(parentWindow)
+setTimeout(
+  () =>
+    $('#dialog_message').text(
+      I18n.t('popup_success', 'Canceled. This popup should close on its own...')
+    ),
+  1000
+)

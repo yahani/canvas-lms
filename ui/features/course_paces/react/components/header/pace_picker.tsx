@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -21,7 +22,7 @@ import keycode from 'keycode'
 import {connect} from 'react-redux'
 import {useScope as useI18nScope} from '@canvas/i18n'
 
-import {ApplyTheme} from '@instructure/ui-themeable'
+import {InstUISettingsProvider} from '@instructure/emotion'
 import {IconArrowOpenDownSolid, IconArrowOpenUpSolid} from '@instructure/ui-icons'
 import {Avatar} from '@instructure/ui-avatar'
 import {Heading} from '@instructure/ui-heading'
@@ -34,7 +35,7 @@ import UnpublishedWarningModal from './unpublished_warning_modal'
 
 import {StoreState, Enrollment, Section, PaceContextTypes, ResponsiveSizes} from '../../types'
 import {Course} from '../../shared/types'
-import {getUnpublishedChangeCount} from '../../reducers/course_paces'
+import {getUnappliedChangesExist} from '../../reducers/course_paces'
 import {getSortedEnrollments} from '../../reducers/enrollments'
 import {getSortedSections} from '../../reducers/sections'
 import {getCourse} from '../../reducers/course'
@@ -45,8 +46,11 @@ const I18n = useI18nScope('course_paces_pace_picker')
 
 const PICKER_WIDTH = '20rem'
 
-// Doing this to avoid TS2339 errors-- remove once we're on InstUI 8
-const {Item} = Menu as any
+const componentOverrides = {
+  Menu: {
+    maxWidth: PICKER_WIDTH,
+  },
+}
 
 interface StoreProps {
   readonly course: Course
@@ -54,8 +58,8 @@ interface StoreProps {
   readonly sections: Section[]
   readonly selectedContextId: string
   readonly selectedContextType: PaceContextTypes
-  readonly changeCount: number
   readonly responsiveSize: ResponsiveSizes
+  readonly unappliedChangesExist: boolean
 }
 
 interface DispatchProps {
@@ -71,19 +75,18 @@ const createContextKey = (contextType: PaceContextTypes, contextId: string): str
 
 const parseContextKey = (key: string): ContextArgs => key.split(':') as ContextArgs
 
-export const PacePicker: React.FC<ComponentProps> = ({
-  changeCount,
+export const PacePicker = ({
   course,
   enrollments,
   sections,
   selectedContextType,
   selectedContextId,
   setSelectedPaceContext,
-  responsiveSize
-}) => {
+  responsiveSize,
+  unappliedChangesExist,
+}: ComponentProps) => {
   const [open, setOpen] = useState(false)
   const [pendingContext, setPendingContext] = useState('')
-  const hasChanges = changeCount > 0
 
   let selectedContextName = I18n.t('Course')
   if (selectedContextType === 'Section') {
@@ -106,7 +109,7 @@ export const PacePicker: React.FC<ComponentProps> = ({
 
   const handleSelect = (_, value: string | string[]) => {
     const option = Array.isArray(value) ? value[0] : value
-    if (hasChanges) {
+    if (unappliedChangesExist) {
       setPendingContext(option)
     } else {
       setSelectedPaceContext(...parseContextKey(option))
@@ -114,25 +117,25 @@ export const PacePicker: React.FC<ComponentProps> = ({
   }
 
   const renderOption = (contextKey: string, label: string, key?: string): JSX.Element => (
-    <Item value={contextKey} defaultSelected={contextKey === selectedContextKey} key={key}>
+    <Menu.Item value={contextKey} defaultSelected={contextKey === selectedContextKey} key={key}>
       <View as="div" width={PICKER_WIDTH}>
         <TruncateText>{label}</TruncateText>
       </View>
-    </Item>
+    </Menu.Item>
   )
 
   const renderStudentOption = (enrollment: Enrollment): JSX.Element => {
     const contextKey = createContextKey('Enrollment', enrollment.id)
     const key = `student-${enrollment.id}`
     return (
-      <Item value={contextKey} defaultSelected={contextKey === selectedContextKey} key={key}>
+      <Menu.Item value={contextKey} defaultSelected={contextKey === selectedContextKey} key={key}>
         <View as="div" width={PICKER_WIDTH}>
           <Avatar name={enrollment.full_name} src={enrollment.avatar_url} size="xx-small" />
           <View as="div" display="inline-block" margin="0 0 0 small">
             <TruncateText>{enrollment.full_name}</TruncateText>
           </View>
         </View>
-      </Item>
+      </Menu.Item>
     )
   }
 
@@ -151,7 +154,7 @@ export const PacePicker: React.FC<ComponentProps> = ({
       renderAfterInput={
         open ? <IconArrowOpenUpSolid inline={false} /> : <IconArrowOpenDownSolid inline={false} />
       }
-      value={selectedContextName}
+      defaultValue={selectedContextName}
       data-testid="course-pace-picker"
       interaction="readonly"
       role="button"
@@ -169,13 +172,7 @@ export const PacePicker: React.FC<ComponentProps> = ({
   }
 
   return (
-    <ApplyTheme
-      theme={{
-        [(Menu as any).theme]: {
-          maxWidth: PICKER_WIDTH
-        }
-      }}
-    >
+    <InstUISettingsProvider theme={{componentOverrides}}>
       <Menu
         id="course-pace-menu"
         placement="bottom"
@@ -186,13 +183,12 @@ export const PacePicker: React.FC<ComponentProps> = ({
         onSelect={handleSelect}
       >
         {renderOption(createContextKey('Course', course.id), I18n.t('Course'))}
-        {ENV.FEATURES.course_paces_for_sections &&
-          sections.length > 0 &&
+        {sections.length > 0 &&
           renderSubMenu(
             sections.map(s =>
               renderOption(createContextKey('Section', s.id), s.name, `section-${s.id}`)
             ),
-            'course_paces_for_sections',
+            'course-pace-section-menu',
             I18n.t('Sections')
           )}
         {enrollments.length > 0 &&
@@ -213,7 +209,7 @@ export const PacePicker: React.FC<ComponentProps> = ({
         }}
         contextType={selectedContextType}
       />
-    </ApplyTheme>
+    </InstUISettingsProvider>
   )
 }
 
@@ -223,10 +219,10 @@ const mapStateToProps = (state: StoreState) => ({
   sections: getSortedSections(state),
   selectedContextId: getSelectedContextId(state),
   selectedContextType: getSelectedContextType(state),
-  changeCount: getUnpublishedChangeCount(state),
-  responsiveSize: getResponsiveSize(state)
+  responsiveSize: getResponsiveSize(state),
+  unappliedChangesExist: getUnappliedChangesExist(state),
 })
 
 export default connect(mapStateToProps, {
-  setSelectedPaceContext: actions.setSelectedPaceContext
+  setSelectedPaceContext: actions.setSelectedPaceContext,
 })(PacePicker)

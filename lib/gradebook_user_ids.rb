@@ -28,6 +28,7 @@ class GradebookUserIds
     @sort_by = settings[:sort_rows_by_setting_key] || "name"
     @selected_grading_period_id = settings.dig(:filter_columns_by, :grading_period_id)
     @selected_section_id = settings.dig(:filter_rows_by, :section_id)
+    @selected_student_group_ids = settings.dig(:filter_rows_by, :student_group_ids)
     @selected_student_group_id = settings.dig(:filter_rows_by, :student_group_id)
     @direction = settings[:sort_rows_by_direction] || "ascending"
   end
@@ -38,12 +39,25 @@ class GradebookUserIds
       sort_by_student_field
     when /assignment_\d+$/
       assignment_id = @column[/\d+$/]
-      send("sort_by_assignment_#{@sort_by}", assignment_id)
+      case @sort_by
+      when "grade"
+        sort_by_assignment_grade(assignment_id)
+      when "missing"
+        sort_by_assignment_missing(assignment_id)
+      when "late"
+        sort_by_assignment_late(assignment_id)
+      when "excused"
+        sort_by_assignment_excused(assignment_id)
+      when "unposted"
+        sort_by_assignment_unposted(assignment_id)
+      end
     when /^assignment_group_\d+$/
       assignment_id = @column[/\d+$/]
       sort_by_assignment_group(assignment_id)
     when "total_grade"
       sort_by_total_grade
+    when "student_firstname"
+      sort_by_student_first_name
     else
       sort_by_student_name
     end
@@ -63,6 +77,14 @@ class GradebookUserIds
     students
       .order(Arel.sql("enrollments.type = 'StudentViewEnrollment'"))
       .order_by_sortable_name(direction: @direction.to_sym)
+      .pluck(:id)
+      .uniq
+  end
+
+  def sort_by_student_first_name
+    students
+      .order(Arel.sql("enrollments.type = 'StudentViewEnrollment'"))
+      .order_by_name(direction: @direction.to_sym, table: "users")
       .pluck(:id)
       .uniq
   end
@@ -103,11 +125,19 @@ class GradebookUserIds
   end
 
   def sort_by_assignment_missing(assignment_id)
-    sort_user_ids(Submission.missing.where(assignment_id: assignment_id))
+    sort_user_ids(Submission.missing.where(assignment_id:))
+  end
+
+  def sort_by_assignment_excused(assignment_id)
+    sort_user_ids(Submission.excused.where(assignment_id:))
+  end
+
+  def sort_by_assignment_unposted(assignment_id)
+    sort_user_ids(Submission.graded.unposted.where(assignment_id:))
   end
 
   def sort_by_assignment_late(assignment_id)
-    sort_user_ids(Submission.late.where(assignment_id: assignment_id))
+    sort_user_ids(Submission.late.where(assignment_id:))
   end
 
   def sort_by_total_grade
@@ -170,8 +200,7 @@ class GradebookUserIds
       type: [:StudentEnrollment, :StudentViewEnrollment]
     )
 
-    section_ids = section_id ? [section_id] : nil
-    @course.apply_enrollment_visibility(student_enrollments, @user, section_ids, include: workflow_states)
+    @course.apply_enrollment_visibility(student_enrollments, @user, nil, include: workflow_states)
   end
 
   def students
@@ -182,12 +211,20 @@ class GradebookUserIds
                .joins("LEFT JOIN #{Enrollment.quoted_table_name} ON enrollments.user_id=users.id")
                .merge(student_enrollments_scope)
 
-    if student_group_id.present?
-      students.joins(group_memberships: :group)
-              .where(group_memberships: { group: student_group_id, workflow_state: :accepted })
+    multiselect_filters_enabled = Account.site_admin.feature_enabled?(:multiselect_gradebook_filters)
+    if multiselect_filters_enabled && student_group_ids.present?
+      students_in_groups(students, student_group_ids)
+    elsif !multiselect_filters_enabled && student_group_id.present?
+      students_in_groups(students, student_group_id)
     else
       students
     end
+  end
+
+  def students_in_groups(students, group_id_or_group_ids)
+    students.joins(group_memberships: :group)
+            .where(group_memberships: { group: group_id_or_group_ids, workflow_state: :accepted })
+            .merge(Group.active)
   end
 
   def sort_by_scores(type = :total_grade, id = nil)
@@ -211,7 +248,7 @@ class GradebookUserIds
   end
 
   def sort_direction
-    @direction == "ascending" ? :asc : :desc
+    (@direction == "ascending") ? :asc : :desc
   end
 
   def grading_period_id
@@ -234,6 +271,18 @@ class GradebookUserIds
   def student_group_id
     return nil if @selected_student_group_id.nil? || ["0", "null"].include?(@selected_student_group_id)
 
-    Group.active.where(id: @selected_student_group_id).exists? ? @selected_student_group_id : nil
+    active_groups_exist?(@selected_student_group_id) ? @selected_student_group_id : nil
+  end
+
+  def student_group_ids
+    @student_group_ids ||= if @selected_student_group_ids.blank? || !active_groups_exist?(@selected_student_group_ids)
+                             []
+                           else
+                             @selected_student_group_ids
+                           end
+  end
+
+  def active_groups_exist?(id_or_ids)
+    Group.active.where(id: id_or_ids).exists?
   end
 end

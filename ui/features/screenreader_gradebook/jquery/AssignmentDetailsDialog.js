@@ -19,7 +19,7 @@
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import assignmentDetailsDialogTemplate from '../jst/AssignmentDetailsDialog.handlebars'
-import round from 'round'
+import round from '@canvas/round'
 import 'jqueryui/dialog'
 import '@canvas/util/jquery/fixDialogButtons'
 
@@ -38,31 +38,34 @@ export default class AssignmentDetailsDialog {
   }
 
   show() {
-    const {scores, locals} = this.compute()
-    let tally = 0
-    let width = 0
+    const {locals} = this.compute()
     const totalWidth = 100
+
+    const widthForValue = val => (totalWidth * val) / this.assignment.points_possible
+
     $.extend(locals, {
       showDistribution: locals.average && this.assignment.points_possible,
-      noneLeftWidth: (width = totalWidth * (locals.min / this.assignment.points_possible)),
-      noneLeftLeft: (tally += width) - width,
-      someLeftWidth: (width =
-        totalWidth * ((locals.average - locals.min) / this.assignment.points_possible)),
-      someLeftLeft: (tally += width) - width,
-      someRightWidth: (width =
-        totalWidth * ((locals.max - locals.average) / this.assignment.points_possible)),
-      someRightLeft: (tally += width) - width,
-      noneRightWidth: (width =
-        totalWidth *
-        ((this.assignment.points_possible - locals.max) / this.assignment.points_possible)),
-      noneRightLeft: (tally += width) - width
+
+      lowLeft: widthForValue(locals.min),
+      lqLeft: widthForValue(locals.lowerQuartile),
+      medianLeft: widthForValue(locals.median),
+      uqLeft: widthForValue(locals.upperQuartile),
+      highLeft: widthForValue(locals.max),
+      maxLeft: totalWidth,
+
+      highWidth: widthForValue(locals.max - locals.upperQuartile),
+      lowLqWidth: widthForValue(locals.lowerQuartile - locals.min),
+      medianLowWidth: widthForValue(locals.median - locals.lowerQuartile) + 1,
+      medianHighWidth: widthForValue(locals.upperQuartile - locals.median),
     })
 
     return $(assignmentDetailsDialogTemplate(locals)).dialog({
       width: 500,
       close() {
         $(this).remove()
-      }
+      },
+      modal: true,
+      zIndex: 1000,
     })
   }
 
@@ -76,6 +79,7 @@ export default class AssignmentDetailsDialog {
           student[`assignment_${assignment.id}`].score != null
       )
       .map(student => student[`assignment_${assignment.id}`].score)
+      .sort()
 
     const locals = {
       assignment,
@@ -83,13 +87,23 @@ export default class AssignmentDetailsDialog {
       max: this.nonNumericGuard(Math.max(...scores)),
       min: this.nonNumericGuard(Math.min(...scores)),
       pointsPossible: this.nonNumericGuard(assignment.points_possible, I18n.t('N/A')),
-      average: this.nonNumericGuard(round(scores.reduce((a, b) => a + b, 0) / scores.length, 2))
+      average: this.nonNumericGuard(round(scores.reduce((a, b) => a + b, 0) / scores.length, 2)),
+      median: this.nonNumericGuard(this.percentile(scores, 0.5)),
+      lowerQuartile: this.nonNumericGuard(this.percentile(scores, 0.25)),
+      upperQuartile: this.nonNumericGuard(this.percentile(scores, 0.75)),
     }
 
     return {scores, locals}
   }
 
   nonNumericGuard(number, message = I18n.t('No graded submissions')) {
-    return isFinite(number) && !isNaN(number) ? I18n.n(number) : message
+    return Number.isFinite(number) && !Number.isNaN(number) ? I18n.n(number) : message
+  }
+
+  percentile(values, percentile) {
+    const k = Math.floor(percentile * (values.length - 1) + 1) - 1
+    const f = (percentile * (values.length - 1) + 1) % 1
+
+    return values[k] + f * (values[k + 1] - values[k])
   }
 }

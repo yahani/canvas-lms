@@ -19,7 +19,6 @@
 #
 
 require_relative "lti2_api_spec_helper"
-require_dependency "lti/ims/access_token_helper"
 
 module Lti
   describe "Originality Reports API", type: :request do
@@ -80,14 +79,14 @@ module Lti
 
       it "requires an lti access token" do
         get @endpoints[:show]
-        expect(response.code).to eq "401"
+        expect(response).to have_http_status :unauthorized
       end
 
       it "requires the tool proxy to be associated to the assignment" do
         @assignment.tool_settings_tool = nil
         @assignment.save!
         get @endpoints[:show], headers: request_headers
-        expect(response.code).to eq "401"
+        expect(response).to have_http_status :unauthorized
       end
 
       it "allows tool proxies with matching access" do
@@ -97,11 +96,11 @@ module Lti
         new_tool_proxy = tool_proxy.deep_clone
         new_tool_proxy.update(guid: SecureRandom.uuid)
 
-        token = Lti::OAuth2::AccessToken.create_jwt(aud: aud, sub: new_tool_proxy.guid)
+        token = Lti::OAuth2::AccessToken.create_jwt(aud:, sub: new_tool_proxy.guid)
         other_helpers = { Authorization: "Bearer #{token}" }
         allow_any_instance_of(Lti::ToolProxy).to receive(:active_in_context?).and_return(true)
         get @endpoints[:show], headers: other_helpers
-        expect(response.code).to eq "200"
+        expect(response).to have_http_status :ok
       end
 
       it "returns an originality report in the response" do
@@ -137,14 +136,14 @@ module Lti
         invalid_report_url = "/api/lti/assignments/#{@assignment.id}/submissions/#{@submission.id}originality_report/#{@report.id + 1}"
         get invalid_report_url
 
-        expect(response.status).to eq 404
+        expect(response).to have_http_status :not_found
       end
 
       it "checks that the specified submission exists" do
         invalid_report_url = "/api/lti/assignments/#{@assignment.id}/submissions/#{@submission.id + 1}originality_report/#{@report.id}"
         get invalid_report_url
 
-        expect(response.status).to eq 404
+        expect(response).to have_http_status :not_found
       end
 
       it "requires the plagiarism feature flag" do
@@ -158,7 +157,7 @@ module Lti
         attachment.save!
 
         post @endpoints[:show], params: { originality_report: { file_id: attachment.id, originality_score: 0.4 } }, headers: request_headers
-        expect(response.status).to eq 404
+        expect(response).to have_http_status :not_found
       end
 
       it "verifies that the specified submission includes the attachment" do
@@ -168,20 +167,20 @@ module Lti
         sub.save!
         endpoint = "/api/lti/assignments/#{@assignment.id}/submissions/#{sub.id}/originality_report/#{@report.id}"
         get endpoint, params: { originality_report: { originality_report_lti_url: "http://www.lti-test.com" } }
-        expect(response.status).to eq 401
+        expect(response).to have_http_status :unauthorized
       end
 
       context "show by attachment id" do
         it "requires an lti access token" do
           get @endpoints[:alt_show]
-          expect(response.code).to eq "401"
+          expect(response).to have_http_status :unauthorized
         end
 
         it "requires the tool proxy to be associated to the assignment" do
           @assignment.tool_settings_tool = nil
           @assignment.save!
           get @endpoints[:alt_show], headers: request_headers
-          expect(response.code).to eq "401"
+          expect(response).to have_http_status :unauthorized
         end
 
         it "allows tool proxies with matching access" do
@@ -189,11 +188,11 @@ module Lti
           @assignment.save!
           new_tool_proxy = tool_proxy.deep_clone
           new_tool_proxy.update(guid: SecureRandom.uuid)
-          token = Lti::OAuth2::AccessToken.create_jwt(aud: aud, sub: new_tool_proxy.guid)
+          token = Lti::OAuth2::AccessToken.create_jwt(aud:, sub: new_tool_proxy.guid)
           other_helpers = { Authorization: "Bearer #{token}" }
           allow_any_instance_of(Lti::ToolProxy).to receive(:active_in_context?).and_return(true)
           get @endpoints[:alt_show], headers: other_helpers
-          expect(response.code).to eq "200"
+          expect(response).to have_http_status :ok
         end
 
         it "returns an originality report in the response" do
@@ -227,13 +226,13 @@ module Lti
         it "checks that the specified originality report exists" do
           invalid_report_url = "/api/lti/assignments/#{@assignment.id}/submissions/#{@submission.id}originality_report/#{@report.id + 1}"
           get invalid_report_url
-          expect(response.status).to eq 404
+          expect(response).to have_http_status :not_found
         end
 
         it "checks that the specified submission exists" do
           invalid_report_url = "/api/lti/assignments/#{@assignment.id}/submissions/#{@submission.id + 1}originality_report/#{@report.id}"
           get invalid_report_url
-          expect(response.status).to eq 404
+          expect(response).to have_http_status :not_found
         end
 
         it "requires the plagiarism feature flag" do
@@ -246,7 +245,7 @@ module Lti
           attachment.context = @course
           attachment.save!
           post @endpoints[:alt_show], params: { originality_report: { file_id: attachment.id, originality_score: 0.4 } }, headers: request_headers
-          expect(response.status).to eq 404
+          expect(response).to have_http_status :not_found
         end
 
         it "verifies that the specified submission includes the attachment" do
@@ -256,7 +255,7 @@ module Lti
           sub.save!
           endpoint = "/api/lti/assignments/#{@assignment.id}/submissions/#{sub.id}/originality_report/#{@report.id}"
           get endpoint, params: { originality_report: { originality_report_lti_url: "http://www.lti-test.com" } }
-          expect(response.status).to eq 401
+          expect(response).to have_http_status :unauthorized
         end
       end
     end
@@ -271,26 +270,26 @@ module Lti
         @report = OriginalityReport.create!(report_initial_values)
         @endpoints[:update] = "/api/lti/assignments/#{@assignment.id}/submissions/#{@submission.id}/originality_report/#{@report.id}"
         @endpoints[:update_alt] = "/api/lti/assignments/#{@assignment.id}/files/#{@attachment.id}/originality_report"
-        @assignment.course.update(account: account)
+        @assignment.course.update(account:)
       end
 
       it "requires the tool proxy to be associated to the assignment" do
         @assignment.tool_settings_tool = nil
         @assignment.save!
         put @endpoints[:update], params: { originality_report: { originality_report_lti_url: "http://www.lti-test.com" } }, headers: request_headers
-        expect(response.code).to eq "401"
+        expect(response).to have_http_status :unauthorized
       end
 
       it "checks that the OriginalityReport exists" do
         invalid_report_url = "/api/lti/assignments/#{@assignment.id}/submissions/#{@submission.id}/originality_report/#{@report.id + 1}"
         put invalid_report_url, params: { originality_report: { originality_score: 0.3 } }, headers: request_headers
-        expect(response.status).to eq 404
+        expect(response).to have_http_status :not_found
       end
 
       it "checks that the Submission exists" do
         invalid_report_url = "/api/lti/assignments/#{@assignment.id}/submissions/#{@submission.id + 1}/originality_report/#{@report.id}"
         put invalid_report_url, params: { originality_report: { originality_score: 0.3 } }, headers: request_headers
-        expect(response.status).to eq 404
+        expect(response).to have_http_status :not_found
       end
 
       it "updates originality score" do
@@ -302,7 +301,7 @@ module Lti
 
       it "does not update originality score if out of range" do
         put @endpoints[:update], params: { originality_report: { originality_score: 150 } }, headers: request_headers
-        expect(response.status).to eq 400
+        expect(response).to have_http_status :bad_request
         expect(JSON.parse(response.body)["errors"]).to have_key "originality_score"
       end
 
@@ -403,16 +402,11 @@ module Lti
         expect(Lti::Link.find_by(id: lti_link_id)).to be_nil
       end
 
-      it "requires the plagiarism feature flag" do
-        put @endpoints[:udpate], params: { originality_report: { originality_report_lti_url: "http://www.lti-test.com" } }, headers: request_headers
-        expect(response).not_to be_successful
-      end
-
       it "verifies the report is in the same context as the assignment" do
         @submission.attachments = []
         @submission.save!
         put @endpoints[:update], params: { originality_report: { originality_report_lti_url: "http://www.lti-test.com" } }, headers: request_headers
-        expect(response.status).to eq 401
+        expect(response).to have_http_status :unauthorized
       end
 
       it "verifies that the specified submission includes the attachment" do
@@ -422,7 +416,7 @@ module Lti
         sub.save!
         endpoint = "/api/lti/assignments/#{@assignment.id}/submissions/#{sub.id}/originality_report/#{@report.id}"
         put endpoint, params: { originality_report: { originality_report_lti_url: "http://www.lti-test.com" } }
-        expect(response.status).to eq 401
+        expect(response).to have_http_status :unauthorized
       end
 
       it "sets the resource type code for the associated tool setting" do
@@ -482,19 +476,19 @@ module Lti
           @assignment.tool_settings_tool = nil
           @assignment.save!
           put @endpoints[:update_alt], params: { originality_report: { originality_report_lti_url: "http://www.lti-test.com" } }, headers: request_headers
-          expect(response.code).to eq "401"
+          expect(response).to have_http_status :unauthorized
         end
 
         it "checks that the OriginalityReport exists" do
           invalid_report_url = "/api/lti/assignments/#{@assignment.id}/submissions/#{@submission.id}/originality_report/#{@report.id + 1}"
           put invalid_report_url, params: { originality_report: { originality_score: 0.3 } }, headers: request_headers
-          expect(response.status).to eq 404
+          expect(response).to have_http_status :not_found
         end
 
         it "checks that the Submission exists" do
           invalid_report_url = "/api/lti/assignments/#{@assignment.id}/submissions/#{@submission.id + 1}/originality_report/#{@report.id}"
           put invalid_report_url, params: { originality_report: { originality_score: 0.3 } }, headers: request_headers
-          expect(response.status).to eq 404
+          expect(response).to have_http_status :not_found
         end
 
         it "updates originality score" do
@@ -506,7 +500,7 @@ module Lti
 
         it "does not update originality score if out of range" do
           put @endpoints[:update_alt], params: { originality_report: { originality_score: 150 } }, headers: request_headers
-          expect(response.status).to eq 400
+          expect(response).to have_http_status :bad_request
           expect(JSON.parse(response.body)["errors"]).to have_key "originality_score"
         end
 
@@ -545,16 +539,11 @@ module Lti
           expect(lti_link.resource_url).to eq "http://www.lti-test.com"
         end
 
-        it "requires the plagiarism feature flag" do
-          put @endpoints[:udpate], params: { originality_report: { originality_report_lti_url: "http://www.lti-test.com" } }, headers: request_headers
-          expect(response).not_to be_successful
-        end
-
         it "verifies the report is in the same context as the assignment" do
           @submission.attachments = []
           @submission.save!
           put @endpoints[:update_alt], params: { originality_report: { originality_report_lti_url: "http://www.lti-test.com" } }, headers: request_headers
-          expect(response.status).to eq 404
+          expect(response).to have_http_status :not_found
         end
 
         it "verifies that the specified submission includes the attachment" do
@@ -564,7 +553,7 @@ module Lti
           sub.save!
           endpoint = "/api/lti/assignments/#{@assignment.id}/submissions/#{sub.id}/originality_report/#{@report.id}"
           put endpoint, params: { originality_report: { originality_report_lti_url: "http://www.lti-test.com" } }
-          expect(response.status).to eq 401
+          expect(response).to have_http_status :unauthorized
         end
 
         it "sets the resource type code for the associated tool setting" do
@@ -621,7 +610,7 @@ module Lti
 
     describe "POST assignments/:assignment_id/submissions/:submission_id/originality_report (#create)" do
       before do
-        @assignment.course.update(account: account)
+        @assignment.course.update(account:)
       end
 
       it "creates an originality report when provided required params" do
@@ -657,13 +646,13 @@ module Lti
 
       it "checks for required params" do
         post @endpoints[:create], headers: request_headers
-        expect(response.status).to eq 400
+        expect(response).to have_http_status :bad_request
 
         post @endpoints[:create], params: { originality_report: {} }, headers: request_headers
-        expect(response.status).to eq 400
+        expect(response).to have_http_status :bad_request
 
         post @endpoints[:create], params: { originality_report: { originality_score: 0.5 } }, headers: request_headers
-        expect(response.status).to eq 404
+        expect(response).to have_http_status :not_found
       end
 
       it "checks that the specified assignment exists" do
@@ -681,7 +670,7 @@ module Lti
         @assignment.tool_settings_tool = nil
         @assignment.save!
         post @endpoints[:create], params: { originality_report: { file_id: @attachment.id, originality_score: 0.4 } }, headers: request_headers
-        expect(response.code).to eq "401"
+        expect(response).to have_http_status :unauthorized
       end
 
       it "verifies the specified attachment is in the course" do
@@ -690,7 +679,7 @@ module Lti
         attachment.save!
 
         post @endpoints[:create], params: { originality_report: { file_id: attachment.id, originality_score: 0.4 } }, headers: request_headers
-        expect(response.status).to eq 401
+        expect(response).to have_http_status :unauthorized
       end
 
       it "verifies that the specified submission includes the attachment" do
@@ -700,7 +689,7 @@ module Lti
         sub.save!
         endpoint = "/api/lti/assignments/#{@assignment.id}/submissions/#{sub.id}/originality_report"
         post endpoint, params: { originality_report: { file_id: @attachment.id, originality_score: 0.4 } }
-        expect(response.status).to eq 401
+        expect(response).to have_http_status :unauthorized
       end
 
       it "does not require an attachment if submission type includes online text entry" do
@@ -814,7 +803,7 @@ module Lti
                },
                headers: request_headers
 
-          expect(response.status).to eq 201
+          expect(response).to have_http_status :created
         end
       end
 
@@ -825,7 +814,7 @@ module Lti
           OriginalityReport.create!(
             attachment: @attachment,
             workflow_state: "pending",
-            submission: submission
+            submission:
           )
         end
 
@@ -836,7 +825,7 @@ module Lti
                params: {
                  originality_report: {
                    file_id: @attachment.id,
-                   originality_score: originality_score
+                   originality_score:
                  }
                },
                headers: request_headers
@@ -916,7 +905,7 @@ module Lti
                  params: {
                    originality_report: {
                      originality_score: score,
-                     attempt: attempt
+                     attempt:
                    },
                  },
                  headers: request_headers
@@ -926,10 +915,10 @@ module Lti
           it "updates the originality report if one exists for the attempt" do
             ver1 = create_version
             report1_id = post_score_for_version(ver1, 10)
-            expect(response.code).to eq("201") # created
+            expect(response).to have_http_status(:created) # created
             create_version
             report2_id = post_score_for_version(ver1, 20)
-            expect(response.code).to eq("200") # ok (updated)
+            expect(response).to have_http_status(:ok) # ok (updated)
 
             expect_n_new_reports(1)
             expect(report2_id).to eq(report1_id)
@@ -941,10 +930,10 @@ module Lti
           it "creates a new originality report if one does not exist for the attempt" do
             ver1 = create_version
             report1_id = post_score_for_version(ver1, 10)
-            expect(response.code).to eq("201") # created
+            expect(response).to have_http_status(:created) # created
             ver2 = create_version
             report2_id = post_score_for_version(ver2, 20)
-            expect(response.code).to eq("201") # created
+            expect(response).to have_http_status(:created) # created
 
             expect_n_new_reports(2)
             report1 = OriginalityReport.find(report1_id)
@@ -962,9 +951,9 @@ module Lti
             ver1 = create_version
             ver2 = create_version
             report1_id = post_score_for_version(ver1, 10)
-            expect(response.code).to eq("201") # created
+            expect(response).to have_http_status(:created) # created
             report2_id = post_score_for_version(ver2, 20)
-            expect(response.code).to eq("201") # created
+            expect(response).to have_http_status(:created) # created
 
             expect_n_new_reports(2)
             report1 = OriginalityReport.find(report1_id)
@@ -978,7 +967,7 @@ module Lti
           it "returns a 404 if the attempt does not exist" do
             ver1 = create_version
             post_score_for_attempt(ver1.model.attempt + 1, 10)
-            expect(response.code).to eq("404")
+            expect(response).to have_http_status(:not_found)
             expect_n_new_reports(0)
           end
         end
@@ -998,7 +987,7 @@ module Lti
             post @endpoints[:create],
                  params: {
                    originality_report: {
-                     originality_score: originality_score
+                     originality_score:
                    }
                  },
                  headers: request_headers
@@ -1045,8 +1034,8 @@ module Lti
           group = course.groups.create!(name: "group one")
           group.add_user(user_one)
           group.add_user(user_two)
-          submission_one.update!(group: group)
-          submission_two.update!(group: group)
+          submission_one.update!(group:)
+          submission_two.update!(group:)
           group
         end
         let(:create_endpoint) do
@@ -1066,7 +1055,7 @@ module Lti
           post create_endpoint,
                params: {
                  originality_report: {
-                   originality_score: originality_score,
+                   originality_score:,
                  },
                  submission_id: submission_one.id
                },
@@ -1081,8 +1070,8 @@ module Lti
         end
 
         it "calls OriginalityReport.copy_to_group_submissions_later! when creating" do
-          expect_any_instance_of(OriginalityReport).to \
-            receive(:copy_to_group_submissions_later!) do |instance|
+          expect_any_instance_of(OriginalityReport)
+            .to receive(:copy_to_group_submissions_later!) do |instance|
             expect(instance.submission_id).to eq(submission_one.id)
             expect(instance.originality_score).to eq(originality_score)
           end
@@ -1094,8 +1083,8 @@ module Lti
           post_to_endpoint
           created_report_id = JSON.parse(response.body)["id"]
 
-          expect_any_instance_of(OriginalityReport).to \
-            receive(:copy_to_group_submissions_later!).at_least(:once) do |instance|
+          expect_any_instance_of(OriginalityReport)
+            .to receive(:copy_to_group_submissions_later!).at_least(:once) do |instance|
             expect(instance.id).to eq(created_report_id)
           end
           post_to_endpoint
@@ -1123,7 +1112,7 @@ module Lti
           {
             originality_report: {
               originality_score: score,
-              file_id: file_id
+              file_id:
             }
           },
           request_headers

@@ -18,34 +18,90 @@
 
 export const alignments = [
   {
-    id: '1',
-    type: 'Assignment',
+    _id: '1',
+    contentType: 'Assignment',
     title: 'Assignment 1',
     url: '/courses/1/outcomes/1/alignments/3',
     moduleTitle: 'Module 1',
-    moduleUrl: '/courses/1/modules/1'
+    moduleUrl: '/courses/1/modules/1',
+    moduleWorkflowState: 'unpublished',
+    assignmentContentType: 'assignment',
+    assignmentWorkflowState: 'published',
+    quizItems: null,
+    alignmentsCount: 1,
   },
   {
-    id: '2',
-    type: 'Rubric',
+    _id: '2',
+    contentType: 'Rubric',
     title: 'Rubric 1',
     url: '/courses/1/outcomes/1/alignments/5',
     moduleTitle: null,
-    moduleUrl: null
-  }
+    moduleUrl: null,
+    moduleWorkflowState: null,
+    assignmentContentType: null,
+    assignmentWorkflowState: null,
+    quizItems: null,
+    alignmentsCount: 1,
+  },
+  {
+    _id: '3',
+    contentType: 'Assignment',
+    title: 'Quiz Assignment 1',
+    url: '/courses/1/outcomes/1/alignments/4',
+    moduleTitle: 'Module 1',
+    moduleUrl: '/courses/1/modules/1',
+    moduleWorkflowState: 'unpublished',
+    assignmentContentType: 'quiz',
+    assignmentWorkflowState: 'published',
+    quizItems: null,
+    alignmentsCount: 1,
+  },
+  {
+    _id: '4',
+    contentType: 'Assignment',
+    title: 'Discussion Assignment 1',
+    url: '/courses/1/outcomes/1/alignments/6',
+    moduleTitle: 'Module 2',
+    moduleUrl: '/courses/1/modules/2',
+    moduleWorkflowState: 'active',
+    assignmentContentType: 'discussion',
+    assignmentWorkflowState: 'published',
+    quizItems: null,
+    alignmentsCount: 1,
+  },
+  {
+    _id: '5',
+    contentType: 'Assignment',
+    title: 'New Quiz Assignment 1',
+    url: '/courses/1/assignments/5',
+    moduleTitle: 'Module 2',
+    moduleUrl: '/courses/1/modules/2',
+    moduleWorkflowState: 'active',
+    assignmentContentType: 'new_quiz',
+    assignmentWorkflowState: 'published',
+    quizItems: [],
+    alignmentsCount: 1,
+  },
 ]
 
 export const generateOutcomes = num =>
   [...Array(num).keys()].map(el => ({
-    id: String(el),
-    title: `Outcome ${el + 1}`,
-    description: `Outcome ${el + 1} description`,
-    alignments
+    node: {
+      _id: String(el),
+      title: `Outcome ${el + 1}`,
+      description: `Outcome ${el + 1} description`,
+      alignments,
+    },
   }))
 
-// Sample data - remove after index.js is integrated with graphql
-export const totalOutcomes = 4200
-export const alignedOutcomes = 3900
-export const totalAlignments = 6800
-export const totalArtifacts = 2400
-export const alignedArtifacts = 2000
+export const generateRootGroup = (numOutcomes, hasNextPage = false) => ({
+  _id: '100',
+  outcomesCount: numOutcomes,
+  outcomes: {
+    pageInfo: {
+      hasNextPage,
+      endCursor: null,
+    },
+    edges: generateOutcomes(numOutcomes),
+  },
+})

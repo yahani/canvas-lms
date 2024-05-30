@@ -117,8 +117,8 @@ class FoldersController < ApplicationController
   before_action :require_context, except: %i[api_index show api_destroy update create create_file copy_folder copy_file]
 
   def index
-    if authorized_action(@context, @current_user, :read)
-      render json: Folder.root_folders(@context).map { |f| f.as_json(permissions: { user: @current_user, session: session }) }
+    if authorized_action(@context, @current_user, :read_files)
+      render json: Folder.root_folders(@context).map { |f| f.as_json(permissions: { user: @current_user, session: }) }
     end
   end
 
@@ -136,7 +136,7 @@ class FoldersController < ApplicationController
     folder = Folder.find(params[:id])
     if authorized_action(folder, @current_user, :read_contents)
       can_view_hidden_files = can_view_hidden_files?(folder.context, @current_user, session)
-      opts = { can_view_hidden_files: can_view_hidden_files, context: folder.context }
+      opts = { can_view_hidden_files:, context: folder.context }
       if can_view_hidden_files && folder.context.is_a?(Course) &&
          MasterCourses::ChildSubscription.is_child_course?(folder.context)
         opts[:master_course_restricted_folder_ids] = MasterCourses::FolderHelper.locked_folder_ids_for_course(folder.context)
@@ -168,7 +168,7 @@ class FoldersController < ApplicationController
   #
   # @returns [Folder]
   def list_all_folders
-    if authorized_action(@context, @current_user, :read)
+    if authorized_action(@context, @current_user, :read_files)
       can_view_hidden_files = can_view_hidden_files?(@context, @current_user, session)
 
       url = named_context_url(@context, :api_v1_context_folders_url, include_host: true)
@@ -184,7 +184,7 @@ class FoldersController < ApplicationController
               end
 
       folders = Api.paginate(scope, self, url)
-      render json: folders_json(folders, @current_user, session, can_view_hidden_files: can_view_hidden_files, context: @context)
+      render json: folders_json(folders, @current_user, session, can_view_hidden_files:, context: @context)
     end
   end
 
@@ -205,12 +205,12 @@ class FoldersController < ApplicationController
   # @returns [Folder]
   def resolve_path
     # as long as one granted permission holds true, in most cases :read, user is authorized
-    if authorized_action(@context, @current_user, [:read, *RoleOverride::GRANULAR_FILE_PERMISSIONS])
+    if authorized_action(@context, @current_user, [:read_files, *RoleOverride::GRANULAR_FILE_PERMISSIONS])
       can_view_hidden_files = can_view_hidden_files?(@context, @current_user, session)
       folders = Folder.resolve_path(@context, params[:full_path], can_view_hidden_files)
       raise ActiveRecord::RecordNotFound if folders.blank?
 
-      render json: folders_json(folders, @current_user, session, can_view_hidden_files: can_view_hidden_files, context: @context)
+      render json: folders_json(folders, @current_user, session, can_view_hidden_files:, context: @context)
     end
   end
 
@@ -348,7 +348,7 @@ class FoldersController < ApplicationController
           if api_request?
             format.json { render json: folder_json(@folder, @current_user, session) }
           else
-            format.json { render json: @folder.as_json(methods: [:currently_locked], permissions: { user: @current_user, session: session }), status: :ok }
+            format.json { render json: @folder.as_json(methods: [:currently_locked], permissions: { user: @current_user, session: }), status: :ok }
           end
         else
           format.html { render :edit }
@@ -366,7 +366,7 @@ class FoldersController < ApplicationController
   #   The name of the folder
   #
   # @argument parent_folder_id [String]
-  #   The id of the folder to store the file in. If this and parent_folder_path are sent an error will be returned. If neither is given, a default folder will be used.
+  #   The id of the folder to store the new folder in. An error will be returned if this does not correspond to an existing folder. If this and parent_folder_path are sent an error will be returned. If neither is given, a default folder will be used.
   #
   # @argument parent_folder_path [String]
   #   The path of the folder to store the new folder in. The path separator is the forward slash `/`, never a back slash. The parent folder will be created if it does not already exist. This parameter only applies to new folders in a context that has folders, such as a user, a course, or a group. If this and parent_folder_id are sent an error will be returned. If neither is given, a default folder will be used.
@@ -419,7 +419,13 @@ class FoldersController < ApplicationController
     elsif folder_params[:folder_id]
       folder_params.delete(:folder_id)
     elsif folder_params[:parent_folder_id]
-      parent_folder = @context.folders.find(folder_params.delete(:parent_folder_id))
+      parent_folder = @context.folders.active.find_by(id: folder_params.delete(:parent_folder_id))
+      if parent_folder.nil?
+        return render json: {
+                        errors: [{ message: t("The specified resource does not exist.") }]
+                      },
+                      status: :not_found
+      end
     elsif @context.respond_to?(:folders) && folder_params[:parent_folder_path].is_a?(String)
       root = Folder.root_folders(@context).first
       if authorized_action(root, @current_user, :create)
@@ -447,7 +453,7 @@ class FoldersController < ApplicationController
           if api_request?
             format.json { render json: folder_json(@folder, @current_user, session) }
           else
-            format.json { render json: @folder.as_json(permissions: { user: @current_user, session: session }) }
+            format.json { render json: @folder.as_json(permissions: { user: @current_user, session: }) }
           end
         else
           format.html { render :new }
@@ -459,9 +465,18 @@ class FoldersController < ApplicationController
 
   def process_folder_params(parameters, api_request)
     folder_params = (api_request ? parameters : parameters[:folder]) || {}
-    folder_params.permit(:name, :parent_folder_id, :parent_folder_path, :folder_id,
-                         :source_folder_id, :lock_at, :unlock_at, :locked,
-                         :hidden, :context, :position, :just_hide)
+    folder_params.permit(:name,
+                         :parent_folder_id,
+                         :parent_folder_path,
+                         :folder_id,
+                         :source_folder_id,
+                         :lock_at,
+                         :unlock_at,
+                         :locked,
+                         :hidden,
+                         :context,
+                         :position,
+                         :just_hide)
   end
   private :process_folder_params
 
@@ -523,7 +538,7 @@ class FoldersController < ApplicationController
     @context = @folder.context
     @attachment = Attachment.new(context: @context)
     if authorized_action(@attachment, @current_user, :create)
-      api_attachment_preflight(@context, request, params: params, check_quota: true)
+      api_attachment_preflight(@context, request, params:, check_quota: true)
     end
   end
 
@@ -569,7 +584,7 @@ class FoldersController < ApplicationController
       @attachment = @context.attachments.build(folder: @dest_folder)
       if authorized_action(@attachment, @current_user, :create)
         on_duplicate, name = params[:on_duplicate].presence, params[:name].presence
-        duplicate_options = (on_duplicate == "rename" && name) ? { name: name } : {}
+        duplicate_options = (on_duplicate == "rename" && name) ? { name: } : {}
         return render json: { message: "on_duplicate must be 'overwrite' or 'rename'" }, status: :bad_request if on_duplicate && %w[overwrite rename].exclude?(on_duplicate)
         if on_duplicate.nil? && @dest_folder.active_file_attachments.where(display_name: @source_file.display_name).exists?
           return render json: { message: "file already exists; set on_duplicate to 'rename' or 'overwrite'" }, status: :conflict
@@ -578,7 +593,7 @@ class FoldersController < ApplicationController
         @attachment = @source_file.clone_for(@context, @attachment, force_copy: true)
         if @attachment.save
           # default to rename on race condition (if a file happened to be created after the check above, and on_duplicate was not given)
-          @attachment.handle_duplicates(on_duplicate == "overwrite" ? :overwrite : :rename, duplicate_options)
+          @attachment.handle_duplicates((on_duplicate == "overwrite") ? :overwrite : :rename, duplicate_options)
           render json: attachment_json(@attachment, @current_user, {}, { omit_verifier_in_app: true })
         else
           render json: @attachment.errors
@@ -661,7 +676,7 @@ class FoldersController < ApplicationController
   # @returns Folder
   def media_folder
     require_context
-    if authorized_action(@context, @current_user, :read)
+    if authorized_action(@context, @current_user, :read_files)
       folder_context =
         if @context.grants_any_right?(@current_user, session, *RoleOverride::GRANULAR_FILE_PERMISSIONS)
           @context

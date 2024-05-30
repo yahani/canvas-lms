@@ -16,10 +16,9 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import {View} from '@canvas/backbone'
-import $ from 'jquery'
 import template from '../../jst/fileUploadQuestionState.handlebars'
 import uploadedOrRemovedTemplate from '../../jst/fileUploadedOrRemoved.handlebars'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import '@canvas/jquery/jquery.instructure_forms'
 import '@canvas/jquery/jquery.disableWhileLoading'
 
 export default class FileUploadQuestion extends View {
@@ -32,23 +31,22 @@ export default class FileUploadQuestion extends View {
       '.file-upload-btn': '$fileDialogButton',
       '.attachment-id': '$attachmentID',
       '.file-upload-box': '$fileUploadBox',
-      '#fileupload_in_progress': '$fileUploadInprogress'
+      '#fileupload_in_progress': '$fileUploadInprogress',
     }
 
     this.prototype.events = {
       'change input[type=file]': 'checkForFileChange',
       'click .file-upload-btn': 'openFileBrowser',
-      'click .delete-attachment': 'deleteAttachment'
+      'click .delete-attachment': 'deleteAttachment',
     }
   }
 
   checkForFileChange(event) {
     // Stop the bubbling of the event so the question doesn't
     // get marked as read before the file is uploaded.
-    let val
     event.preventDefault()
     event.stopPropagation()
-    if ((val = this.$fileUpload.val())) {
+    if (this.$fileUpload.val()) {
       this.removeFileStatusMessage()
       this.model.set('file', this.$fileUpload[0])
       this.$fileUploadInprogress.val(true)
@@ -69,7 +67,7 @@ export default class FileUploadQuestion extends View {
     // input file element, get the file element, and submit a form.
     // For now, remove the input rendered in ERB-land, and the template is
     // responsible for rendering a fallback to a regular input type=file
-    const isIE = !!$.browser.msie
+    const isIE = false
     this.$fileUploadBox.html(template({...this.model.present(), isIE}))
     this.$fileUpload = this.$('.file-upload')
     return this
@@ -80,7 +78,7 @@ export default class FileUploadQuestion extends View {
   }
 
   // For now we'll just process the first one.
-  processAttachment(attachment) {
+  processAttachment(_attachment) {
     this.$attachmentID.val(this.model.id).trigger('change')
     this.$fileUploadInprogress.val(false)
     this.$fileUploadBox.addClass('file-upload-box-with-file')

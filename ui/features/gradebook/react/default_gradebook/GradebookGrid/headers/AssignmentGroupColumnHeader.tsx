@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2017 - present Instructure, Inc.
  *
@@ -17,17 +18,17 @@
  */
 
 import React from 'react'
+import {type PartialStudent} from '@canvas/grading/grading'
 import {bool, func, number, shape, string} from 'prop-types'
 import {IconMoreSolid} from '@instructure/ui-icons'
-import {Button} from '@instructure/ui-buttons'
+import {IconButton} from '@instructure/ui-buttons'
 import {Grid} from '@instructure/ui-grid'
 import {Menu} from '@instructure/ui-menu'
 import {Text} from '@instructure/ui-text'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import {ScreenReaderContent} from '@instructure/ui-a11y-content'
 import ColumnHeader from './ColumnHeader'
-
-const {Item: MenuItem, Group: MenuGroup, Separator: MenuSeparator} = Menu as any
+import {showMessageStudentsWithObserversModal} from '../../../shared/MessageStudentsWithObserversModal'
 
 const I18n = useI18nScope('gradebook')
 
@@ -40,7 +41,7 @@ function AssignmentGroupDetail({assignmentGroup, viewUngradedAsZero, weightedGro
       const weight = I18n.n(weightValue, {
         precision: 2,
         percentage: true,
-        strip_insignificant_zeros: true
+        strip_insignificant_zeros: true,
       })
 
       if (viewUngradedAsZero) {
@@ -83,17 +84,22 @@ function AssignmentGroupDetail({assignmentGroup, viewUngradedAsZero, weightedGro
 AssignmentGroupDetail.propTypes = {
   assignmentGroup: shape({
     name: string.isRequired,
-    groupWeight: number
+    groupWeight: number,
   }).isRequired,
   viewUngradedAsZero: bool.isRequired,
-  weightedGroups: bool.isRequired
+  weightedGroups: bool.isRequired,
 }
 
 function renderTrigger(assignmentGroup, ref) {
   return (
-    <Button elementRef={ref} margin="0" size="small" variant="icon">
-      <IconMoreSolid title={I18n.t('%{name} Options', {name: assignmentGroup.name})} />
-    </Button>
+    <IconButton
+      elementRef={ref}
+      margin="0"
+      size="small"
+      color="secondary"
+      renderIcon={IconMoreSolid}
+      screenReaderLabel={I18n.t('%{name} Options', {name: assignmentGroup.name})}
+    />
   )
 }
 
@@ -105,6 +111,12 @@ type Props = {
   viewUngradedAsZero: any
   weightedGroups: any
   onMenuDismiss: any
+  allStudents: PartialStudent[]
+  courseId: string
+  messageAttachmentUploadFolderId: string
+  userId: string
+  showMessageStudentsWithObserversDialog: boolean
+  onSendMessageStudentsWho: (args: {recipientsIds: string[]; subject: string; body: string}) => void
 }
 
 type State = {
@@ -117,7 +129,7 @@ export default class AssignmentGroupColumnHeader extends ColumnHeader<Props, Sta
   static propTypes = {
     assignmentGroup: shape({
       name: string.isRequired,
-      groupWeight: number
+      groupWeight: number,
     }).isRequired,
     sortBySetting: shape({
       direction: string.isRequired,
@@ -125,23 +137,53 @@ export default class AssignmentGroupColumnHeader extends ColumnHeader<Props, Sta
       isSortColumn: bool.isRequired,
       onSortByGradeAscending: func.isRequired,
       onSortByGradeDescending: func.isRequired,
-      settingKey: string.isRequired
+      settingKey: string.isRequired,
     }).isRequired,
     onApplyScoreToUngraded: func,
+    pointsBasedGradingScheme: bool.isRequired,
     viewUngradedAsZero: bool.isRequired,
     weightedGroups: bool.isRequired,
     onMenuDismiss: Menu.propTypes.onDismiss.isRequired,
     isRunningScoreToUngraded: bool,
-    ...ColumnHeader.propTypes
+    ...ColumnHeader.propTypes,
   }
 
   static defaultProps = {
-    ...ColumnHeader.defaultProps
+    ...ColumnHeader.defaultProps,
+  }
+
+  handleSendMessageStudentsWho = (args: {
+    recipientsIds: string[]
+    subject: string
+    body: string
+  }): void => {
+    this.props.onSendMessageStudentsWho(args)
+  }
+
+  async showMessageStudentsWhoDialog(students, courseId) {
+    // @ts-expect-error
+    this.state.skipFocusOnClose = true
+    this.setState({skipFocusOnClose: true})
+
+    const props = {
+      assignment: null,
+      students: students.filter(student => !student.isInactive && !student.isTestStudent),
+      courseId,
+      onClose: () => {},
+      onSend: this.handleSendMessageStudentsWho,
+      messageAttachmentUploadFolderId: this.props.messageAttachmentUploadFolderId,
+      userId: this.props.userId,
+      pointsBasedGradingScheme: this.props.pointsBasedGradingScheme,
+    }
+
+    showMessageStudentsWithObserversModal(props, this.focusAtEnd)
   }
 
   render() {
     const {assignmentGroup, sortBySetting, viewUngradedAsZero, weightedGroups} = this.props
     const selectedSortSetting = sortBySetting.isSortColumn && sortBySetting.settingKey
+    const allStudents = this.props.allStudents
+    const courseId = this.props.courseId
     const classes = `Gradebook__ColumnHeaderAction ${this.state.menuShown ? 'menuShown' : ''}`
 
     return (
@@ -168,7 +210,7 @@ export default class AssignmentGroupColumnHeader extends ColumnHeader<Props, Sta
               <Grid.Col textAlign="center" width="auto">
                 <div className={classes}>
                   <Menu
-                    contentRef={this.bindOptionsMenuContent}
+                    menuRef={this.bindOptionsMenuContent}
                     shouldFocusTriggerOnClose={false}
                     trigger={renderTrigger(
                       this.props.assignmentGroup,
@@ -177,11 +219,11 @@ export default class AssignmentGroupColumnHeader extends ColumnHeader<Props, Sta
                     onToggle={this.onToggle}
                     onDismiss={this.props.onMenuDismiss}
                   >
-                    <Menu label={I18n.t('Sort by')} contentRef={this.bindSortByMenuContent}>
-                      <MenuGroup
+                    <Menu label={I18n.t('Sort by')} menuRef={this.bindSortByMenuContent}>
+                      <Menu.Group
                         label={<ScreenReaderContent>{I18n.t('Sort by')}</ScreenReaderContent>}
                       >
-                        <MenuItem
+                        <Menu.Item
                           selected={
                             selectedSortSetting === 'grade' &&
                             sortBySetting.direction === 'ascending'
@@ -190,9 +232,9 @@ export default class AssignmentGroupColumnHeader extends ColumnHeader<Props, Sta
                           onSelect={sortBySetting.onSortByGradeAscending}
                         >
                           <span>{I18n.t('Grade - Low to High')}</span>
-                        </MenuItem>
+                        </Menu.Item>
 
-                        <MenuItem
+                        <Menu.Item
                           selected={
                             selectedSortSetting === 'grade' &&
                             sortBySetting.direction === 'descending'
@@ -201,21 +243,31 @@ export default class AssignmentGroupColumnHeader extends ColumnHeader<Props, Sta
                           onSelect={sortBySetting.onSortByGradeDescending}
                         >
                           <span>{I18n.t('Grade - High to Low')}</span>
-                        </MenuItem>
-                      </MenuGroup>
+                        </Menu.Item>
+                      </Menu.Group>
                     </Menu>
 
-                    {this.props.onApplyScoreToUngraded != null && <MenuSeparator />}
+                    {this.props.showMessageStudentsWithObserversDialog && (
+                      <Menu.Item
+                        onSelect={() => this.showMessageStudentsWhoDialog(allStudents, courseId)}
+                      >
+                        <span data-menu-item-id="assignment-group-total-message-students-who">
+                          {I18n.t('Message Students Who')}
+                        </span>
+                      </Menu.Item>
+                    )}
+
+                    {this.props.onApplyScoreToUngraded != null && <Menu.Separator />}
 
                     {this.props.onApplyScoreToUngraded != null && (
-                      <MenuItem
+                      <Menu.Item
                         disabled={this.props.isRunningScoreToUngraded}
                         onSelect={this.props.onApplyScoreToUngraded}
                       >
                         {this.props.isRunningScoreToUngraded
                           ? I18n.t('Applying Score to Ungraded')
                           : I18n.t('Apply Score to Ungraded')}
-                      </MenuItem>
+                      </Menu.Item>
                     )}
                   </Menu>
                 </div>

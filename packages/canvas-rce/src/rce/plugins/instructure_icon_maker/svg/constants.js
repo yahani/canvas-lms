@@ -35,7 +35,7 @@ export const Size = {
   Small: 'small',
   Medium: 'medium',
   Large: 'large',
-  ExtraLarge: 'x-large'
+  ExtraLarge: 'x-large',
 }
 
 export const DEFAULT_SETTINGS = {
@@ -53,9 +53,10 @@ export const DEFAULT_SETTINGS = {
   textColor: '#000000',
   textBackgroundColor: null,
   textPosition: 'below',
-  encodedImage: '',
-  encodedImageType: '',
-  encodedImageName: '',
+  // Additional external attributes
+  externalStyle: null,
+  externalWidth: null,
+  externalHeight: null,
   // Embedded image crop settings
   x: 0,
   y: 0,
@@ -64,41 +65,48 @@ export const DEFAULT_SETTINGS = {
   width: 0,
   height: 0,
   transform: '',
-  imageSettings: null
-}
-
-export const DEFAULT_OPTIONS = {
-  isPreview: false
+  imageSettings: null,
+  embedImage: null,
+  error: null,
 }
 
 export const BASE_SIZE = {
   [Size.ExtraSmall]: 74,
   [Size.Small]: 122,
   [Size.Medium]: 158,
-  [Size.Large]: 218
+  [Size.Large]: 218,
 }
 
 export const STROKE_WIDTH = {
   [Size.None]: 0,
   [Size.Small]: 2,
   [Size.Medium]: 4,
-  [Size.Large]: 8
+  [Size.Large]: 8,
 }
 
 export const TEXT_SIZE = {
   [Size.Small]: 14,
   [Size.Medium]: 16,
   [Size.Large]: 22,
-  [Size.ExtraLarge]: 28
+  [Size.ExtraLarge]: 28,
+}
+
+export const TEXT_SIZE_FONT_DIFF = {
+  [Size.Small]: -1,
+  [Size.Medium]: 0,
+  [Size.Large]: 1,
+  [Size.ExtraLarge]: 2,
 }
 
 export const MAX_CHAR_COUNT = {
   [Size.Small]: 21,
   [Size.Medium]: 18,
   [Size.Large]: 13,
-  [Size.ExtraLarge]: 10
+  [Size.ExtraLarge]: 10,
 }
 
 export const MAX_TOTAL_TEXT_CHARS = 32
 
 export const TEXT_BACKGROUND_PADDING = 4
+
+export const ICON_PADDING = 4

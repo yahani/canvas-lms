@@ -18,7 +18,7 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import _ from 'underscore'
+import {map, find} from 'lodash'
 import {View} from '@canvas/backbone'
 import template from '../../jst/section_to_show_menu.handlebars'
 import 'jquery-kyle-menu'
@@ -26,7 +26,7 @@ import 'jquery-tinypubsub'
 
 const I18n = useI18nScope('gradebookSectionMenuView')
 
-const boundMethodCheck = function(instance, Constructor) {
+const boundMethodCheck = function (instance, Constructor) {
   if (!(instance instanceof Constructor)) {
     throw new Error('Bound instance method accessed before binding')
   }
@@ -50,7 +50,7 @@ class SectionMenuView extends View {
     if (this.sections.length > 1) {
       this.sections.unshift({
         name: this.defaultSection,
-        checked: !options.currentSection
+        checked: !options.currentSection,
       })
     }
     this.updateSections()
@@ -59,9 +59,7 @@ class SectionMenuView extends View {
   render() {
     this.detachEvents()
     super.render()
-    this.$('button')
-      .prop('disabled', this.disabled)
-      .kyleMenu()
+    this.$('button').prop('disabled', this.disabled).kyleMenu()
     return this.attachEvents()
   }
 
@@ -72,12 +70,12 @@ class SectionMenuView extends View {
 
   attachEvents() {
     $.subscribe('currentSection/change', this.onSectionChange)
-    this.$('.section-select-menu').on('click', function(e) {
+    this.$('.section-select-menu').on('click', function (e) {
       return e.preventDefault()
     })
     return this.$('.section-select-menu').on('menuselect', (event, ui) => {
-      let section
-      section = this.$('[aria-checked=true] input[name=section_to_show_radio]').val() || undefined
+      const section =
+        this.$('[aria-checked=true] input[name=section_to_show_radio]').val() || undefined
       $.publish('currentSection/change', [section, this.cid])
       return this.trigger('menuselect', event, ui, this.currentSection)
     })
@@ -91,7 +89,7 @@ class SectionMenuView extends View {
   }
 
   updateSections() {
-    return _.map(this.sections, section => {
+    return map(this.sections, section => {
       section.checked = section.id === this.currentSection
       return section
     })
@@ -107,11 +105,11 @@ class SectionMenuView extends View {
       sections: this.sections,
       showSections: this.showSections,
       currentSection:
-        ((ref = _.findWhere(this.sections, {
-          id: this.currentSection
+        ((ref = find(this.sections, {
+          id: this.currentSection,
         })) != null
           ? ref.name
-          : undefined) || this.defaultSection
+          : undefined) || this.defaultSection,
     }
   }
 }

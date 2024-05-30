@@ -20,7 +20,6 @@
 
 require_relative "../../../conditional_release_spec_helper"
 require_relative "../../api_spec_helper"
-require_dependency "conditional_release/rules_controller"
 
 module ConditionalRelease
   describe RulesController, type: :request do
@@ -44,17 +43,17 @@ module ConditionalRelease
 
     describe "GET index" do
       before(:once) do
-        create :rule_with_scoring_ranges,
+        create(:rule_with_scoring_ranges,
                course: @course,
-               trigger_assignment: @assignment
-        create :rule_with_scoring_ranges,
+               trigger_assignment: @assignment)
+        create(:rule_with_scoring_ranges,
                course: @course,
                trigger_assignment: @assignment,
-               assignment_count: 0
-        create :rule_with_scoring_ranges, course: @course
+               assignment_count: 0)
+        create(:rule_with_scoring_ranges, course: @course)
 
         other_course = Course.create!
-        create :rule_with_scoring_ranges, course: other_course
+        create(:rule_with_scoring_ranges, course: other_course)
 
         @url = "/api/v1/courses/#{@course.id}/mastery_paths/rules"
         @base_params = {
@@ -108,11 +107,11 @@ module ConditionalRelease
 
     describe "GET show" do
       before :once do
-        @rule = create :rule_with_scoring_ranges,
+        @rule = create(:rule_with_scoring_ranges,
                        course: @course,
                        scoring_range_count: 2,
                        assignment_set_count: 2,
-                       assignment_count: 3
+                       assignment_count: 3)
 
         @url = "/api/v1/courses/#{@course.id}/mastery_paths/rules/#{@rule.id}"
         @base_params = {
@@ -248,7 +247,7 @@ module ConditionalRelease
 
     describe "PUT update" do
       before :once do
-        @rule = create :rule, course: @course, trigger_assignment: @assignment
+        @rule = create(:rule, course: @course, trigger_assignment: @assignment)
         @url = "/api/v1/courses/#{@course.id}/mastery_paths/rules/#{@rule.id}"
         @other_assignment = @course.assignments.create!
         @base_params = {
@@ -284,15 +283,19 @@ module ConditionalRelease
       end
 
       it "updates with scoring ranges" do
-        rule = create :rule_with_scoring_ranges,
+        rule = create(:rule_with_scoring_ranges,
                       course: @course,
                       scoring_range_count: 2,
-                      assignment_count: 3
+                      assignment_count: 3)
         range = rule.scoring_ranges[0]
         range.upper_bound = 99
         rule_params = rule.as_json(include: :scoring_ranges, include_root: false)
-        api_call(:put, "/api/v1/courses/#{@course.id}/mastery_paths/rules/#{rule.id}",
-                 @base_params.with_indifferent_access.merge(rule_params), {}, {}, { expected_status: 200 })
+        api_call(:put,
+                 "/api/v1/courses/#{@course.id}/mastery_paths/rules/#{rule.id}",
+                 @base_params.with_indifferent_access.merge(rule_params),
+                 {},
+                 {},
+                 { expected_status: 200 })
         rule.reload
         range.reload
         expect(rule.scoring_ranges.count).to eq(2) # didn't add ranges
@@ -302,24 +305,28 @@ module ConditionalRelease
       end
 
       it "updates removes scoring ranges" do
-        rule = create :rule_with_scoring_ranges,
+        rule = create(:rule_with_scoring_ranges,
                       course: @course,
-                      scoring_range_count: 2
+                      scoring_range_count: 2)
         rule_params = rule.as_json(include: :scoring_ranges, include_root: false)
         rule_params["scoring_ranges"].shift
 
-        api_call(:put, "/api/v1/courses/#{@course.id}/mastery_paths/rules/#{rule.id}",
-                 @base_params.with_indifferent_access.merge(rule_params), {}, {}, { expected_status: 200 })
+        api_call(:put,
+                 "/api/v1/courses/#{@course.id}/mastery_paths/rules/#{rule.id}",
+                 @base_params.with_indifferent_access.merge(rule_params),
+                 {},
+                 {},
+                 { expected_status: 200 })
         rule.reload
         expect(rule.scoring_ranges.count).to be(1)
       end
 
       it "updates with assignments in order" do
-        rule = create :rule_with_scoring_ranges,
+        rule = create(:rule_with_scoring_ranges,
                       course: @course,
                       scoring_range_count: 2,
                       assignment_set_count: 2,
-                      assignment_count: 1
+                      assignment_count: 1)
         rule_params = rule.as_json(include: { scoring_ranges: { include: { assignment_sets: { include: :assignment_set_associations } } } }, include_root: false)
 
         changed_assignment = @course.assignments.create!
@@ -330,41 +337,49 @@ module ConditionalRelease
         new_assignment = @course.assignments.create!
         rule_params["scoring_ranges"][0]["assignment_sets"][0]["assignment_set_associations"] = [{ assignment_id: new_assignment.id }]
 
-        api_call(:put, "/api/v1/courses/#{@course.id}/mastery_paths/rules/#{rule.id}",
-                 @base_params.with_indifferent_access.merge(rule_params), {}, {}, { expected_status: 200 })
+        api_call(:put,
+                 "/api/v1/courses/#{@course.id}/mastery_paths/rules/#{rule.id}",
+                 @base_params.with_indifferent_access.merge(rule_params),
+                 {},
+                 {},
+                 { expected_status: 200 })
 
         rule.reload
         changed_assoc = rule.assignment_set_associations.where(assignment_id: changed_assignment.id).take
-        expect(changed_assoc).not_to be nil
+        expect(changed_assoc).not_to be_nil
         new_assoc = rule.assignment_set_associations.where(assignment_id: new_assignment.id).take
-        expect(new_assoc).not_to be nil
+        expect(new_assoc).not_to be_nil
         deleted_assoc = rule.assignment_set_associations.where(assignment_id: deleted_assignment_id).take
-        expect(deleted_assoc).to be nil
+        expect(deleted_assoc).to be_nil
         expect(rule.assignment_set_associations.count).to be 4
 
         verify_positions_for rule
       end
 
       it "updates with assignments in rearranged order" do
-        rule = create :rule_with_scoring_ranges,
+        rule = create(:rule_with_scoring_ranges,
                       course: @course,
                       scoring_range_count: 1,
                       assignment_set_count: 1,
-                      assignment_count: 3
+                      assignment_count: 3)
         rule_params = rule.as_json(include_root: false, include: { scoring_ranges: { include: { assignment_sets: { include: :assignment_set_associations } } } })
 
         assignments = rule_params["scoring_ranges"][0]["assignment_sets"][0]["assignment_set_associations"]
         # Rearrange them
         assignments[0], assignments[1], assignments[2] = assignments[2], assignments[0], assignments[1]
 
-        api_call(:put, "/api/v1/courses/#{@course.id}/mastery_paths/rules/#{rule.id}",
-                 @base_params.with_indifferent_access.merge(rule_params), {}, {}, { expected_status: 200 })
+        api_call(:put,
+                 "/api/v1/courses/#{@course.id}/mastery_paths/rules/#{rule.id}",
+                 @base_params.with_indifferent_access.merge(rule_params),
+                 {},
+                 {},
+                 { expected_status: 200 })
 
         # Refresh the Rule and make sure no assignments were added
         rule.reload
         expect(rule.assignment_set_associations.count).to be 3
         # Check that the rules have been sorted to match the order received
-        expect(rule.assignment_set_associations.pluck(:id)).to eq(assignments.map { |asg| asg["id"] })
+        expect(rule.assignment_set_associations.pluck(:id)).to eq(assignments.pluck("id"))
         # And that their positions are correctly updated
         verify_positions_for rule
       end
@@ -372,7 +387,7 @@ module ConditionalRelease
 
     describe "DELETE destroy" do
       before :once do
-        @rule = create :rule, course: @course
+        @rule = create(:rule, course: @course)
         @url = "/api/v1/courses/#{@course.id}/mastery_paths/rules/#{@rule.id}"
         @base_params = {
           controller: "conditional_release/rules",
@@ -392,7 +407,7 @@ module ConditionalRelease
       it "deletes a rule" do
         api_call(:delete, @url, @base_params, {}, {}, { expected_status: 200 })
         expect(@rule.reload.deleted_at).to be_present
-        expect(Rule.active.where(id: @rule.id).exists?).to eq false
+        expect(Rule.active.where(id: @rule.id).exists?).to be false
       end
 
       it "fails for non-existent rule" do

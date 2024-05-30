@@ -33,7 +33,7 @@ describe AssignmentGroupsController do
   describe "GET index" do
     let(:assignments_ids) do
       json_response = json_parse(response.body)
-      json_response.first["assignments"].map { |assignment| assignment["id"] }
+      json_response.first["assignments"].pluck("id")
     end
 
     describe "filtering by grading period and overrides" do
@@ -54,8 +54,8 @@ describe AssignmentGroupsController do
 
       let(:student) do
         dora = User.create!(name: "Dora")
-        course_with_student(course: course, user: dora, active_enrollment: true)
-        course_with_student(course: course, user: User.create!, active_enrollment: true)
+        course_with_student(course:, user: dora, active_enrollment: true)
+        course_with_student(course:, user: User.create!, active_enrollment: true)
         dora
       end
 
@@ -200,14 +200,13 @@ describe AssignmentGroupsController do
 
       it "filters assignments by the submission_type" do
         user_session(@teacher)
-        get :index, {
-          params: {
-            course_id: @course.id,
-            include: ["assignments"],
-            exclude_assignment_submission_types: ["discussion_topic"]
-          },
-          format: :json
-        }
+        get :index,
+            params: {
+              course_id: @course.id,
+              include: ["assignments"],
+              exclude_assignment_submission_types: ["discussion_topic"]
+            },
+            format: :json
         expect(assignments_ids).to include @vanilla_assignment.id
         expect(assignments_ids).not_to include @discussion_assignment.id
       end
@@ -222,28 +221,26 @@ describe AssignmentGroupsController do
 
       it "optionally filters assignments by ID" do
         user_session(@teacher)
-        get :index, {
-          params: {
-            course_id: @course.id,
-            include: ["assignments"],
-            assignment_ids: [@second_assignment.id]
-          },
-          format: :json
-        }
+        get :index,
+            params: {
+              course_id: @course.id,
+              include: ["assignments"],
+              assignment_ids: [@second_assignment.id]
+            },
+            format: :json
         expect(assignments_ids).to match_array [@second_assignment.id]
       end
 
       it "optionally filters assignments by ID when passed assignment_ids as a comma separated string" do
         new_assignment = @course.assignments.create!(name: "Assignment 3")
         user_session(@teacher)
-        get :index, {
-          params: {
-            course_id: @course.id,
-            include: ["assignments"],
-            assignment_ids: [@second_assignment.id, new_assignment.id].join(",")
-          },
-          format: :json
-        }
+        get :index,
+            params: {
+              course_id: @course.id,
+              include: ["assignments"],
+              assignment_ids: [@second_assignment.id, new_assignment.id].join(",")
+            },
+            format: :json
         expect(assignments_ids).to match_array [@second_assignment.id, new_assignment.id]
       end
 
@@ -252,15 +249,46 @@ describe AssignmentGroupsController do
         new_assignment = new_course.assignments.create!(name: "New Assignment")
 
         user_session(@teacher)
-        get :index, {
-          params: {
-            course_id: @course.id,
-            include: ["assignments"],
-            assignment_ids: [@second_assignment.id, new_assignment.id]
-          },
-          format: :json
-        }
+        get :index,
+            params: {
+              course_id: @course.id,
+              include: ["assignments"],
+              assignment_ids: [@second_assignment.id, new_assignment.id]
+            },
+            format: :json
         expect(assignments_ids).to match_array [@second_assignment.id]
+      end
+    end
+
+    describe "filtering out hidden zero point quizzes" do
+      before(:once) do
+        course_with_teacher(active_all: true)
+        @first_quiz = @course.assignments.create!(name: "Quiz", points_possible: 10, submission_types: ["external_tool"], omit_from_final_grade: true, hide_in_gradebook: false)
+        @second_quiz = @course.assignments.create!(name: "Practice Quiz", points_possible: 0, submission_types: ["external_tool"], omit_from_final_grade: true, hide_in_gradebook: true)
+      end
+
+      it "filters out assignments that have been hidden from gradebook if 'hide_zero_point_quizzes' param is set to true" do
+        user_session(@teacher)
+        get :index,
+            params: {
+              hide_zero_point_quizzes: true,
+              course_id: @course.id,
+              include: ["assignments"],
+            },
+            format: :json
+        expect(assignments_ids).to match_array [@first_quiz.id]
+      end
+
+      it "does not filter out assignments that have been hidden from gradebook if 'hide_zero_point_quizzes_option' param is set to false" do
+        user_session(@teacher)
+        get :index,
+            params: {
+              hide_zero_point_quizzes: false,
+              course_id: @course.id,
+              include: ["assignments"],
+            },
+            format: :json
+        expect(assignments_ids).to match_array [@first_quiz.id, @second_quiz.id]
       end
     end
 
@@ -316,8 +344,10 @@ describe AssignmentGroupsController do
       end
 
       it "returns assignment and submission" do
-        json = api_call_as_user(@student, :get,
-                                "/api/v1/courses/#{@course.id}/assignment_groups?include[]=assignments&include[]=submission", {
+        json = api_call_as_user(@student,
+                                :get,
+                                "/api/v1/courses/#{@course.id}/assignment_groups?include[]=assignments&include[]=submission",
+                                {
                                   controller: "assignment_groups",
                                   action: "index",
                                   format: "json",
@@ -342,8 +372,10 @@ describe AssignmentGroupsController do
             title: "closed gp"
           )
           @course.assignments.destroy_all
-          json = api_call_as_user(@student, :get,
-                                  "/api/v1/courses/#{@course.id}/assignment_groups?include[]=assignments&include[]=submission", {
+          json = api_call_as_user(@student,
+                                  :get,
+                                  "/api/v1/courses/#{@course.id}/assignment_groups?include[]=assignments&include[]=submission",
+                                  {
                                     controller: "assignment_groups",
                                     action: "index",
                                     format: "json",
@@ -355,8 +387,10 @@ describe AssignmentGroupsController do
 
         it "returns in_closed_grading_period when 'assignments' are included in params" do
           @course.assignments.create!
-          json = api_call_as_user(@teacher, :get,
-                                  "/api/v1/courses/#{@course.id}/assignment_groups", {
+          json = api_call_as_user(@teacher,
+                                  :get,
+                                  "/api/v1/courses/#{@course.id}/assignment_groups",
+                                  {
                                     controller: "assignment_groups",
                                     action: "index",
                                     format: "json",
@@ -367,6 +401,22 @@ describe AssignmentGroupsController do
           expect(assignment_json).to have_key "in_closed_grading_period"
         end
 
+        it "deals with non-array include" do
+          api_call_as_user(@teacher,
+                           :get,
+                           "/api/v1/courses/#{@course.id}/assignment_groups",
+                           {
+                             controller: "assignment_groups",
+                             action: "index",
+                             format: "json",
+                             course_id: @course.id,
+                             include: "assignments"
+                           },
+                           {},
+                           {},
+                           { expected_status: 200 })
+        end
+
         it "in_closed_grading_period is true when any submission is in a closed grading period" do
           @gp_group.grading_periods.create!(
             start_date: 4.days.ago,
@@ -375,8 +425,10 @@ describe AssignmentGroupsController do
             title: "closed gp"
           )
           closed_gp_assignment = @course.assignments.create!(due_at: 2.days.ago)
-          json = api_call_as_user(@teacher, :get,
-                                  "/api/v1/courses/#{@course.id}/assignment_groups", {
+          json = api_call_as_user(@teacher,
+                                  :get,
+                                  "/api/v1/courses/#{@course.id}/assignment_groups",
+                                  {
                                     controller: "assignment_groups",
                                     action: "index",
                                     format: "json",
@@ -396,8 +448,10 @@ describe AssignmentGroupsController do
             title: "open gp"
           )
           open_gp_assignment = @course.assignments.create!(due_at: 2.days.ago)
-          json = api_call_as_user(@teacher, :get,
-                                  "/api/v1/courses/#{@course.id}/assignment_groups", {
+          json = api_call_as_user(@teacher,
+                                  :get,
+                                  "/api/v1/courses/#{@course.id}/assignment_groups",
+                                  {
                                     controller: "assignment_groups",
                                     action: "index",
                                     format: "json",
@@ -417,8 +471,10 @@ describe AssignmentGroupsController do
             title: "open gp"
           )
           assignment = @course.assignments.create!
-          json = api_call_as_user(@teacher, :get,
-                                  "/api/v1/courses/#{@course.id}/assignment_groups", {
+          json = api_call_as_user(@teacher,
+                                  :get,
+                                  "/api/v1/courses/#{@course.id}/assignment_groups",
+                                  {
                                     controller: "assignment_groups",
                                     action: "index",
                                     format: "json",
@@ -438,8 +494,10 @@ describe AssignmentGroupsController do
             title: "closed gp"
           )
           assignment = @course.assignments.create!
-          json = api_call_as_user(@teacher, :get,
-                                  "/api/v1/courses/#{@course.id}/assignment_groups", {
+          json = api_call_as_user(@teacher,
+                                  :get,
+                                  "/api/v1/courses/#{@course.id}/assignment_groups",
+                                  {
                                     controller: "assignment_groups",
                                     action: "index",
                                     format: "json",
@@ -451,6 +509,43 @@ describe AssignmentGroupsController do
           expect(assignment_json.fetch("in_closed_grading_period")).to be true
         end
       end
+
+      context "cross shard observer" do
+        specs_require_sharding
+
+        it "fetches observees submissions" do
+          @shard1.activate do
+            student_in_course(active_all: true)
+            @cross_shard_observer = User.create!
+            @course.enroll_student(@cross_shard_observer, enrollment_state: "active")
+          end
+          @shard2.activate do
+            account = Account.create!
+            @course2 = Course.create!(account:, workflow_state: "available")
+            @teacher = @course2.enroll_teacher(@teacher, enrollment_state: "active").user
+            @observer_enrollment = @course2.enroll_user(@cross_shard_observer, "ObserverEnrollment", enrollment_state: "active")
+            @course2.enroll_student(@student, enrollment_state: "active")
+            @observer_enrollment.update_attribute(:associated_user_id, @student.id)
+            @assignment = @course2.assignments.create!(name: "Assignment 1", submission_types: "online_text_entry")
+            @assignment.grade_student(@student, grade: 9, grader: @teacher)
+          end
+
+          json = api_call_as_user(@cross_shard_observer,
+                                  :get,
+                                  "/api/v1/courses/#{@course2.id}/assignment_groups",
+                                  {
+                                    controller: "assignment_groups",
+                                    action: "index",
+                                    format: "json",
+                                    course_id: @course2.id,
+                                    include: %w[assignments observed_users submission]
+                                  })
+
+          expect(json[0]["assignments"][0]["submission"]).to be_present
+          expect(json[0]["assignments"][0]["submission"][0]["grade"]).to eq "9"
+          expect(json[0]["assignments"][0]["submission"][0]["user_id"]).to eq @student.id
+        end
+      end
     end
 
     context "passing include_param assessment_requests", type: :request do
@@ -459,13 +554,22 @@ describe AssignmentGroupsController do
         @student1 = student_in_course(course: @course, active_enrollment: true).user
         @student2 = student_in_course(course: @course, active_enrollment: true).user
 
-        @assignment = @course.assignments.create!(name: "Assignment 1", peer_reviews: true)
+        @assignment = @course.assignments.create!(name: "Assignment 1", peer_reviews: true, submission_types: "online_text_entry")
 
         @assessment_request = AssessmentRequest.create!(
-          asset: @assignment.submission_for_student(@student2),
+          asset: @assignment.submit_homework(@student2, body: "hi"),
           user: @student2,
           assessor: @student1,
-          assessor_asset: @assignment.submission_for_student(@student1)
+          assessor_asset: @assignment.submit_homework(@student1, body: "hi")
+        )
+
+        @assignment2 = @course.assignments.create!(name: "Assignment 2", peer_reviews: true, submission_types: "online_text_entry")
+
+        AssessmentRequest.create!(
+          asset: @assignment2.submission_for_student(@student2),
+          user: @student2,
+          assessor: @student1,
+          assessor_asset: @assignment2.submission_for_student(@student1)
         )
       end
 
@@ -490,8 +594,10 @@ describe AssignmentGroupsController do
         end
 
         it "does not include assessment_requests when the current user is a teacher" do
-          json = api_call_as_user(@teacher, :get,
-                                  "/api/v1/courses/#{@course.id}/assignment_groups?include[]=assignments&include[]=assessment_requests", {
+          json = api_call_as_user(@teacher,
+                                  :get,
+                                  "/api/v1/courses/#{@course.id}/assignment_groups?include[]=assignments&include[]=assessment_requests",
+                                  {
                                     controller: "assignment_groups",
                                     action: "index",
                                     format: "json",
@@ -512,8 +618,10 @@ describe AssignmentGroupsController do
         end
 
         it "does not include assessment_requests when the current user is a teacher" do
-          json = api_call_as_user(@teacher, :get,
-                                  "/api/v1/courses/#{@course.id}/assignment_groups?include[]=assignments&include[]=assessment_requests", {
+          json = api_call_as_user(@teacher,
+                                  :get,
+                                  "/api/v1/courses/#{@course.id}/assignment_groups?include[]=assignments&include[]=assessment_requests",
+                                  {
                                     controller: "assignment_groups",
                                     action: "index",
                                     format: "json",
@@ -533,6 +641,7 @@ describe AssignmentGroupsController do
           assessment_request = json[0]["assignments"][0]["assessment_requests"][0]
           expect(assessment_request["workflow_state"]).to eq @assessment_request.workflow_state
           expect(assessment_request["anonymous_id"]).to eq @assessment_request.asset.anonymous_id
+          expect(assessment_request["available"]).to be true
         end
 
         it "includes workflow_state, user_id, user_name when the assignment has anonymous_peer_reviews disabled" do
@@ -542,6 +651,14 @@ describe AssignmentGroupsController do
           expect(assessment_request["workflow_state"]).to eq @assessment_request.workflow_state
           expect(assessment_request["user_id"]).to eq @assessment_request.user.id
           expect(assessment_request["user_name"]).to eq @assessment_request.user.name
+          expect(assessment_request["available"]).to be true
+        end
+
+        it "has available set correctly if both asset and assessor_asset have submitted_at" do
+          assessment_request0 = json[0]["assignments"][0]["assessment_requests"][0]
+          assessment_request1 = json[0]["assignments"][1]["assessment_requests"][0]
+          expect(assessment_request0["available"]).to be true
+          expect(assessment_request1["available"]).to be false
         end
       end
     end
@@ -612,7 +729,8 @@ describe AssignmentGroupsController do
     it "moves an associated Quiz to the correct assignment group along with the assignment" do
       @quiz = @course.quizzes.create!(title: "teh quiz", quiz_type: "assignment", assignment_group_id: @group2)
       user_session(@teacher)
-      post :reorder_assignments, params: { course_id: @course.id, assignment_group_id: @group1.id,
+      post :reorder_assignments, params: { course_id: @course.id,
+                                           assignment_group_id: @group1.id,
                                            order: @order + ",#{@quiz.assignment.id}" }
       @quiz.reload
       expect(@quiz.assignment.assignment_group_id).to eq(@group1.id)
@@ -673,33 +791,33 @@ describe AssignmentGroupsController do
         expect(@assignment1.reload.assignment_group_id).to eq(@group1.id)
         expect(@assignment2.reload.assignment_group_id).to eq(@group2.id)
         expect(@assignment3.reload.assignment_group_id).to eq(@group2.id)
-        expect(@assignment2.position).to eql(2)
-        expect(@assignment3.position).to eql(1)
+        expect(@assignment2.position).to be(2)
+        expect(@assignment3.position).to be(1)
       end
 
       it "allows assignments not in closed grading periods to be moved into different assignment groups" do
         user_session(@teacher)
         order = "#{@assignment3.id},#{@assignment2.id}"
-        post :reorder_assignments, params: { course_id: @course.id, assignment_group_id: @group2.id, order: order }
+        post :reorder_assignments, params: { course_id: @course.id, assignment_group_id: @group2.id, order: }
         expect(response).to be_successful
         expect(@assignment1.reload.assignment_group_id).to eq(@group1.id)
         expect(@assignment2.reload.assignment_group_id).to eq(@group2.id)
         expect(@assignment3.reload.assignment_group_id).to eq(@group2.id)
-        expect(@assignment2.position).to eql(2)
-        expect(@assignment3.position).to eql(1)
+        expect(@assignment2.position).to be(2)
+        expect(@assignment3.position).to be(1)
       end
 
       it "allows assignments in closed grading periods to be reordered within the same assignment group" do
         user_session(@teacher)
         order = "#{@assignment3.id},#{@assignment1.id},#{@assignment2.id}"
-        post :reorder_assignments, params: { course_id: @course.id, assignment_group_id: @group1.id, order: order }
+        post :reorder_assignments, params: { course_id: @course.id, assignment_group_id: @group1.id, order: }
         expect(response).to be_successful
         expect(@assignment1.reload.assignment_group_id).to eq(@group1.id)
         expect(@assignment2.reload.assignment_group_id).to eq(@group1.id)
         expect(@assignment3.reload.assignment_group_id).to eq(@group1.id)
-        expect(@assignment1.position).to eql(2)
-        expect(@assignment2.position).to eql(3)
-        expect(@assignment3.position).to eql(1)
+        expect(@assignment1.position).to be(2)
+        expect(@assignment2.position).to be(3)
+        expect(@assignment3.position).to be(1)
       end
 
       it "allows assignments in closed grading periods when the user is a root admin" do
@@ -752,61 +870,65 @@ describe AssignmentGroupsController do
     let(:name) { "some test group" }
 
     it "requires authorization" do
-      post "create", params: { course_id: @course.id, assignment_group: { name: name } }
+      post "create", params: { course_id: @course.id, assignment_group: { name: } }
       assert_unauthorized
     end
 
     it "does not allow students to create" do
       user_session(@student)
-      post "create", params: { course_id: @course.id, assignment_group: { name: name } }
+      post "create", params: { course_id: @course.id, assignment_group: { name: } }
       assert_unauthorized
     end
 
     it "creates a new group with valid integration_data" do
       user_session(@teacher)
       group_integration_data = { "something" => "else" }
-      post "create", params: { course_id: @course.id, assignment_group: { name: name,
-                                                                          integration_data: group_integration_data } }
+      post "create", params: { course_id: @course.id,
+                               assignment_group: { name:,
+                                                   integration_data: group_integration_data } }
       expect(response).to be_redirect
       expect(assigns[:assignment_group].name).to eql(name)
-      expect(assigns[:assignment_group].position).to eql(1)
+      expect(assigns[:assignment_group].position).to be(1)
       expect(assigns[:assignment_group].integration_data).to eql(group_integration_data)
     end
 
     it "creates a new group with no integration_data" do
       user_session(@teacher)
-      post "create", params: { course_id: @course.id, assignment_group: { name: name,
-                                                                          integration_data: {} } }
+      post "create", params: { course_id: @course.id,
+                               assignment_group: { name:,
+                                                   integration_data: {} } }
       expect(response).to be_redirect
       expect(assigns[:assignment_group].name).to eql(name)
-      expect(assigns[:assignment_group].position).to eql(1)
+      expect(assigns[:assignment_group].position).to be(1)
       expect(assigns[:assignment_group].integration_data).to eql({})
     end
 
     it "creates a new group where integration_data is not present" do
       user_session(@teacher)
-      post "create", params: { course_id: @course.id, assignment_group: { name: name,
-                                                                          integration_data: nil } }
+      post "create", params: { course_id: @course.id,
+                               assignment_group: { name:,
+                                                   integration_data: nil } }
       expect(response).to be_redirect
       expect(assigns[:assignment_group].name).to eql(name)
-      expect(assigns[:assignment_group].position).to eql(1)
+      expect(assigns[:assignment_group].position).to be(1)
       expect(assigns[:assignment_group].integration_data).to eql({})
     end
 
     it "returns a 400 when trying to create a new group with invalid integration_data" do
       user_session(@teacher)
       integration_data = "something"
-      post "create", params: { course_id: @course.id, assignment_group: { name: name,
-                                                                          integration_data: integration_data } }
-      expect(response.status).to eq(400)
+      post "create", params: { course_id: @course.id,
+                               assignment_group: { name:,
+                                                   integration_data: } }
+      expect(response).to have_http_status(:bad_request)
     end
 
     it "creates a new group when integration_data is not present" do
       user_session(@teacher)
-      post "create", params: { course_id: @course.id, assignment_group: { name: name } }
+      post "create", params: { course_id: @course.id, assignment_group: { name: } }
       expect(response).to be_redirect
       expect(assigns[:assignment_group].name).to eql(name)
-      expect(assigns[:assignment_group].position).to eql(1)
+      expect(assigns[:assignment_group].position).to be(1)
       expect(assigns[:assignment_group].integration_data).to eql({})
     end
   end
@@ -821,13 +943,13 @@ describe AssignmentGroupsController do
     let(:name) { "new group name" }
 
     it "requires authorization" do
-      put "update", params: { course_id: @course.id, id: @group.id, assignment_group: { name: name } }
+      put "update", params: { course_id: @course.id, id: @group.id, assignment_group: { name: } }
       assert_unauthorized
     end
 
     it "does not allow students to update" do
       user_session(@student)
-      put "update", params: { course_id: @course.id, id: @group.id, assignment_group: { name: name } }
+      put "update", params: { course_id: @course.id, id: @group.id, assignment_group: { name: } }
       assert_unauthorized
     end
 
@@ -836,7 +958,7 @@ describe AssignmentGroupsController do
       group_integration_data = { "something" => "else", "foo" => "bar" }
       put "update", params: { course_id: @course.id,
                               id: @group.id,
-                              assignment_group: { name: name,
+                              assignment_group: { name:,
                                                   sis_source_id: "5678",
                                                   integration_data: group_integration_data } }
       expect(assigns[:assignment_group]).to eql(@group)
@@ -854,7 +976,7 @@ describe AssignmentGroupsController do
       new_integration_data = { "oh" => "hello", "hi" => "there" }
       put "update", params: { course_id: @course.id,
                               id: @group.id,
-                              assignment_group: { name: name,
+                              assignment_group: { name:,
                                                   sis_source_id: "5678",
                                                   integration_data: new_integration_data } }
 
@@ -867,7 +989,7 @@ describe AssignmentGroupsController do
       user_session(@teacher)
       put "update", params: { course_id: @course.id,
                               id: @group.id,
-                              assignment_group: { name: name,
+                              assignment_group: { name:,
                                                   sis_source_id: "5678",
                                                   integration_data: {} } }
       expect(assigns[:assignment_group]).to eql(@group)
@@ -894,9 +1016,9 @@ describe AssignmentGroupsController do
       integration_data = "test"
       put "update", params: { course_id: @course.id,
                               id: @group.id,
-                              assignment_group: { name: name,
-                                                  integration_data: integration_data } }
-      expect(response.status).to eq(400)
+                              assignment_group: { name:,
+                                                  integration_data: } }
+      expect(response).to have_http_status(:bad_request)
     end
 
     it "retains integration_data when updating a group" do
@@ -946,9 +1068,9 @@ describe AssignmentGroupsController do
       delete "destroy", params: { course_id: @course.id, id: @group1.id }
       expect(assigns[:assignment_group]).to eql(@group1)
       expect(assigns[:assignment_group]).to be_deleted
-      expect(@group1.reload.assignments.length).to eql(1)
+      expect(@group1.reload.assignments.length).to be(1)
       expect(@group1.reload.assignments[0]).to eql(@assignment1)
-      expect(@group1.assignments.active.length).to eql(0)
+      expect(@group1.assignments.active.length).to be(0)
     end
 
     it "moves assignments to a different group if specified" do
@@ -957,21 +1079,21 @@ describe AssignmentGroupsController do
       @assignment1 = @course.assignments.create!(title: "assignment 1", assignment_group: @group1)
       @group2 = @course.assignment_groups.create!(name: "group 2")
       @assignment2 = @course.assignments.create!(title: "assignment 2", assignment_group: @group2)
-      expect(@assignment1.position).to eql(1)
+      expect(@assignment1.position).to be(1)
       expect(@assignment1.assignment_group_id).to eql(@group1.id)
-      expect(@assignment2.position).to eql(1)
+      expect(@assignment2.position).to be(1)
       expect(@assignment2.assignment_group_id).to eql(@group2.id)
 
       delete "destroy", params: { course_id: @course.id, id: @group2.id, move_assignments_to: @group1.id }
 
       expect(assigns[:assignment_group]).to eql(@group2)
       expect(assigns[:assignment_group]).to be_deleted
-      expect(@group2.reload.assignments.length).to eql(0)
-      expect(@group1.reload.assignments.length).to eql(2)
-      expect(@group1.assignments.active.length).to eql(2)
-      expect(@assignment1.reload.position).to eql(1)
+      expect(@group2.reload.assignments.length).to be(0)
+      expect(@group1.reload.assignments.length).to be(2)
+      expect(@group1.assignments.active.length).to be(2)
+      expect(@assignment1.reload.position).to be(1)
       expect(@assignment1.assignment_group_id).to eql(@group1.id)
-      expect(@assignment2.reload.position).to eql(2)
+      expect(@assignment2.reload.position).to be(2)
       expect(@assignment2.assignment_group_id).to eql(@group1.id)
     end
 

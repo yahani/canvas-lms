@@ -32,6 +32,8 @@ export const RubricAssessmentRating = {
         _id
       }
       points
+      artifactAttempt
+      rubricAssessmentId
     }
   `,
 
@@ -39,17 +41,45 @@ export const RubricAssessmentRating = {
     id: string,
     comments: string,
     comments_html: string,
+    criterion: shape({
+      _id: string.isRequired,
+    }),
     criterion_id: string,
     description: string,
     learning_outcome_id: string,
-    points: number
-  })
+    points: number,
+    artifactAttempt: number,
+    rubricAssessmentId: string,
+  }),
+
+  mock: ({
+    _id = '1',
+    comments = 'Rating Comments',
+    comments_html = 'Rating Comments HTML',
+    criterion = {_id: '1'},
+    criterion_id = '1',
+    description = 'Rating Description',
+    points = 1,
+    artifactAttempt = 1,
+    rubricAssessmentId = 'Rubric Assessment ID',
+  } = {}) => ({
+    _id,
+    comments,
+    comments_html,
+    criterion,
+    criterion_id,
+    description,
+    points,
+    artifactAttempt,
+    rubricAssessmentId,
+  }),
 }
 
 export const DefaultMocks = {
   RubricAssessmentRating: () => ({
     _id: '1',
     outcome: null,
-    points: 6
-  })
+    points: 6,
+    artifactAttempt: '1',
+  }),
 }

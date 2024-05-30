@@ -19,12 +19,12 @@
 import $ from 'jquery'
 import ready from '@instructure/ready'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import '@canvas/jquery/jquery.instructure_forms'
 
 const I18n = useI18nScope('terms_of_use')
 
 ready(() => {
-  $('form.reaccept_terms').submit(function() {
+  $('form.reaccept_terms').submit(function () {
     const checked = !!$('input[name="user[terms_of_use]"]').is(':checked')
     if (!checked) {
       $(this).formErrors({'user[terms_of_use]': I18n.t('You must agree to the terms')})

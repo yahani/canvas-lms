@@ -16,8 +16,20 @@
 #
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
+require_relative "state_poller"
 
 module CustomWaitMethods
+  # #initialize and #to_s are overwritten to allow message customization
+  class SlowCodePerformance < ::Timeout::Error
+    def initialize(message) # rubocop:disable Lint/MissingSuper
+      @message = message
+    end
+
+    def to_s
+      @message
+    end
+  end
+
   def wait_for_dom_ready
     result = driver.execute_async_script(<<~JS)
       var callback = arguments[arguments.length - 1];
@@ -32,7 +44,7 @@ module CustomWaitMethods
             callback(0);
           }
         }
-      };
+      }
     JS
     raise "left page before domready" if result != 0
   end
@@ -40,30 +52,41 @@ module CustomWaitMethods
   # If we're looking for the loading image, we can't just do a normal assertion, because the image
   # could end up getting loaded too quickly.
   def wait_for_transient_element(selector)
+    puts "wait for transient element #{selector}"
     driver.execute_script(<<~JS)
       window.__WAIT_FOR_LOADING_IMAGE = 0
       window.__WAIT_FOR_LOADING_IMAGE_CALLBACK = null
 
       var _checkAddedNodes = function(addedNodes) {
-        for(var newNode of addedNodes) {
-          if(newNode.matches('#{selector}') || newNode.querySelector('#{selector}')) {
-            window.__WAIT_FOR_LOADING_IMAGE = 1
+        try {
+          for(var newNode of addedNodes) {
+            if (!([Node.ELEMENT_NODE, Node.DOCUMENT_NODE, Node.DOCUMENT_FRAGMENT_NODE].includes(newNode.nodeType))) continue
+            if (newNode.matches('#{selector}') || newNode.querySelector('#{selector}')) {
+              window.__WAIT_FOR_LOADING_IMAGE = 1
+            }
           }
+        } catch (e) {
+          console.error('CHECK ADDED NODES FAILED'); console.error(e)
         }
       }
 
       var _checkRemovedNodes = function(removedNodes) {
-        if(window.__WAIT_FOR_LOADING_IMAGE !== 1) {
-          return
-        }
-
-        for(var newNode of removedNodes) {
-          if(newNode.matches('#{selector}') || newNode.querySelector('#{selector}')) {
-            observer.disconnect()
-
-            window.__WAIT_FOR_LOADING_IMAGE = 2
-            window.__WAIT_FOR_LOADING_IMAGE_CALLBACK && window.__WAIT_FOR_LOADING_IMAGE_CALLBACK()
+        try {
+          if(window.__WAIT_FOR_LOADING_IMAGE !== 1) {
+            return
           }
+
+          for(var newNode of removedNodes) {
+            if (!([Node.ELEMENT_NODE, Node.DOCUMENT_NODE, Node.DOCUMENT_FRAGMENT_NODE].includes(newNode.nodeType))) continue
+            if (newNode.matches('#{selector}') || newNode.querySelector('#{selector}')) {
+              observer.disconnect()
+
+              window.__WAIT_FOR_LOADING_IMAGE = 2
+              window.__WAIT_FOR_LOADING_IMAGE_CALLBACK && window.__WAIT_FOR_LOADING_IMAGE_CALLBACK()
+            }
+          }
+        } catch (e) {
+          console.error('CHECK REMOVED NODES FAILED'); console.error(e)
         }
       }
 
@@ -91,67 +114,35 @@ module CustomWaitMethods
     raise "element #{selector} did not appear or was not transient" if result != 0
   end
 
+  # NOTE: for "__CANVAS_IN_FLIGHT_XHR_REQUESTS__" see "ui/boot/index.js"
+  AJAX_REQUESTS_SCRIPT = "return window.__CANVAS_IN_FLIGHT_XHR_REQUESTS__"
   def wait_for_ajax_requests(bridge = nil)
     bridge = driver if bridge.nil?
 
-    result = bridge.execute_async_script(<<~JS)
-      var callback = arguments[arguments.length - 1];
-      // see code in ui/boot/index.js for where
-      // __CANVAS_IN_FLIGHT_XHR_REQUESTS__ and 'canvasXHRComplete' come from
-      if (typeof window.__CANVAS_IN_FLIGHT_XHR_REQUESTS__  === 'undefined') {
-        callback(-1);
-      } else if (window.__CANVAS_IN_FLIGHT_XHR_REQUESTS__ === 0) {
-        callback(0);
-      } else {
-        var fallbackCallback = window.setTimeout(function() {
-          callback(-2);
-        }, #{(SeleniumDriverSetup.timeouts[:script] * 1000) - 500})
-
-        function onXHRCompleted () {
-          // while there are no outstanding requests, a new one could be
-          // chained immediately afterwards in this thread of execution,
-          // e.g. $.get(url).then(() => $.get(otherUrl))
-          //
-          // so wait a tick just to be sure we're done
-          setTimeout(function() {
-            if (window.__CANVAS_IN_FLIGHT_XHR_REQUESTS__ === 0) {
-              window.removeEventListener('canvasXHRComplete', onXHRCompleted)
-              window.clearTimeout(fallbackCallback);
-              callback(0)
-            }
-          }, 0)
-        }
-        window.addEventListener('canvasXHRComplete', onXHRCompleted)
-      }
-    JS
-    raise "ajax requests not completed" if result == -2
-
-    result
+    res = StatePoller.await(0) { bridge.execute_script(AJAX_REQUESTS_SCRIPT) || 0 }
+    if res[:got] > 0 && !NoRaiseTimeoutsWhileDebugging.ever_run_a_debugger?
+      raise SlowCodePerformance, "AJAX requests not done after #{res[:spent]}s: #{res[:got]}"
+    end
   end
 
+  # NOTE: for "$.timers" see https://github.com/jquery/jquery/blob/6c2c7362fb18d3df7c2a7b13715c2763645acfcb/src/effects.js#L638
+  ANIMATION_COUNT_SCRIPT = "return (typeof($) !== 'undefined' && $.timers) ? $.timers.length : 0"
+  ANIMATION_ELEMENTS_SCRIPT = <<~JS
+    return $.timers.map(t => (
+     t.elem.tagName + (t.elem.id?'#'+t.elem.id:'') + (t.elem.className?'.'+t.elem.className.replaceAll(' ','.'):'')
+    ))
+  JS
   def wait_for_animations(bridge = nil)
     bridge = driver if bridge.nil?
 
-    bridge.execute_async_script(<<~JS)
-      var callback = arguments[arguments.length - 1];
-      if (typeof($) == 'undefined') {
-        callback(-1);
-      } else if ($.timers.length == 0) {
-        callback(0);
-      } else {
-        var _stop = $.fx.stop;
-        $.fx.stop = function() {
-          $.fx.stop = _stop;
-          _stop.apply(this, arguments);
-          callback(0);
-        }
-      }
-    JS
+    res = StatePoller.await(0) { bridge.execute_script(ANIMATION_COUNT_SCRIPT) || 0 }
+    if res[:got] > 0
+      pending = (bridge.execute_script(ANIMATION_ELEMENTS_SCRIPT) || []).join("\n")
+      raise SlowCodePerformance, "JQuery animations not done after #{res[:spent]}s: #{res[:got]}\n#{pending}"
+    end
   end
 
   def wait_for_ajaximations(bridge = nil)
-    bridge = driver if bridge.nil?
-
     wait_for_ajax_requests(bridge)
     wait_for_animations(bridge)
   end
@@ -200,8 +191,8 @@ module CustomWaitMethods
     end
   end
 
-  def pause_ajax(&block)
-    SeleniumDriverSetup.request_mutex.synchronize(&block)
+  def pause_ajax(&)
+    SeleniumDriverSetup.request_mutex.synchronize(&)
   end
 
   def keep_trying_until(seconds = SeleniumDriverSetup::SECONDS_UNTIL_GIVING_UP)
@@ -262,8 +253,8 @@ module CustomWaitMethods
     tiny_frame
   end
 
-  def disable_implicit_wait(&block)
-    ::SeleniumExtensions::FinderWaiting.disable(&block)
+  def disable_implicit_wait(&)
+    ::SeleniumExtensions::FinderWaiting.disable(&)
   end
 
   # little wrapper around Selenium::WebDriver::Wait, notably it:
@@ -276,7 +267,7 @@ module CustomWaitMethods
   end
 
   def wait_for_no_such_element(method: nil, timeout: SeleniumExtensions::FinderWaiting.timeout)
-    wait_for(method: method, timeout: timeout, ignore: []) do
+    wait_for(method:, timeout:, ignore: []) do
       # so find_element calls return ASAP
       disable_implicit_wait do
         yield

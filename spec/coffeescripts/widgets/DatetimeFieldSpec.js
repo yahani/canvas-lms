@@ -17,13 +17,15 @@
  */
 
 import DatetimeField, {
-  TIME_FORMAT_OPTIONS,
   DATE_FORMAT_OPTIONS,
-  DATETIME_FORMAT_OPTIONS
+  DATETIME_FORMAT_OPTIONS,
+  TIME_FORMAT_OPTIONS,
 } from '@canvas/datetime/jquery/DatetimeField'
+import '@canvas/datetime/jquery'
 import $ from 'jquery'
-import tz from '@canvas/timezone'
-import tzInTest from '@canvas/timezone/specHelpers'
+import 'jquery-migrate'
+import * as tz from '@canvas/datetime'
+import tzInTest from '@canvas/datetime/specHelpers'
 import timezone from 'timezone'
 import detroit from 'timezone/America/Detroit'
 import juneau from 'timezone/America/Juneau'
@@ -37,7 +39,7 @@ QUnit.module('processTimeOptions', {
   setup() {
     this.$field = $('<input type="text" name="due_at">')
     this.field = new DatetimeField(this.$field, {})
-  }
+  },
 })
 
 test('should include date and time, but not always time, by default', function () {
@@ -80,7 +82,7 @@ QUnit.module('addDatePicker', {
     // timeOnly=true to prevent creation of the datepicker before we do it in
     // the individual tests
     this.field = new DatetimeField(this.$field, {timeOnly: true})
-  }
+  },
 })
 
 test('should wrap field in .input-append', function () {
@@ -135,7 +137,7 @@ QUnit.module('addSuggests', {
     if (this.field.$contextSuggest) this.field.$contextSuggest.remove()
 
     this.field.$suggest = this.field.$contextSuggest = null
-  }
+  },
 })
 
 test('should add suggest field', function () {
@@ -162,8 +164,8 @@ QUnit.module('constructor', {
     tzInTest.configureAndRestoreLater({
       tz: timezone(detroit, 'America/Detroit'),
       tzData: {
-        'America/Detroit': detroit
-      }
+        'America/Detroit': detroit,
+      },
     })
     fakeENV.setup({TIMEZONE: 'America/Detroit'})
     this.$field = $('<input type="text" name="due_at">')
@@ -172,7 +174,7 @@ QUnit.module('constructor', {
   teardown() {
     fakeENV.teardown()
     tzInTest.restore()
-  }
+  },
 })
 
 test('should add datepicker by default', function () {
@@ -186,18 +188,24 @@ test('should not add datepicker when timeOnly', function () {
 })
 
 test('should place suggest outside wrapper when adding datepicker', function () {
+  const $wrapper = $('<div></div>').appendTo('body')
+  this.$field.appendTo($wrapper)
   const field = new DatetimeField(this.$field, {})
   equal(this.$field.parent().next()[0], field.$suggest[0], 'wrapper and suggest are siblings')
+  $wrapper.remove()
 })
 
 test('should place suggest next to field when not adding datepicker', function () {
+  const $wrapper = $('<div></div>').appendTo('body')
+  this.$field.appendTo($wrapper)
   const field = new DatetimeField(this.$field, {timeOnly: true})
   equal(this.$field.next()[0], field.$suggest[0], 'field and suggest are siblings')
+  $wrapper.remove()
 })
 
 test('should set the button to disabled when given the option to do so', function () {
   new DatetimeField(this.$field, {disableButton: true})
-  ok(this.$field.next().attr('disabled'))
+  ok(this.$field.next().prop('disabled'))
 })
 
 test('should not add hidden input by default', function () {
@@ -240,8 +248,8 @@ QUnit.module('setFromValue', {
     tzInTest.configureAndRestoreLater({
       tz: timezone(detroit, 'America/Detroit'),
       tzData: {
-        'America/Detroit': detroit
-      }
+        'America/Detroit': detroit,
+      },
     })
     fakeENV.setup({TIMEZONE: 'America/Detroit'})
     this.$field = $('<input type="text" name="due_at">')
@@ -251,7 +259,7 @@ QUnit.module('setFromValue', {
   teardown() {
     fakeENV.teardown()
     tzInTest.restore()
-  }
+  },
 })
 
 test('should set data fields', function () {
@@ -270,7 +278,7 @@ QUnit.module('parseValue', {
   setup() {
     this.$field = $('<input type="text" name="due_at">')
     this.field = new DatetimeField(this.$field, {})
-  }
+  },
 })
 
 test('sets @fudged according to browser (fudged) timezone', function () {
@@ -374,8 +382,8 @@ QUnit.module('updateData', {
     tzInTest.configureAndRestoreLater({
       tz: timezone(detroit, 'America/Detroit'),
       tzData: {
-        'America/Detroit': detroit
-      }
+        'America/Detroit': detroit,
+      },
     })
     fakeENV.setup({TIMEZONE: 'America/Detroit'})
 
@@ -389,7 +397,7 @@ QUnit.module('updateData', {
   teardown() {
     fakeENV.teardown()
     tzInTest.restore()
-  }
+  },
 })
 
 test('sets date field to fudged time', function () {
@@ -465,7 +473,7 @@ QUnit.module('updateSuggest', {
   setup() {
     this.$field = $('<input type="text" name="due_at">')
     this.field = new DatetimeField(this.$field, {})
-  }
+  },
 })
 
 test('puts formatSuggest result in suggest text', function () {
@@ -516,7 +524,7 @@ QUnit.module('alertScreenreader', {
     // called. but we can confirm this step, despite the coupling to
     // implementation
     sandbox.spy(this.field, 'debouncedSRFME')
-  }
+  },
 })
 
 test('should alert screenreader on an invalid parse no matter what', function () {
@@ -561,7 +569,7 @@ QUnit.module('formatSuggest', {
   setup() {
     tzInTest.configureAndRestoreLater({
       tz: timezone(detroit, 'America/Detroit'),
-      tzData: {'America/Detroit': detroit}
+      tzData: {'America/Detroit': detroit},
     })
     fakeENV.setup({TIMEZONE: 'America/Detroit'})
     this.$field = $('<input type="text" name="due_at">')
@@ -572,7 +580,7 @@ QUnit.module('formatSuggest', {
   teardown() {
     fakeENV.teardown()
     tzInTest.restore()
-  }
+  },
 })
 
 test('returns result formatted in profile timezone', function () {
@@ -601,7 +609,7 @@ test('returns time only if @showDate false', function () {
 
 test('localizes formatting of dates and times', function () {
   ENV.LOCALE = 'pt-BR'
-  equal(this.field.formatSuggest(), 'dom., 20 de jul. de 1969 21:56')
+  equal(this.field.formatSuggest(), 'dom., 20 de jul. de 1969, 21:56')
 })
 
 QUnit.module('formatSuggestContext', {
@@ -610,8 +618,8 @@ QUnit.module('formatSuggestContext', {
       tz: timezone(detroit, 'America/Detroit'),
       tzData: {
         'America/Detroit': detroit,
-        'America/Juneau': juneau
-      }
+        'America/Juneau': juneau,
+      },
     })
     fakeENV.setup({TIMEZONE: 'America/Detroit', CONTEXT_TIMEZONE: 'America/Juneau'})
     this.$field = $('<input type="text" name="due_at">')
@@ -622,7 +630,7 @@ QUnit.module('formatSuggestContext', {
   teardown() {
     fakeENV.teardown()
     tzInTest.restore()
-  }
+  },
 })
 
 test('returns result formatted in course timezone', function () {
@@ -653,7 +661,7 @@ QUnit.module('normalizeValue', {
   setup() {
     this.$field = $('<input type="text" name="due_at">')
     this.field = new DatetimeField(this.$field, {})
-  }
+  },
 })
 
 test('trims whitespace', function () {
@@ -712,8 +720,8 @@ QUnit.module('setFormattedDatetime', {
     tzInTest.configureAndRestoreLater({
       tz: timezone(detroit, 'America/Detroit'),
       tzData: {
-        'America/Detroit': detroit
-      }
+        'America/Detroit': detroit,
+      },
     })
     fakeENV.setup({TIMEZONE: 'America/Detroit'})
 
@@ -724,7 +732,7 @@ QUnit.module('setFormattedDatetime', {
   teardown() {
     fakeENV.teardown()
     tzInTest.restore()
-  }
+  },
 })
 
 test('sets to blank with null value', function () {
@@ -763,8 +771,8 @@ QUnit.module('setDate/setTime/setDatetime', {
     tzInTest.configureAndRestoreLater({
       tz: timezone(detroit, 'America/Detroit'),
       tzData: {
-        'America/Detroit': detroit
-      }
+        'America/Detroit': detroit,
+      },
     })
     fakeENV.setup({TIMEZONE: 'America/Detroit'})
     this.$field = $('<input type="text" name="due_at">')
@@ -774,7 +782,7 @@ QUnit.module('setDate/setTime/setDatetime', {
   teardown() {
     fakeENV.teardown()
     tzInTest.restore()
-  }
+  },
 })
 
 test('setDate formats into val() with just date', function () {

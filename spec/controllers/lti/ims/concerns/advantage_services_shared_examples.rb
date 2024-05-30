@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_dependency "lti/ims/concerns/advantage_services"
-
 shared_examples_for "advantage services" do
   let(:extra_tool_context) { raise "Override in spec" }
 
@@ -46,7 +44,7 @@ shared_examples_for "advantage services" do
           name: "test tool 2",
           url: "http://www.tool2.com/launch",
           developer_key: developer_key_that_should_not_be_resolved_from_request,
-          settings: { use_1_3: true },
+          lti_version: "1.3",
           workflow_state: "public"
         )
       end
@@ -81,6 +79,20 @@ shared_examples_for "advantage services" do
 
     context "with unknown context" do
       let(:context_id) { unknown_context_id }
+
+      it_behaves_like "mime_type check"
+
+      it "returns 404 not found" do
+        expect(response).to have_http_status :not_found
+      end
+    end
+
+    context "with deleted context" do
+      let(:before_send_request) do
+        lambda do
+          context.destroy
+        end
+      end
 
       it_behaves_like "mime_type check"
 
@@ -155,8 +167,8 @@ shared_examples_for "advantage services" do
           shared_secret: "secret2",
           name: "test tool 2",
           url: "http://www.tool2.com/launch",
-          developer_key: developer_key,
-          settings: { use_1_3: true },
+          developer_key:,
+          lti_version: "1.3",
           workflow_state: "public"
         )
       end
@@ -187,8 +199,8 @@ shared_examples_for "advantage services" do
           shared_secret: "secret2",
           name: "test tool 2",
           url: "http://www.tool2.com/launch",
-          developer_key: developer_key,
-          settings: { use_1_3: true },
+          developer_key:,
+          lti_version: "1.3",
           workflow_state: "public"
         )
       end
@@ -219,8 +231,8 @@ shared_examples_for "advantage services" do
           shared_secret: "secret2",
           name: "test tool 2",
           url: "http://www.tool2.com/launch",
-          developer_key: developer_key,
-          settings: { use_1_3: true },
+          developer_key:,
+          lti_version: "1.3",
           workflow_state: "public"
         )
       end
@@ -253,8 +265,8 @@ shared_examples_for "advantage services" do
           shared_secret: "secret2",
           name: "test tool 2",
           url: "http://www.tool2.com/launch",
-          developer_key: developer_key,
-          settings: { use_1_3: true },
+          developer_key:,
+          lti_version: "1.3",
           workflow_state: "public"
         )
       end
@@ -286,8 +298,8 @@ shared_examples_for "advantage services" do
           shared_secret: "secret2",
           name: "test tool 2",
           url: "http://www.tool2.com/launch",
-          developer_key: developer_key,
-          settings: { use_1_3: true },
+          developer_key:,
+          lti_version: "1.3",
           workflow_state: "public"
         )
       end
@@ -312,8 +324,8 @@ shared_examples_for "advantage services" do
           shared_secret: "secret2",
           name: "test tool 2",
           url: "http://www.tool2.com/launch",
-          developer_key: developer_key,
-          settings: { use_1_3: true },
+          developer_key:,
+          lti_version: "1.3",
           workflow_state: "public"
         )
       end

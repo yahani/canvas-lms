@@ -34,7 +34,6 @@ class StreamItemInstance < ActiveRecord::Base
   end
 
   class << self
-    alias_method :original_update_all, :update_all
     # Don't use update_all() because there is an observer
     # on StreamItemInstance to invalidate some cache keys.
     # Use update_all_with_invalidation() instead.
@@ -46,7 +45,7 @@ class StreamItemInstance < ActiveRecord::Base
     # is an array of [context_type, context_id])
     def update_all_with_invalidation(contexts, updates)
       contexts.each { |context| StreamItemCache.invalidate_context_stream_item_key(context.first, context.last) }
-      original_update_all(updates)
+      in_batches(of: 10_000).update_all(updates)
     end
   end
 

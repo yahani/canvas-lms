@@ -17,10 +17,10 @@
  */
 
 import {useScope as useI18nScope} from '@canvas/i18n'
-import fcUtil from '../fcUtil.coffee'
+import fcUtil from '../fcUtil'
 import CommonEvent from './CommonEvent'
 import {extend} from '@canvas/util/legacyCoffeesScriptHelpers'
-import '@canvas/datetime'
+import '@canvas/datetime/jquery'
 import '@canvas/jquery/jquery.instructure_misc_helpers'
 
 const I18n = useI18nScope('calendar')
@@ -150,7 +150,7 @@ Object.assign(ToDoItem.prototype, {
       planner_override,
       new_activity,
       submissions,
-      html_url
+      html_url,
     } = this.object
 
     return {
@@ -164,7 +164,7 @@ Object.assign(ToDoItem.prototype, {
       submissions,
       html_url,
       plannable_date: data.todo_date,
-      plannable: data // replace the plannable with the wiki page / discussion topic API update result
+      plannable: data, // replace the plannable with the wiki page / discussion topic API update result
     }
-  }
+  },
 })

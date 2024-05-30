@@ -21,7 +21,7 @@ import PropTypes from 'prop-types'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import customPropTypes from '../modules/customPropTypes'
 import '@canvas/rails-flash-notifications'
-import '@canvas/datetime' // $.datetimeString
+import '@canvas/datetime/jquery' // $.datetimeString
 
 const I18n = useI18nScope('broccoli_cloud')
 
@@ -32,7 +32,7 @@ export default {
     togglePublishClassOn: PropTypes.object,
     model: customPropTypes.filesystemObject,
     userCanEditFilesForContext: PropTypes.bool.isRequired,
-    fileName: PropTypes.string
+    fileName: PropTypes.string,
   },
 
   // == React Functions == #
@@ -47,7 +47,7 @@ export default {
     if (this.props.togglePublishClassOn) this.updatePublishClassElements()
   },
 
-  componentWillMount() {
+  UNSAFE_componentWillMount() {
     const setState = model => this.setState(this.extractStateFromModel(model))
     this.props.model.on('change', setState, this)
   },
@@ -66,15 +66,15 @@ export default {
     if (this.props.model.get('unlock_at') && this.props.model.get('lock_at')) {
       return I18n.t('Available after %{unlock_at} until %{lock_at}', {
         unlock_at: $.datetimeString(this.props.model.get('unlock_at')),
-        lock_at: $.datetimeString(this.props.model.get('lock_at'))
+        lock_at: $.datetimeString(this.props.model.get('lock_at')),
       })
     } else if (this.props.model.get('unlock_at') && !this.props.model.get('lock_at')) {
       return I18n.t('Available after %{unlock_at}', {
-        unlock_at: $.datetimeString(this.props.model.get('unlock_at'))
+        unlock_at: $.datetimeString(this.props.model.get('unlock_at')),
       })
     } else if (!this.props.model.get('unlock_at') && this.props.model.get('lock_at')) {
       return I18n.t('Available until %{lock_at}', {
-        lock_at: $.datetimeString(this.props.model.get('lock_at'))
+        lock_at: $.datetimeString(this.props.model.get('lock_at')),
       })
     }
   },
@@ -94,7 +94,7 @@ export default {
     return {
       published: !model.get('locked'),
       restricted: !!model.get('lock_at') || !!model.get('unlock_at'),
-      hidden: !!model.get('hidden')
+      hidden: !!model.get('hidden'),
     }
   },
 
@@ -104,5 +104,5 @@ export default {
 
   togglePublishedState() {
     this.setState({published: !this.state.published, restricted: false, hidden: false})
-  }
+  },
 }

@@ -18,7 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 require_relative "../../spec_helper"
-require_dependency "canvas/vault"
 
 module Canvas
   describe Vault do
@@ -30,21 +29,25 @@ module Canvas
     let(:addr_path) { "/path/to/addr" }
     let(:static_config) do
       {
-        token: token,
-        addr: addr,
+        token:,
+        addr:,
         kv_mount: "app-canvas"
       }
     end
     let(:path_config) do
       {
-        token_path: token_path,
-        addr_path: addr_path,
+        token_path:,
+        addr_path:,
         kv_mount: "app-canvas"
       }
     end
     let(:local_config) { { token: "file", addr: "file" } }
 
     before do
+      # override default stub in spec_helper.rb since we actually
+      # want to test this function in this file
+      allow(Canvas::Vault).to receive(:read).and_call_original
+
       LocalCache.clear(force: true)
       WebMock.disable_net_connect!
     end
@@ -80,12 +83,14 @@ module Canvas
       before do
         allow(described_class).to receive(:config).and_return(static_config)
         @stub = stub_request(:get, "#{addr}/v1/test/path")
-                .to_return(status: 200, body: {
-                  data: {
-                    foo: "bar"
-                  },
-                  lease_duration: 3600,
-                }.to_json, headers: { "content-type": "application/json" })
+                .to_return(status: 200,
+                           body: {
+                             data: {
+                               foo: "bar"
+                             },
+                             lease_duration: 3600,
+                           }.to_json,
+                           headers: { "content-type": "application/json" })
         stub_request(:get, "#{addr}/v1/bad/test/path")
           .to_return(status: 404, headers: { "content-type": "application/json" })
       end
@@ -110,7 +115,7 @@ module Canvas
         expect(described_class.read("test/path")).to eq({ foo: "bar" })
         expect(@stub).to have_been_requested.times(1)
         # does not use the cache
-        Timecop.travel(Time.zone.now + 3600.seconds) do
+        Timecop.travel(3600.seconds.from_now) do
           expect(described_class.read("test/path")).to eq({ foo: "bar" })
           expect(@stub).to have_been_requested.times(2)
         end
@@ -121,7 +126,7 @@ module Canvas
         expect(@stub).to have_been_requested.times(1)
         # restub to return an error now
         stub_request(:get, "#{addr}/v1/test/path").to_return(status: 500, body: "error")
-        Timecop.travel(Time.zone.now + 3600.seconds) do
+        Timecop.travel(3600.seconds.from_now) do
           expect(described_class.read("test/path")).to eq({ foo: "bar" })
         end
       end
@@ -168,10 +173,12 @@ module Canvas
                                                                              })
           allow(ConfigFile).to receive(:load).and_call_original
           @lock_stub = stub_request(:get, "#{addr}/v1/#{credential_path}")
-                       .to_return(status: 200, body: {
-                         data: credential_data,
-                         lease_duration: lease_duration,
-                       }.to_json, headers: { "content-type": "application/json" })
+                       .to_return(status: 200,
+                                  body: {
+                                    data: credential_data,
+                                    lease_duration:,
+                                  }.to_json,
+                                  headers: { "content-type": "application/json" })
         end
 
         it "will queue if the lock is taken and there is no value in the cache" do
@@ -195,7 +202,7 @@ module Canvas
           cache_key = ::Canvas::Vault::CACHE_KEY_PREFIX + credential_path
           expect(LocalCache.fetch(cache_key)).to be_nil
           described_class.read(credential_path)
-          cache_entry = LocalCache.cache.send(:read_entry, LocalCache.cache.send(:normalize_key, cache_key, {}), {})
+          cache_entry = LocalCache.cache.send(:read_entry, LocalCache.cache.send(:normalize_key, cache_key, {}))
           expiry_approximate = Time.now.utc.to_i + (lease_duration / 2)
           expiry_delta = (cache_entry.expires_at - expiry_approximate).abs
           expect(expiry_delta.abs < 30).to be_truthy

@@ -20,16 +20,20 @@
 
 require_relative "../../views_helper"
 
-describe "/quizzes/quizzes/_display_question" do
+describe "quizzes/quizzes/_display_question" do
   it "renders" do
     course_with_student
     view_context
 
     @quiz = @course.quizzes.create!(title: "new quiz")
-    @quiz.quiz_questions.create!(question_data: { :name => "LTUE", :points_possible => 1, "question_type" => "numerical_question",
+    @quiz.quiz_questions.create!(question_data: { :name => "LTUE",
+                                                  :points_possible => 1,
+                                                  "question_type" => "numerical_question",
                                                   "correct_comments_html" => '<img class="equation_image" title="\sqrt{1764}" src="/equation_images/%255Csqrt%257B9%257D" alt="LaTeX: \sqrt{1764}" data-equation-content="\sqrt{1764}" />',
                                                   "answers" => { "answer_0" => { "numerical_answer_type" => "exact_answer",
-                                                                                 "answer_exact" => 42, "answer_text" => "", "answer_weight" => "100" } } })
+                                                                                 "answer_exact" => 42,
+                                                                                 "answer_text" => "",
+                                                                                 "answer_weight" => "100" } } })
     @quiz.generate_quiz_data
     @quiz.save
 

@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "atom"
-
 # @API Discussion Topics
 class DiscussionEntriesController < ApplicationController
   before_action :require_context_and_read_access, except: :public_feed
@@ -68,9 +66,9 @@ class DiscussionEntriesController < ApplicationController
                                   methods: [:user_name, :read_state],
                                   permissions: {
                                     user: @current_user,
-                                    session: session
+                                    session:
                                   })
-            render(json: json, status: :created)
+            render(json:, status: :created)
           end
         else
           respond_to_bad_request(format, "new")
@@ -166,17 +164,10 @@ class DiscussionEntriesController < ApplicationController
       @discussion_entries = @topic.entries_for_feed(@current_user, request.format == :rss)
       respond_to do |format|
         format.atom do
-          feed = Atom::Feed.new do |f|
-            f.title = t :posts_feed_title, "%{title} Posts Feed", title: @topic.title
-            f.links << Atom::Link.new(href: polymorphic_url([@context, @topic]), rel: "self")
-            f.updated = Time.now
-            f.id = polymorphic_url([@context, @topic])
-          end
-          feed.entries << @topic.to_atom
-          @discussion_entries.sort_by(&:updated_at).each do |e|
-            feed.entries << e.to_atom
-          end
-          render plain: feed.to_xml
+          title = t :posts_feed_title, "%{title} Posts Feed", title: @topic.title
+          link = polymorphic_url([@context, @topic])
+
+          render plain: AtomFeedHelper.render_xml(title:, link:, entries: [@topic, *@discussion_entries.sort_by(&:updated_at)])
         end
         format.rss do
           @entries = [@topic] + @discussion_entries
@@ -239,7 +230,7 @@ class DiscussionEntriesController < ApplicationController
   #
   # Returns nothing.
   def respond_to_bad_request(format, action)
-    format.html { render(action: action) }
+    format.html { render(action:) }
     format.json { render(json: @entry.errors, status: :bad_request) }
   end
 end

@@ -17,31 +17,31 @@
  */
 
 import {isEmpty, keys} from 'lodash'
-import Backbone from '@canvas/backbone'
 import AssignmentGroupCollection from '@canvas/assignments/backbone/collections/AssignmentGroupCollection'
-import AssignmentGroup from '@canvas/assignments/backbone/models/AssignmentGroup.coffee'
-import Assignment from '@canvas/assignments/backbone/models/Assignment.coffee'
-import Course from '@canvas/courses/backbone/models/Course.coffee'
-import CreateGroupView from 'ui/features/assignment_index/backbone/views/CreateGroupView.coffee'
+import AssignmentGroup from '@canvas/assignments/backbone/models/AssignmentGroup'
+import Assignment from '@canvas/assignments/backbone/models/Assignment'
+import Course from '@canvas/courses/backbone/models/Course'
+import CreateGroupView from 'ui/features/assignment_index/backbone/views/CreateGroupView'
 import $ from 'jquery'
+import 'jquery-migrate'
 import fakeENV from 'helpers/fakeENV'
 import assertions from 'helpers/assertions'
-import 'helpers/jquery.simulate'
+import '@canvas/jquery/jquery.simulate'
 
 const group = (opts = {}) =>
   new AssignmentGroup({
     name: 'something cool',
     assignments: [new Assignment(), new Assignment()],
-    ...opts
+    ...opts,
   })
 const assignmentGroups = () => new AssignmentGroupCollection([group(), group()])
-const createView = function(opts = {}) {
+const createView = function (opts = {}) {
   const groups = opts.assignmentGroups || assignmentGroups()
   const args = {
     course: opts.course || new Course({apply_assignment_group_weights: true}),
     assignmentGroups: groups,
     assignmentGroup: opts.group || (opts.newGroup == null ? groups.first() : undefined),
-    userIsAdmin: opts.userIsAdmin
+    userIsAdmin: opts.userIsAdmin,
   }
   return new CreateGroupView(args)
 }
@@ -53,16 +53,18 @@ QUnit.module('CreateGroupView', {
   teardown() {
     fakeENV.teardown()
     return $('form[id^=ui-id-]').remove()
-  }
+  },
 })
 
+// eslint-disable-next-line qunit/resolve-async
 test('should be accessible', assert => {
   const view = createView()
   const done = assert.async()
   assertions.isAccessible(view, done, {a11yReport: true})
 })
 
-test('hides drop options for no assignments', () => {
+// when creating a new Assignment Group
+test('it does hides drop options for no assignments and undefined assignmentGroup id', () => {
   const view = createView()
   view.render()
   ok(view.$('[name="rules[drop_lowest]"]').length)
@@ -78,8 +80,8 @@ test('it should not add errors when never_drop rules are added', () => {
   const data = {
     name: 'Assignments',
     rules: {
-      never_drop: ['1854', '352', '234563']
-    }
+      never_drop: ['1854', '352', '234563'],
+    },
   }
   const errors = view.validateFormData(data)
   ok(isEmpty(errors))
@@ -131,8 +133,8 @@ test('it should only allow positive numbers for drop rules', () => {
     rules: {
       drop_lowest: 'tree',
       drop_highest: -1,
-      never_drop: ['1', '2', '3']
-    }
+      never_drop: ['1', '2', '3'],
+    },
   }
   const errors = view.validateFormData(data)
   ok(errors)
@@ -141,10 +143,20 @@ test('it should only allow positive numbers for drop rules', () => {
 
 test('it should only allow less than the number of assignments for drop rules', () => {
   const view = createView()
-  const assignments = view.assignmentGroup.get('assignments')
   const data = {
     name: 'Assignments',
-    rules: {drop_highest: 5}
+    rules: {drop_highest: 5},
+  }
+  const errors = view.validateFormData(data)
+  ok(errors)
+  equal(keys(errors).length, 1)
+})
+
+test('it should only allow integer values for rules', () => {
+  const view = createView()
+  const data = {
+    name: 'Assignments',
+    rules: {drop_highest: 2.5},
   }
   const errors = view.validateFormData(data)
   ok(errors)
@@ -153,7 +165,6 @@ test('it should only allow less than the number of assignments for drop rules', 
 
 test('it should not allow assignment groups with no name', () => {
   const view = createView()
-  const assignments = view.assignmentGroup.get('assignments')
   const data = {name: ''}
   const errors = view.validateFormData(data)
   ok(errors)
@@ -162,12 +173,11 @@ test('it should not allow assignment groups with no name', () => {
 
 test('it should not allow NaN values for group weight', () => {
   const view = createView()
-  const assignments = view.assignmentGroup.get('assignments')
   const data = {
     name: 'Assignments',
     drop_highest: '0',
     drop_lowest: '0',
-    group_weight: 'the weighting is the hardest part'
+    group_weight: 'the weighting is the hardest part',
   }
   const errors = view.validateFormData(data)
   ok(errors)
@@ -205,7 +215,7 @@ test('does not render group weight input when the course is not using weights', 
   const course = new Course({apply_assignment_group_weights: false})
   const view = createView({
     assignmentGroups: groups,
-    course
+    course,
   })
   view.render()
   notOk(view.showWeight())
@@ -217,7 +227,7 @@ test('disables group weight input when an assignment is due in a closed grading 
   const groups = new AssignmentGroupCollection([group(), closed_group])
   const view = createView({
     group: closed_group,
-    assignmentGroups: groups
+    assignmentGroups: groups,
   })
   view.render()
   notOk(view.canChangeWeighting())
@@ -230,7 +240,7 @@ test('does not disable group weight input when userIsAdmin is true', () => {
   const view = createView({
     group: closed_group,
     assignmentGroups: groups,
-    userIsAdmin: true
+    userIsAdmin: true,
   })
   view.render()
   ok(view.canChangeWeighting())
@@ -242,7 +252,7 @@ test('disables drop rule inputs when an assignment is due in a closed grading pe
   const groups = new AssignmentGroupCollection([group(), closed_group])
   const view = createView({
     group: closed_group,
-    assignmentGroups: groups
+    assignmentGroups: groups,
   })
   view.render()
   ok(view.$('[name="rules[drop_lowest]"]').attr('readonly'))
@@ -255,7 +265,7 @@ test('does not disable drop rule inputs when userIsAdmin is true', () => {
   const view = createView({
     group: closed_group,
     assignmentGroups: groups,
-    userIsAdmin: true
+    userIsAdmin: true,
   })
   view.render()
   notOk(view.$('[name="rules[drop_lowest]"]').attr('readonly'))

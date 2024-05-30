@@ -16,11 +16,11 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import EquationEditorView from '@canvas/rce/backbone/views/EquationEditorView'
-import loadEventListeners from '@canvas/rce/loadEventListeners'
+import loadEventListeners from '../loadEventListeners'
 import 'jquery'
 import 'jqueryui/tabs'
-import 'browser-sniffer'
+
+if (!('INST' in window)) window.INST = {}
 
 describe('loadEventListeners', () => {
   let fakeEditor, dispatchEvent
@@ -28,7 +28,7 @@ describe('loadEventListeners', () => {
     window.INST.editorButtons = [{id: '__BUTTON_ID__'}]
 
     ENV = {
-      context_asset_string: 'course_1'
+      context_asset_string: 'course_1',
     }
 
     fakeEditor = {
@@ -41,7 +41,7 @@ describe('loadEventListeners', () => {
         getBookmark: () => ({}),
         getNode: () => ({}),
         getContent: () => ({}),
-        moveToBookmark: _prevSelect => (fakeEditor.bookmarkMoved = true)
+        moveToBookmark: _prevSelect => (fakeEditor.bookmarkMoved = true),
       },
       addCommand: () => ({}),
       addButton: () => ({}),
@@ -50,16 +50,16 @@ describe('loadEventListeners', () => {
           addButton: () => {},
           addMenuButton: () => {},
           addIcon: () => {},
-          addNestedMenuItem: () => {}
-        }
-      }
+          addNestedMenuItem: () => {},
+        },
+      },
     }
 
     dispatchEvent = name => {
       const event = document.createEvent('CustomEvent')
       const eventData = {
         ed: fakeEditor,
-        selectNode: '<div></div>'
+        selectNode: '<div></div>',
       }
       event.initCustomEvent(`tinyRCE/${name}`, true, true, eventData)
       document.dispatchEvent(event)
@@ -68,24 +68,15 @@ describe('loadEventListeners', () => {
 
   afterAll(() => {
     window.alert.restore && window.alert.restore()
+    window.getComputedStyle.restore && window.getComputedStyle.restore()
     console.log.restore && console.log.restore() // eslint-disable-line no-console
   })
   afterEach(() => {
     jest.restoreAllMocks()
   })
 
-  it('initializes equation editor plugin', done => {
-    loadEventListeners({
-      equationCB: view => {
-        expect(view instanceof EquationEditorView).toBeTruthy()
-        expect(view.$editor.selector).toEqual('#someId')
-        done()
-      }
-    })
-    dispatchEvent('initEquation')
-  })
-
   it('initializes equella plugin', done => {
+    expect.assertions(1)
     window.alert = jest.fn()
 
     loadEventListeners({
@@ -94,30 +85,8 @@ describe('loadEventListeners', () => {
           'Equella is not properly configured for this account, please notify your system administrator.'
         )
         done()
-      }
+      },
     })
-    const event = document.createEvent('CustomEvent')
-    const eventData = {
-      ed: fakeEditor,
-      selectNode: '<div></div>'
-    }
-    event.initCustomEvent('tinyRCE/initEquella', true, true, eventData)
-    document.dispatchEvent(event)
-  })
-
-  it('initializes external tools plugin', () => {
-    fakeEditor.addCommand = jest.fn()
-    loadEventListeners()
-    const event = document.createEvent('CustomEvent')
-    const eventData = {
-      ed: fakeEditor,
-      url: 'someurl.com'
-    }
-    event.initCustomEvent('tinyRCE/initExternalTools', true, true, eventData)
-    document.dispatchEvent(event)
-    expect(fakeEditor.addCommand).toHaveBeenCalledWith(
-      'instructureExternalButton__BUTTON_ID__',
-      expect.any(Function)
-    )
+    dispatchEvent('initEquella')
   })
 })

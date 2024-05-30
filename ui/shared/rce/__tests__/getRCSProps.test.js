@@ -26,11 +26,11 @@ describe('getRCSProps', () => {
       ...ENV,
       current_user_id: 'user_id',
       RICH_CONTENT_CAN_UPLOAD_FILES: false,
-      context_asset_string: 'course_1'
+      context_asset_string: 'course_1',
     }
     expect(getRCSProps()).toMatchObject({
       contextId: 'user_id',
-      contextType: 'user'
+      contextType: 'user',
     })
   })
 
@@ -39,11 +39,11 @@ describe('getRCSProps', () => {
       ...ENV,
       current_user_id: 'user_id',
       RICH_CONTENT_CAN_UPLOAD_FILES: true,
-      context_asset_string: 'account_1'
+      context_asset_string: 'account_1',
     }
     expect(getRCSProps()).toMatchObject({
       contextId: 'user_id',
-      contextType: 'user'
+      contextType: 'user',
     })
   })
 
@@ -53,11 +53,11 @@ describe('getRCSProps', () => {
       current_user_id: 'user_id',
       context_asset_string: 'course_1',
       JWT: 'the jwt',
-      RICH_CONTENT_APP_HOST: 'the.host'
+      RICH_CONTENT_APP_HOST: 'the.host',
     }
     expect(getRCSProps()).toMatchObject({
       jwt: 'the jwt',
-      host: 'the.host'
+      host: 'the.host',
     })
   })
 
@@ -66,16 +66,16 @@ describe('getRCSProps', () => {
       ...ENV,
       current_user_id: 'user_id',
       RICH_CONTENT_CAN_UPLOAD_FILES: true,
-      context_asset_string: 'course_1'
+      context_asset_string: 'course_1',
     }
     expect(getRCSProps()).toMatchObject({
       containingContext: {
         contextType: 'course',
         contextId: '1',
-        userId: 'user_id'
+        userId: 'user_id',
       },
       contextType: 'course',
-      contextId: '1'
+      contextId: '1',
     })
   })
 
@@ -88,20 +88,12 @@ describe('getRCSProps', () => {
       RICH_CONTENT_FILES_TAB_DISABLED: false,
       active_brand_config_json_url: 'http://the.theme.here/',
       DEEP_LINKING_POST_MESSAGE_ORIGIN: 'https://canvas.instructure.com',
-      FEATURES: {
-        // Release flag was NOT re-named, so left here as "buttons_and_icons_cropper"
-        buttons_and_icons_cropper: true
-      }
+      FEATURES: {},
     }
     expect(getRCSProps()).toMatchObject({
       canUploadFiles: true,
       filesTabDisabled: false,
       themeUrl: 'http://the.theme.here/',
-      canvasUrl: 'https://canvas.instructure.com',
-      features: {
-        // This feature name was renamed in getRCSProps() to "icon_maker_cropper"
-        icon_maker_cropper: true
-      }
     })
   })
 
@@ -109,7 +101,7 @@ describe('getRCSProps', () => {
     ENV = {
       ...ENV,
       current_user_id: 'user_id',
-      context_asset_string: 'course_1'
+      context_asset_string: 'course_1',
     }
     expect(typeof getRCSProps().refreshToken).toEqual('function')
   })

@@ -21,13 +21,14 @@ import QuizEvent from '@canvas/quiz-log-auditing/jquery/event'
 import EventManager from '@canvas/quiz-log-auditing/jquery/event_manager'
 import EventTracker from '@canvas/quiz-log-auditing/jquery/event_tracker'
 import Backbone from 'node_modules-version-of-backbone'
+import sinon from 'sinon'
 
 QUnit.module('Quizzes::LogAuditing::EventManager', {
   teardown() {
     if (this.evtManager && this.evtManager.isRunning()) {
       return this.evtManager.stop()
     }
-  }
+  },
 })
 
 test('#start and #stop: should work', function () {
@@ -85,13 +86,14 @@ QUnit.module('Quizzes::LogAuditing::EventManager - Event delivery', {
     if (this.evtManager && this.evtManager.isRunning()) {
       return this.evtManager.stop()
     }
-  }
+  },
 })
 
 test('it should deliver events', function () {
+  const clock = sinon.useFakeTimers()
   this.evtManager = new EventManager({
     autoDeliver: false,
-    deliveryUrl: '/events'
+    deliveryUrl: '/events',
   })
   this.evtManager.registerTracker(this.TestEventTracker)
   this.evtManager.start()
@@ -112,14 +114,16 @@ test('it should deliver events', function () {
   )
   ok(this.evtManager.isDelivering(), 'it correctly reports whether a delivery is in progress')
   this.server.requests[0].respond(204)
+  clock.tick(1)
   ok(!this.evtManager.isDelivering(), "it untracks the delivery once it's synced with the server")
   ok(!this.evtManager.isDirty(), 'it flushes its buffer when sync is complete')
+  clock.restore()
 })
 
 test('should ignore EVT_PAGE_FOCUSED events that are not preceded by EVT_PAGE_BLURRED', function () {
   this.evtManager = new EventManager({
     autoDeliver: false,
-    deliveryUrl: '/events'
+    deliveryUrl: '/events',
   })
   this.evtManager.registerTracker(this.TestPageFocusEventTracker)
   this.evtManager.registerTracker(this.TestPageBlurredEventTracker)
@@ -158,7 +162,7 @@ test('should ignore EVT_PAGE_FOCUSED events that are not preceded by EVT_PAGE_BL
 test('it should drop trackers', function () {
   this.evtManager = new EventManager({
     autoDeliver: false,
-    deliveryUrl: '/events'
+    deliveryUrl: '/events',
   })
   this.evtManager.start()
   this.evtManager.registerTracker(this.TestEventTracker)

@@ -19,7 +19,7 @@ import $ from 'jquery'
 import GroupUsersView from './GroupUsersView'
 import AssignToGroupMenu from './AssignToGroupMenu'
 import Scrollable from './Scrollable'
-import GroupCategoryCloneView from './GroupCategoryCloneView.coffee'
+import GroupCategoryCloneView from './GroupCategoryCloneView'
 import groupHasSubmissions from '../../groupHasSubmissions'
 
 export default class UnassignedUsersView extends GroupUsersView {
@@ -32,15 +32,15 @@ export default class UnassignedUsersView extends GroupUsersView {
       autoFetch: true, // load until below the viewport, don't wait for the user to scroll
       itemViewOptions: {
         canAssignToGroup: true,
-        canEditGroupAssignment: false
-      }
+        canEditGroupAssignment: false,
+      },
     }
 
     this.prototype.els = {
       ...GroupUsersView.prototype.els,
       '.no-results-wrapper': '$noResultsWrapper',
       '.no-results': '$noResults',
-      '.invalid-filter': '$invalidFilter'
+      '.invalid-filter': '$invalidFilter',
     }
 
     this.mixin(Scrollable)
@@ -52,14 +52,13 @@ export default class UnassignedUsersView extends GroupUsersView {
       accept: '.group-user',
       activeClass: 'droppable',
       hoverClass: 'droppable-hover',
-      tolerance: 'pointer'
+      tolerance: 'pointer',
     }
 
     this.prototype.events = {
       'click .assign-to-group': 'focusAssignToGroup',
-      'focus .assign-to-group': 'showAssignToGroup',
       'blur .assign-to-group': 'hideAssignToGroup',
-      scroll: 'hideAssignToGroup'
+      scroll: 'hideAssignToGroup',
     }
   }
 
@@ -99,7 +98,7 @@ export default class UnassignedUsersView extends GroupUsersView {
     return {
       loading: !this.collection.loadedAll,
       count: this.collection.length,
-      ENV
+      ENV,
     }
   }
 
@@ -169,7 +168,7 @@ export default class UnassignedUsersView extends GroupUsersView {
     return this.assignToGroupMenu
   }
 
-  hideAssignToGroup(e) {
+  hideAssignToGroup(_e) {
     if (!this.fromAddButton) {
       if (this.assignToGroupMenu != null) {
         this.assignToGroupMenu.hide()
@@ -208,7 +207,7 @@ export default class UnassignedUsersView extends GroupUsersView {
     if (user.has('group') && groupHasSubmissions(user.get('group'))) {
       this.cloneCategoryView = new GroupCategoryCloneView({
         model: this.collection.category,
-        openedFromCaution: true
+        openedFromCaution: true,
       })
       this.cloneCategoryView.open()
       return this.cloneCategoryView.on('close', () => {
@@ -229,7 +228,7 @@ export default class UnassignedUsersView extends GroupUsersView {
 
   _initDrag(view) {
     super._initDrag(...arguments)
-    return view.$el.on('dragstart', (event, ui) => (this.elementIndex = -1))
+    return view.$el.on('dragstart', (_event, _ui) => (this.elementIndex = -1))
   }
 }
 UnassignedUsersView.initClass()

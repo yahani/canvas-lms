@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
-import _ from 'underscore'
+import {each} from 'lodash'
 import CollectionView from '@canvas/backbone-collection-view'
 import WikiPageRevisionView from './WikiPageRevisionView'
 import template from '../../jst/WikiPageRevisions.handlebars'
@@ -32,19 +32,19 @@ export default class WikiPageRevisionsView extends CollectionView {
       events: {
         'click .prev-button': 'prevPage',
         'click .next-button': 'nextPage',
-        'click .close-button': 'close'
+        'click .close-button': 'close',
       },
       els: {
         '#ticker': '$ticker',
         aside: '$aside',
-        '.revisions-list': '$revisionsList'
-      }
+        '.revisions-list': '$revisionsList',
+      },
     })
 
     this.optionProperty('pages_path')
   }
 
-  initialize(options) {
+  initialize(_options) {
     super.initialize(...arguments)
     this.selectedRevision = null
 
@@ -70,7 +70,7 @@ export default class WikiPageRevisionsView extends CollectionView {
 
   remove() {
     if (this.floatingSticky) {
-      _.each(this.floatingSticky, sticky => sticky.remove())
+      each(this.floatingSticky, sticky => sticky.remove())
       this.floatingSticky = null
     }
 
@@ -126,7 +126,7 @@ export default class WikiPageRevisionsView extends CollectionView {
 
   reposition() {
     if (this.floatingSticky) {
-      return _.each(this.floatingSticky, sticky => sticky.reposition())
+      each(this.floatingSticky, sticky => sticky.reposition())
     }
   }
 
@@ -155,7 +155,7 @@ export default class WikiPageRevisionsView extends CollectionView {
     const json = super.toJSON(...arguments)
     json.CAN = {
       FETCH_PREV: this.collection.canFetch('prev'),
-      FETCH_NEXT: this.collection.canFetch('next')
+      FETCH_NEXT: this.collection.canFetch('next'),
     }
     return json
   }

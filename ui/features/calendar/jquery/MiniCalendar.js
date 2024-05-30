@@ -18,7 +18,7 @@
 
 import $ from 'jquery'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import _ from 'underscore'
+import {defaults} from 'lodash'
 import calendarDefaults from '../CalendarDefaults'
 import 'jquery-tinypubsub'
 
@@ -29,28 +29,27 @@ export default class MiniCalendar {
     this.mainCalendar = mainCalendar
     this.calendar = $(selector)
     this.calendar.fullCalendar(
-      _.defaults(
+      defaults(
         {
           height: 185,
           buttonSRText: {
             prev: I18n.t('Previous month'),
-            next: I18n.t('Next month')
+            next: I18n.t('Next month'),
           },
           header: {
             left: 'prev',
             center: 'title',
-            right: 'next'
+            right: 'next',
           },
           dayClick: this.dayClick,
           events: this.getEvents,
           eventRender: this.eventRender,
           droppable: true,
           dragRevertDuration: 0,
-          dropAccept: '*',
           dropAccept: '.fc-event,.undated_event',
           drop: this.drop,
           eventDrop: this.drop,
-          eventReceive: this.drop
+          eventReceive: this.drop,
         },
         calendarDefaults
       ),
@@ -59,7 +58,8 @@ export default class MiniCalendar {
         'Calendar/refetchEvents': this.refetchEvents,
         'Calendar/currentDate': this.gotoDate,
         'CommonEvent/eventDeleted': this.eventSaved,
-        'CommonEvent/eventSaved': this.eventSaved
+        'CommonEvent/eventSaved': this.eventSaved,
+        'CommonEvent/eventsSavedFromSeries': this.eventsSavedFromSeries,
       })
     )
   }
@@ -101,9 +101,13 @@ export default class MiniCalendar {
     return false // don't render the event
   }
 
-  visibleContextListChanged = list => this.refetchEvents()
+  visibleContextListChanged = _list => this.refetchEvents()
 
   eventSaved = () => this.refetchEvents()
+
+  eventsSavedFromSeries = () => {
+    this.refetchEvents()
+  }
 
   refetchEvents = () => {
     if (!this.calendar.is(':visible')) return

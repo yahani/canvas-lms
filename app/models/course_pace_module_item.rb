@@ -29,6 +29,8 @@ class CoursePaceModuleItem < ActiveRecord::Base
   validates :course_pace, presence: true
   validate :assignable_module_item
 
+  after_update :mark_downstream_changes_on_pace
+
   scope :active, -> { joins(:module_item).merge(ContentTag.active) }
   scope :not_deleted, -> { joins(:module_item).merge(ContentTag.not_deleted) }
   scope :ordered, lambda {
@@ -37,8 +39,14 @@ class CoursePaceModuleItem < ActiveRecord::Base
                   }
 
   def assignable_module_item
-    unless module_item&.assignment
+    unless module_item&.assignment && module_item&.tag_type == "context_module"
       errors.add(:module_item, "is not assignable")
     end
+  end
+
+  def mark_downstream_changes_on_pace
+    return unless saved_changes.key?("duration")
+
+    course_pace.mark_downstream_changes ["duration"]
   end
 end

@@ -16,7 +16,7 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import I18n from '@canvas/i18n'
-import PaginatedCollectionView from '@canvas/pagination/backbone/views/PaginatedCollectionView.coffee'
+import PaginatedCollectionView from '@canvas/pagination/backbone/views/PaginatedCollectionView'
 import MessageView from './MessageView'
 import template from '../../jst/messageList.handlebars'
 
@@ -73,7 +73,7 @@ export default class MessageListView extends PaginatedCollectionView {
     updatedThread.set({
       last_message: thread.last_message,
       last_authored_message_at: new Date().toString(),
-      message_count: I18n.n(updatedThread.get('messages').length)
+      message_count: I18n.n(updatedThread.get('messages').length),
     })
     this.collection.sort()
     this.render()

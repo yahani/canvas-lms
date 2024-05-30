@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2017 - present Instructure, Inc.
  *
@@ -39,7 +40,7 @@ type Props = {
   loginHandleName?: string
   onMenuDismiss: any
   onSelectPrimaryInfo: any
-  onToggleEnrollmentFilter: any
+  onToggleEnrollmentFilter: (enrollmentFilter: string, skipApply?: boolean) => void
   sectionsEnabled: boolean
   selectedEnrollmentFilters: any
   selectedPrimaryInfo: any
@@ -79,20 +80,20 @@ export default class StudentColumnHeader extends ColumnHeader<Props, State> {
       // sort callbacks with additional sort options disabled
       onSortBySortableNameAscending: func.isRequired,
       onSortBySortableNameDescending: func.isRequired,
-      settingKey: string.isRequired
+      settingKey: string.isRequired,
     }).isRequired,
     selectedEnrollmentFilters: arrayOf(oneOf(studentRowHeaderConstants.enrollmentFilterKeys))
       .isRequired,
     onToggleEnrollmentFilter: func.isRequired,
     disabled: Menu.propTypes.disabled.isRequired,
     onMenuDismiss: Menu.propTypes.onDismiss.isRequired,
-    ...ColumnHeader.propTypes
+    ...ColumnHeader.propTypes,
   }
 
   static defaultProps = {
     loginHandleName: null,
     sisName: null,
-    ...ColumnHeader.defaultProps
+    ...ColumnHeader.defaultProps,
   }
 
   getColumnHeaderName() {
@@ -101,6 +102,10 @@ export default class StudentColumnHeader extends ColumnHeader<Props, State> {
 
   getColumnHeaderOptions() {
     return I18n.t('Student Name Options')
+  }
+
+  getHeaderTestId() {
+    return 'student-column-header'
   }
 
   showDisplayAsViewOption() {
@@ -179,8 +184,8 @@ export default class StudentColumnHeader extends ColumnHeader<Props, State> {
         onSortByLoginId,
         onSortInAscendingOrder,
         onSortInDescendingOrder,
-        settingKey
-      }
+        settingKey,
+      },
     } = this.props
     const selectedSortSetting = isSortColumn && settingKey
     const selectedSortDirection = isSortColumn && direction
@@ -263,7 +268,7 @@ export default class StudentColumnHeader extends ColumnHeader<Props, State> {
                 <View
                   className="Gradebook__ColumnHeaderDetail Gradebook__ColumnHeaderDetail--OneLine"
                   padding="0 0 0 small"
-                  data-testid="student-column-header"
+                  data-testid={this.getHeaderTestId()}
                 >
                   <Text fontStyle="normal" size="x-small" weight="bold">
                     {this.getColumnHeaderName()}
@@ -386,7 +391,7 @@ export default class StudentColumnHeader extends ColumnHeader<Props, State> {
 
                     <MenuSeparator />
 
-                    <MenuGroup label={I18n.t('Show')} allowMultiple>
+                    <MenuGroup label={I18n.t('Show')} allowMultiple={true}>
                       <MenuItem
                         key="inactive"
                         selected={this.props.selectedEnrollmentFilters.includes('inactive')}

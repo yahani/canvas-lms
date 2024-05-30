@@ -17,6 +17,14 @@ confetti_for_valid_links:
     a course and no issues are found.
   applies_to: RootAccount
 
+bbb_avatar:
+  state: 'hidden'
+  display_name: 'Send user avatar to BigBlueButton'
+  description: |-
+    Adds a new admin setting to the BigBlueButton plugin to allow
+    sending of user avatars upon joining conference.
+  applies_to: RootAccount
+
 react_discussions_post:
   state: hidden
   beta: true
@@ -39,12 +47,19 @@ draft_discussions:
     in the discussions redesign
   applies_to: SiteAdmin
 
-isolated_view:
+discussion_grading_view:
   state: hidden
-  display_name: Discussions Redesign - Isolated View
+  beta: true
+  display_name: Discussion Redesign Grading View
   description: |-
-    This feature flag enables Isolated View inside the new
-    Discussions Redesign work.
+    Will allow for graders to grade assigned discussions without leaving discussion page
+  applies_to: SiteAdmin
+
+discussion_entry_version_history:
+  state: hidden
+  display_name: Discussion Redesign - Discussion Entry Version History
+  description: |-
+    Will display the version history for edited discussion entries within the Redesign UI
   applies_to: SiteAdmin
 
 discussion_create:
@@ -55,11 +70,41 @@ discussion_create:
     discussion create/edit page
   applies_to: RootAccount
 
+bbb_modal_update:
+  state: hidden
+  display_name: BBB Modal Update
+  description: |-
+    This update offers enhanced feature functionality for
+    Big Blue Button Conferences. Users will now be able to enable
+    the Waiting Room in their conference settings, they'll be able
+    to add a scheduled conference to their calendar from within a conference,
+    and they'll be able to update/sync conference attendees as new attendees are
+    added or removed.
+  applies_to: SiteAdmin
+
 react_inbox:
   state: hidden
   display_name: Update Inbox page to use react/instui
   description: |-
     This refactor will make this page more maintainable
+  applies_to: RootAccount
+  environments:
+    development:
+      state: on # enable for local development
+
+react_inbox_labels:
+  state: hidden
+  display_name: Enable Labels on the new Inbox page
+  description: |-
+    This will allow the user to manage their labels, add labels to conversations and
+    filter conversations by labels.
+  applies_to: SiteAdmin
+
+restrict_quantitative_data:
+  state: hidden
+  display_name: Restrict quantitative data
+  description: |-
+    This feature will hide all quantitative values from users
   applies_to: RootAccount
 
 smart_alerts:
@@ -82,3 +127,26 @@ apollo_caching:
   description: |-
     Allow for Apollo to cache graphQL queries on a users browser to speed up their experience
   applies_to: SiteAdmin
+
+react_people_page:
+  state: hidden
+  display_name: People Page Upgrade
+  description: |-
+    This feature flag enables the React/InstUI and GraphQL People page upgrade.
+  applies_to: RootAccount
+
+discussion_checkpoints:
+  state: hidden
+  display_name: Discussion Checkpoints
+  description: |-
+    Enables checkpoints for graded discussions. Checkpoints allow teachers to
+    create separate due dates for the initial response and replies. The initial
+    response and replies are then graded separately, and those grades are
+    combined to form a final discussion grade.
+  applies_to: RootAccount
+
+inbox_settings:
+  state: hidden
+  applies_to: SiteAdmin
+  display_name: Inbox Settings - QW Updates
+  description: Gives users access to new optional features like setting a default signature that will be added at the end of outgoing messages and setting an autoresponder.

@@ -39,15 +39,18 @@ const mapping = {
   fi: 'fi',
   fr: 'fr_FR',
   'fr-CA': 'fr_FR',
+  ga: 'ga',
   he: 'he_IL',
   ht: undefined, // tiny doesn't have Haitian Creole
   hu: 'hu_HU',
   hy: 'hy',
+  id: 'id',
   is: undefined, // tiny doesn't have Icelandic
   it: 'it',
   ja: 'ja',
   ko: 'ko_KR',
   mi: undefined,
+  ms: undefined, // tiny has Malayalam but not Malay Standard, haiyaa
   nb: 'nb_NO',
   nl: 'nl',
   nn: 'nb_NO', // tiny doesn't have Norwegian (Nynorsk) so go to Norwegian (Bokmal)
@@ -68,7 +71,7 @@ const mapping = {
   zh: 'zh_CN',
   'zh-HK': 'zh_TW',
   'zh-Hans': 'zh_CN',
-  'zh-Hant': 'zh_TW'
+  'zh-Hant': 'zh_TW',
 }
 
 // still expose it as a method for consistent usage and in case we ever have to
@@ -84,7 +87,10 @@ function editorLanguage(locale) {
   if (locale.match('-x-')) {
     locale = locale.split('-x-')[0]
   }
-  return mapping[locale]
+  if (mapping[locale]) {
+    return mapping[locale]
+  }
+  return mapping[locale.split('-')[0]]
 }
 
 module.exports = editorLanguage

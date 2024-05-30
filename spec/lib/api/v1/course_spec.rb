@@ -35,16 +35,21 @@ describe Api::V1::Course do
       @course.grading_standard = grading_standard
       @course.save
       course_settings = course_settings_json(@course)
-      expect(course_settings[:allow_student_discussion_topics]).to eq true
-      expect(course_settings[:allow_student_forum_attachments]).to eq true
-      expect(course_settings[:allow_student_discussion_editing]).to eq true
-      expect(course_settings[:grading_standard_enabled]).to eq true
+      expect(course_settings[:allow_student_discussion_topics]).to be true
+      expect(course_settings[:allow_student_forum_attachments]).to be true
+      expect(course_settings[:allow_student_discussion_editing]).to be true
+      expect(course_settings[:grading_standard_enabled]).to be true
       expect(course_settings[:grading_standard_id]).to eq grading_standard.id
     end
 
     it "includes filter_speed_grader_by_student_group in the settings hash" do
       course_settings = course_settings_json(@course)
       expect(course_settings).to have_key :filter_speed_grader_by_student_group
+    end
+
+    it "includes conditional_release value in the settings hash" do
+      course_settings = course_settings_json(@course)
+      expect(course_settings).to have_key :conditional_release
     end
   end
 
@@ -63,20 +68,40 @@ describe Api::V1::Course do
       expect(hash["locale"]).to eql @course.locale
     end
 
-    it "includes the image when it is asked for and the feature flag is on" do
-      course_factory
-      @course.image_url = "http://image.jpeg"
-      @course.save
+    describe "course_image" do
+      before :once do
+        course_factory
+        @course.image_url = "http://image.jpeg"
+        @course.save
+      end
 
-      hash = course_json(@course, nil, nil, ["course_image"], nil)
-      expect(hash["image_download_url"]).to eql "http://image.jpeg"
+      it "is included when requested" do
+        hash = course_json(@course, nil, nil, ["course_image"], nil)
+        expect(hash["image_download_url"]).to eql "http://image.jpeg"
+      end
+
+      it "is not included if the course_image include is not present" do
+        hash = course_json(@course, nil, nil, [], nil)
+        expect(hash["image_download_url"]).not_to be_present
+      end
     end
 
-    it "does not include the image if the course_image include is not present" do
-      course_factory
+    describe "banner_image" do
+      before :once do
+        course_factory
+        @course.banner_image_url = "http://image2.jpeg"
+        @course.save
+      end
 
-      hash = course_json(@course, nil, nil, [], nil)
-      expect(hash["image_download_url"]).not_to be_present
+      it "is included when requested" do
+        hash = course_json(@course, nil, nil, ["banner_image"], nil)
+        expect(hash["banner_image_download_url"]).to eql "http://image2.jpeg"
+      end
+
+      it "is not included if the course_image include is not present" do
+        hash = course_json(@course, nil, nil, [], nil)
+        expect(hash["banner_image_download_url"]).not_to be_present
+      end
     end
   end
 end

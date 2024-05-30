@@ -18,6 +18,10 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 require "simple_oauth"
+require "inst_statsd"
+require "active_support/core_ext/string/filters"
+require "faraday/follow_redirects"
+require "faraday/multipart"
 
 module TurnitinApi
   class OutcomesResponseTransformer
@@ -27,6 +31,16 @@ module TurnitinApi
 
     attr_accessor :outcomes_response_json, :key, :lti_params
 
+    class InvalidResponse < StandardError; end
+
+    KNOWN_ERROR_MESSAGES = {
+      api_login_failed: 'API Login failed: "oauth_signature" incorrect credentials and/or signature calculation',
+      api_product_inactive: "API product inactive or expired",
+      oauth_consumer_key: '"oauth_consumer_key" value is missing or not valid.',
+      not_enabled: "This integration is not currently enabled. Contact your account administrator.",
+      not_found: "The requested Object Result could not be found."
+    }.freeze
+
     def initialize(key, secret, lti_params, outcomes_response_json)
       @key = key
       @secret = secret
@@ -35,7 +49,22 @@ module TurnitinApi
     end
 
     def response
-      @response ||= make_call(outcomes_response_json["outcomes_tool_placement_url"])
+      @response ||= make_call(outcomes_response_json["outcomes_tool_placement_url"]).tap do |resp|
+        if (200..299).cover?(resp.status)
+          resp
+        else
+          error_msg = KNOWN_ERROR_MESSAGES.find { |_name, text| resp.body&.include?(text) }&.first
+          error_msg ||= :unknown
+
+          stats_tags = { status: resp.status, message: error_msg }
+          InstStatsd::Statsd.increment("lti.tii.outcomes_response_bad", tags: stats_tags)
+
+          body = resp.env[:raw_body] || resp.body
+          raise InvalidResponse,
+                "TII returned #{resp.status} code, content length=#{body&.length}, " \
+                "message #{error_msg}, body #{body&.truncate(100).inspect}"
+        end
+      end
     end
 
     # download original
@@ -66,8 +95,8 @@ module TurnitinApi
       @connection ||= Faraday.new do |conn|
         conn.request :multipart
         conn.request :url_encoded
-        conn.response :json, content_type: /\bjson$/
-        conn.use FaradayMiddleware::FollowRedirects
+        conn.response :json, preserve_raw: true
+        conn.response :follow_redirects
         conn.adapter :net_http
       end
     end
@@ -80,8 +109,12 @@ module TurnitinApi
         "resource_link_id" => SecureRandom.hex(32),
       }
       params = default_params.merge(lti_params)
-      header = SimpleOAuth::Header.new(:post, url, params, consumer_key: @key, consumer_secret: @secret,
-                                                           callback: "about:blank")
+      header = SimpleOAuth::Header.new(:post,
+                                       url,
+                                       params,
+                                       consumer_key: @key,
+                                       consumer_secret: @secret,
+                                       callback: "about:blank")
       connection.post url, params.merge(header.signed_attributes)
     end
   end

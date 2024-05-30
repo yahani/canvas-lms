@@ -26,10 +26,35 @@ module Types
     implements Interfaces::LegacyIDInterface
 
     field :workflow_state, String, null: false
+    field :asset_id, String, null: false
+    field :available, Boolean, method: :available?, null: true
 
     field :user, UserType, null: false
     def user
       load_association(:user)
+    end
+
+    field :anonymized_user, UserType, null: true
+    def anonymized_user
+      load_association(:asset).then do |submission|
+        Loaders::AssociationLoader.for(Submission, :assignment).load(submission).then do |assignment|
+          assignment.anonymous_peer_reviews? ? nil : load_association(:user)
+        end
+      end
+    end
+
+    field :anonymous_id, String, null: true
+    def anonymous_id
+      load_association(:asset).then do |submission|
+        Loaders::AssociationLoader.for(Submission, :assignment).load(submission).then do |assignment|
+          assignment.anonymous_peer_reviews? ? submission.anonymous_id : nil
+        end
+      end
+    end
+
+    field :asset_submission_type, String, null: true
+    def asset_submission_type
+      load_association(:asset).then(&:submission_type)
     end
   end
 end

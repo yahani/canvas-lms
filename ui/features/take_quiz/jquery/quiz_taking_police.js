@@ -1,3 +1,5 @@
+/* eslint-disable import/no-commonjs */
+/* eslint-disable no-inner-declarations */
 /*
  * Copyright (C) 2017 - present Instructure, Inc.
  *
@@ -47,22 +49,23 @@ The quiz taking police has arrived.
        });
      }
 */
-define([], function() {
-  if (!window.Worker) {
-    // if this browser doesn't support web workers, this module does nothing
-    return
-  }
 
+/* eslint-disable no-restricted-globals */
+
+if (!window.Worker) {
+  // If this browser doesn't support web workers, this module does nothing
+  module.exports = null
+} else {
   function worker() {
     let stopwatch
 
     self.addEventListener(
       'message',
-      function(e) {
+      function (e) {
         const message = e.data || {}
         switch (message.code) {
           case 'startStopwatch':
-            stopwatch = setInterval(function() {
+            stopwatch = setInterval(function () {
               self.postMessage('stopwatchTick')
             }, message.frequency || 1000)
             break
@@ -74,10 +77,12 @@ define([], function() {
       false
     )
   }
+
   let code = worker.toString()
   code = code.substring(code.indexOf('{') + 1, code.lastIndexOf('}'))
 
   const blob = new Blob([code], {type: 'application/javascript'})
   const quizTakingPolice = new Worker(URL.createObjectURL(blob))
-  return quizTakingPolice
-})
+
+  module.exports = quizTakingPolice
+}

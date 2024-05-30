@@ -18,17 +18,19 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 class JobsV2Controller < ApplicationController
+  include Api::V1::Progress
+
   BUCKETS = %w[queued running future failed].freeze
   SEARCH_LIMIT = 100
 
-  MANAGE_ENDPOINTS = %i[manage requeue].freeze
+  MANAGE_ENDPOINTS = %i[manage requeue unstuck throttle].freeze
   before_action :require_view_jobs, except: MANAGE_ENDPOINTS
   before_action :require_manage_jobs, only: MANAGE_ENDPOINTS
 
   before_action :require_bucket, only: %i[grouped_info list search]
   before_action :require_group, only: %i[grouped_info search]
   before_action :set_date_range, only: %i[grouped_info list search]
-  before_action :set_site_admin_context, :set_navigation, only: [:index]
+  before_action :set_site_admin_context, :set_navigation, only: [:index, :job_stats]
 
   def require_view_jobs
     require_site_admin_with_permission(:view_jobs)
@@ -48,7 +50,7 @@ class JobsV2Controller < ApplicationController
         @page_title = t("Jobs Control Panel v2")
 
         css_bundle :jobs_v2
-        js_bundle :jobs_v2
+        deferred_js_bundle :jobs_v2
 
         jobs_server = @domain_root_account.shard.delayed_jobs_shard&.database_server_id
         cluster = @domain_root_account.shard&.database_server_id
@@ -56,12 +58,27 @@ class JobsV2Controller < ApplicationController
           manage_jobs: Account.site_admin.grants_right?(@current_user, session, :manage_jobs),
           jobs_scope_filter: {
             jobs_server: (jobs_server && t("Server: %{server}", server: jobs_server)) || t("All Jobs"),
-            cluster: cluster && t("Cluster: %{cluster}", cluster: cluster),
+            cluster: cluster && t("Cluster: %{cluster}", cluster:),
             shard: t("Shard: %{shard}", shard: @domain_root_account.shard.name),
             account: t("Account: %{account}", account: @domain_root_account.name)
           }.compact
         )
 
+        render html: "", layout: true
+      end
+    end
+  end
+
+  def job_stats
+    respond_to do |format|
+      format.html do
+        @page_title = t("Jobs Stats by Cluster")
+
+        js_env(
+          manage_jobs: Account.site_admin.grants_right?(@current_user, session, :manage_jobs)
+        )
+
+        deferred_js_bundle :job_stats
         render html: "", layout: true
       end
     end
@@ -108,9 +125,11 @@ class JobsV2Controller < ApplicationController
       # This seems silly, but it forces postgres to use the available indicies.
       scope = scope.where("locked_by IS NULL OR locked_by IS NOT NULL") if @group == :singleton
 
-      tag_info = Api.paginate(scope, self, api_v1_jobs_grouped_info_url)
+      group_info = Api.paginate(scope, self, api_v1_jobs_grouped_info_url)
+      group_statuses = get_group_statuses(group_info, @group) if %i[strand singleton].include?(@group)
+
       now = Delayed::Job.db_time_now
-      render json: tag_info.map { |row| grouped_info_json(row, @group, base_time: now) }
+      render json: group_info.map { |row| grouped_info_json(row, @group, base_time: now, group_statuses:) }
     end
   end
 
@@ -226,8 +245,8 @@ class JobsV2Controller < ApplicationController
       id = params[:id]
       raise ActionController::BadRequest unless id.present?
 
-      jobs = Delayed::Job.where(id: id).to_a
-      jobs.concat Delayed::Job::Failed.where(id: id).or(
+      jobs = Delayed::Job.where(id:).to_a
+      jobs.concat Delayed::Job::Failed.where(id:).or(
         Delayed::Job::Failed.where(original_job_id: id)
       ).order(:id).to_a
 
@@ -263,11 +282,10 @@ class JobsV2Controller < ApplicationController
     count = nil
     Delayed::Job.transaction do
       Delayed::Job.advisory_lock(strand)
-      count = Delayed::Job.where(strand: strand).update_all(update_args)
-      # TODO: revisit this after DE-1158
-      unleash_more_jobs(strand, update_args[:max_concurrent]) if update_args[:max_concurrent]
+      count = Delayed::Job.where(strand:).update_all(update_args)
+      SwitchmanInstJobs::JobsMigrator.unblock_strand!(strand, new_parallelism: update_args[:max_concurrent]) if update_args[:max_concurrent]
     end
-    render json: { status: "OK", count: count }
+    render json: { status: "OK", count: }
   end
 
   # @{not an}API requeue a failed job
@@ -282,6 +300,205 @@ class JobsV2Controller < ApplicationController
     render json: job_json(job)
   end
 
+  # @{not an}API unstuck orphaned strands/singletons
+  #
+  # Given a strand or singleton that cannot progress because no job is next_in_strand,
+  # unstuck the jobs by setting next_in_strand on the appropriate number of stuck jobs
+  #
+  # if a +strand+ or +singleton+ is supplied, it will be unstucked synchronously and status "OK"
+  # will be returned.
+  #
+  # otherwise, a job will be queued to run the unblocker on all strands and singletons in
+  # job shards given by the ids in the +job_shards+ parameter (all job shards in the region
+  # if none specified) and status "pending" will be returned along with progress information.
+  #
+  # if a strand or singleton is blocked by the shard migrator, status "blocked" will be returned.
+  #
+  # @argument strand [Optional,String]
+  #   The name of the strand to unstuck
+  #
+  # @argument singleton [Optional,String]
+  #   The name of the singleton to unstuck
+  #
+  def unstuck
+    if params[:strand].present?
+      begin
+        count = SwitchmanInstJobs::JobsMigrator.unblock_strand!(params[:strand])
+        raise ActiveRecord::RecordNotFound if count.nil?
+
+        render json: { status: "OK", count: }
+      rescue SwitchmanInstJobs::JobsBlockedError
+        render json: { status: "blocked" }
+      end
+    elsif params[:singleton].present?
+      begin
+        count = SwitchmanInstJobs::JobsMigrator.unblock_singleton!(params[:singleton])
+        raise ActiveRecord::RecordNotFound if count.nil?
+
+        render json: { status: "OK", count: }
+      rescue SwitchmanInstJobs::JobsBlockedError
+        render json: { status: "blocked" }
+      end
+    else
+      progress = Progress.create(context: @current_user, tag: "JobsV2Controller::run_unstucker!")
+      progress.process_job(JobsV2Controller,
+                           :run_unstucker!,
+                           { priority: Delayed::HIGH_PRIORITY },
+                           shard_ids: Array(params[:job_shards]))
+      render json: { status: "pending", progress: progress_json(progress, @current_user, session) }
+    end
+  end
+
+  # @{not an}API return information about job clusters
+  #
+  # @argument job_shards [Optional, Array] ids of specific job shards to query
+  #
+  # @example_response
+  #   [
+  #     {
+  #       "id": 106,
+  #       "database_server_id": "jobs6",
+  #       "block_stranded_shard_ids": [1170],
+  #       "jobs_held_shard_ids": [],
+  #       "domain": "jobs6.instructure.com",
+  #       "counts": {
+  #          "queued": 1170,
+  #          "running": 135,
+  #          "future": 1500,
+  #          "blocked": 17
+  #       }
+  #     },
+  #     ...
+  #   ]
+  def clusters
+    GuardRail.activate(:secondary) do
+      scope = self.class.filtered_dj_shards(Array(params[:job_shards]))
+
+      # since fetching blocked job stats can be expensive, we will do one job cluster per page by default
+      shards = Api.paginate(scope, self, api_v1_job_clusters_url, default_per_page: 1)
+      render json: shards.map { |dj_shard|
+        json = dj_shard.slice(:id, :database_server_id)
+        json["block_stranded_shard_ids"] = Shard.where(delayed_jobs_shard_id: dj_shard.id, block_stranded: true).pluck(:id)
+        json["jobs_held_shard_ids"] = Shard.where(delayed_jobs_shard_id: dj_shard.id, jobs_held: true).pluck(:id)
+        dj_shard.activate do
+          account = Account.root_accounts.active.first
+          json["domain"] = account.primary_domain&.host if account.respond_to?(:primary_domain)
+          json["domain"] ||= request.host_with_port
+          json["counts"] = {}
+          json["counts"]["queued"] = queued_scope.count
+          json["counts"]["running"] = Delayed::Job.running.count
+          json["counts"]["future"] = Delayed::Job.future.count
+          json["counts"]["blocked"] = SwitchmanInstJobs::JobsMigrator.blocked_job_count
+        end
+        json
+      }
+    end
+  end
+
+  # @{not an}API return a list of stuck strands in a given job shard
+  #
+  # @argument job_shard [Optional, Integer]
+  #   The id of the job shard to check. The domain root account's job shard
+  #   will be checked by default
+  #
+  # @example_response
+  #   [
+  #     { name: "foo", count: 100 },
+  #     { name: "bar", count: 3 }
+  #   ]
+  #
+  def stuck_strands
+    GuardRail.activate(:secondary) do
+      activate_job_shard do
+        scope = SwitchmanInstJobs::JobsMigrator.blocked_strands.select("strand, count(*) AS count").order(:strand)
+        strands = Api.paginate(scope, self, api_v1_jobs_stuck_strands_url)
+        render json: strands.map { |row| { name: row.strand, count: row.count } }
+      end
+    end
+  end
+
+  # @{not an}API return a list of stuck singletons in a given job shard
+  #
+  # @argument job_shard [Optional, Integer]
+  #   The id of the job shard to check. The domain root account's job shard
+  #   will be checked by default
+  #
+  # @example_response
+  #   [
+  #     { name: "foo", count: 1 },
+  #     { name: "bar", count: 1 }
+  #   ]
+  #
+  def stuck_singletons
+    GuardRail.activate(:secondary) do
+      activate_job_shard do
+        scope = SwitchmanInstJobs::JobsMigrator.blocked_singletons.select("singleton, count(*) AS count").order(:singleton)
+        singletons = Api.paginate(scope, self, api_v1_jobs_stuck_singletons_url)
+        render json: singletons.map { |row| { name: row.singleton, count: row.count } }
+      end
+    end
+  end
+
+  # @{not an}API Test throttle search term
+  #
+  # @argument term [Required, String]
+  #   The search term. Will find unstranded queued jobs whose tags start with this term.
+  #
+  # @argument shard_id [Optional, Integer]
+  #   If given, limit search to jobs on this shard
+  #
+  # @example_response
+  #   {
+  #     matched_jobs: 103,
+  #     matched_tags: 7
+  #   }
+  #
+  def throttle_check
+    GuardRail.activate(:secondary) do
+      term = params[:term]
+      raise ActionController::BadRequest, "missing term" unless term.present?
+
+      scope = throttle_scope(term, params[:shard_id])
+      render json: {
+        matched_jobs: scope.count,
+        matched_tags: scope.distinct.count(:tag)
+      }
+    end
+  end
+
+  # @{not an}API Throttle jobs with a specific tag pattern by stranding them
+  #
+  # @argument term [Required, String]
+  #   The search term. Unstranded queued jobs whose tags start with this term
+  #   (case sensitively) will be throttled.
+  #
+  # @argument shard_id [Optional, Integer]
+  #   If given, limit to jobs on this shard
+  #
+  # @argument max_concurrent [Optional, Integer]
+  #   The number of matched jobs to allow to run concurrently. Default 1
+  #
+  # @example_response
+  #   {
+  #     job_count: 110,
+  #     new_strand: "tmp_strand_2b369177"
+  #   }
+  #
+  def throttle
+    term = params[:term]
+    raise ActionController::BadRequest, "missing term" unless term.present?
+
+    max_concurrent = params[:max_concurrent]&.to_i || 1
+
+    scope = throttle_scope(term, params[:shard_id])
+    job_count, new_strand = ::Delayed::Job.apply_temp_strand!(scope, max_concurrent:)
+
+    render json: {
+      job_count:,
+      new_strand:
+    }
+  end
+
   protected
 
   def require_bucket
@@ -292,6 +509,19 @@ class JobsV2Controller < ApplicationController
   def require_group
     @group = params[:group].to_sym if %w[tag strand singleton].include?(params[:group])
     throw :abort unless @group
+  end
+
+  def activate_job_shard(&)
+    if params[:job_shard].present?
+      shard = ::Switchman::Shard.find(params[:job_shard])
+      if shard.delayed_jobs_shard_id && shard.delayed_jobs_shard_id != shard.id
+        return render json: { message: "not a job shard" }, status: :bad_request
+      end
+
+      shard.activate(&)
+    else
+      yield
+    end
   end
 
   def queued_scope
@@ -322,7 +552,7 @@ class JobsV2Controller < ApplicationController
     case params[:scope]
     when "cluster"
       database_server_id = @domain_root_account.shard.database_server_id
-      shard_ids = Shard.where(database_server_id: database_server_id).pluck(:id)
+      shard_ids = ::Switchman::Shard.where(database_server_id:).pluck(:id)
 
       scope.where(shard_id: shard_ids)
     when "shard" then scope.where(shard_id: @domain_root_account.shard)
@@ -331,8 +561,22 @@ class JobsV2Controller < ApplicationController
     end
   end
 
-  def grouped_info_json(row, group, base_time:)
-    { :count => row.count, group => row[group], :info => grouped_info_data(row, base_time: base_time) }
+  def throttle_scope(search_term, shard_id)
+    scope = Delayed::Job
+            .where(strand: nil, singleton: nil, locked_by: nil)
+            .where(ActiveRecord::Base.wildcard("tag", search_term, type: :right, case_sensitive: true))
+    scope = scope.where(shard_id:) if shard_id.present?
+    scope
+  end
+
+  def grouped_info_json(row, group, base_time:, group_statuses: nil)
+    json = {
+      :count => row.count,
+      group => row[group],
+      :info => grouped_info_data(row, base_time:)
+    }
+    json[:orphaned] = group_statuses[row[group]] if group_statuses&.key?(row[group])
+    json
   end
 
   def job_json(job, base_time: nil)
@@ -340,7 +584,7 @@ class JobsV2Controller < ApplicationController
     job_fields += %w[failed_at original_job_id requeued_job_id last_error] if job.is_a?(Delayed::Job::Failed)
     json = api_json(job, @current_user, nil, only: job_fields)
     if @bucket && base_time
-      json["info"] = list_info_data(job, base_time: base_time)
+      json["info"] = list_info_data(job, base_time:)
     else
       json["bucket"] = infer_bucket(job)
     end
@@ -428,13 +672,55 @@ class JobsV2Controller < ApplicationController
 
   def set_navigation
     set_active_tab "jobs"
-    add_crumb t("#crumbs.jobs", "Jobs")
+    if action_name == "job_stats"
+      add_crumb t("Job Stats by Cluster")
+    else
+      add_crumb t("#crumbs.jobs", "Jobs")
+    end
   end
 
-  def unleash_more_jobs(strand, new_parallelism)
-    needed_jobs = new_parallelism - Delayed::Job.where(strand: strand, next_in_strand: true).count
-    if needed_jobs > 0
-      Delayed::Job.where(strand: strand, next_in_strand: false, locked_by: nil, singleton: nil).order(:id).limit(needed_jobs).update_all(next_in_strand: true)
+  # returns a hash from strand name to boolean indicating the strand or singleton is orphaned
+  # (i.e., no job in the group has next_in_strand set)
+  def get_group_statuses(jobs, strand_or_singleton)
+    return nil unless jobs.present? && %w[queued future].include?(@bucket)
+
+    scope = case strand_or_singleton
+            when :strand
+              Delayed::Job.where(strand: jobs.map(&:strand))
+            when :singleton
+              Delayed::Job.where(strand: nil, singleton: jobs.map(&:singleton))
+            else
+              raise ArgumentError, "strand_or_singleton must be one of those two"
+            end
+    scope
+      .group(strand_or_singleton)
+      .pluck("#{strand_or_singleton}, BOOL_OR(next_in_strand)")
+      .to_h
+      .transform_values(&:!)
+  end
+
+  class << self
+    def filtered_dj_shards(shard_ids)
+      scope = ::Switchman::Shard.delayed_jobs_shards
+      scope = scope.order(:id) unless scope.is_a?(Array)
+      if shard_ids.present?
+        shard_ids = Array(shard_ids).map(&:to_i)
+        scope = if scope.is_a?(Array)
+                  scope.select { |shard| shard_ids.include?(shard.id) }
+                else
+                  scope.where(id: shard_ids)
+                end
+      end
+      scope
+    end
+
+    def run_unstucker!(progress, shard_ids: [])
+      dj_shards = filtered_dj_shards(shard_ids)
+      progress.calculate_completion!(0, dj_shards.size)
+      dj_shards.each do |dj_shard|
+        SwitchmanInstJobs::JobsMigrator.unblock_strands(dj_shard)
+        progress.increment_completion!
+      end
     end
   end
 end

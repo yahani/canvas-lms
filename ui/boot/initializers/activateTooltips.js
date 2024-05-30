@@ -32,7 +32,7 @@
 //   </button>
 
 import $ from 'jquery'
-import htmlEscape from 'html-escape'
+import htmlEscape, {raw} from '@instructure/html-escape'
 import 'jqueryui/tooltip'
 
 const tooltipsToShortCirtuit = {}
@@ -54,28 +54,28 @@ const tooltipUtils = {
       right: {
         my: 'left center',
         at: `right+${caret()} center`,
-        collision
+        collision,
       },
       left: {
         my: 'right center',
         at: `left-${caret()} center`,
-        collision
+        collision,
       },
       top: {
         my: 'center bottom',
         at: `center top-${caret()}`,
-        collision
+        collision,
       },
       bottom: {
         my: 'center top',
         at: `center bottom+${caret()}`,
-        collision
-      }
+        collision,
+      },
     }
     if (opts.position in positions) {
       opts.position = positions[opts.position]
     }
-  }
+  },
 }
 
 // create a custom widget that inherits from the default jQuery UI
@@ -113,7 +113,7 @@ $.widget('custom.timeoutTooltip', $.ui.tooltip, {
           fakeEvent.currentTarget = target[0]
           return this.close(fakeEvent, true)
         }
-      }
+      },
     })
   },
 
@@ -124,7 +124,7 @@ $.widget('custom.timeoutTooltip', $.ui.tooltip, {
       return
     }
     return this._superApply([event, true])
-  }
+  },
 })
 
 // you can provide a 'using' option to jqueryUI position (which gets called by jqueryui Tooltip to
@@ -145,7 +145,7 @@ function using(position, feedback) {
 
         // if tooltip was positioned mostly above/below trigger then: "vertical"
         // else since the tooltip was positioned more to the left or right: "horizontal"
-        feedback.important
+        feedback.important,
       ].join(' ')
     )
 }
@@ -167,7 +167,7 @@ $('body').on('mouseenter focusin', '[data-tooltip]', function (_event) {
 
   if ($this.data('html-tooltip-title')) {
     opts.content = function () {
-      return $.raw($(this).data('html-tooltip-title'))
+      return raw($(this).data('html-tooltip-title'))
     }
     opts.items = '[data-html-tooltip-title]'
   }

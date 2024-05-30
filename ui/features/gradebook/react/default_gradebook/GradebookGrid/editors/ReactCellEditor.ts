@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2018 - present Instructure, Inc.
  *
@@ -42,7 +43,7 @@ export default class ReactCellEditor {
       ...this.options.column.propFactory.getProps(this.options),
       ref: ref => {
         this.component = ref
-      }
+      },
     }
 
     /*
@@ -52,7 +53,7 @@ export default class ReactCellEditor {
     ReactDOM.render(element, this.container)
   }
 
-  handleKeyDown(event) {
+  handleKeyDown(event: KeyboardEvent) {
     if (this.component) {
       return this.component.handleKeyDown(event)
     }

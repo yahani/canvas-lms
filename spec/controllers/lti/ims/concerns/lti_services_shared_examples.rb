@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_dependency "lti/ims/concerns/lti_services"
-
 shared_examples "mime_type check" do
   it "does not return ims mime_type" do
     expect(response.headers["Content-Type"]).not_to include expected_mime_type
@@ -52,7 +50,7 @@ shared_examples_for "lti services" do
           name: "test tool 2",
           url: "http://www.tool2.com/launch",
           developer_key: developer_key_that_should_not_be_resolved_from_request,
-          settings: { use_1_3: true },
+          lti_version: "1.3",
           workflow_state: "public"
         )
       end
@@ -108,6 +106,19 @@ shared_examples_for "lti services" do
 
       it "returns 200 success" do
         expect(response).to have_http_status http_success_status
+      end
+    end
+
+    context "with correct token but also a normandy_session" do
+      let(:before_send_request) do
+        lambda do
+          allow(controller).to receive(:verify_authenticity_token).and_call_original
+        end
+      end
+
+      it "skips authenticity check and returns 200 success" do
+        expect(response).to have_http_status http_success_status
+        expect(controller).not_to have_received(:verify_authenticity_token)
       end
     end
 

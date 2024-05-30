@@ -26,7 +26,7 @@ class AttachmentUploadStatus < ApplicationRecord
   end
 
   def self.pending!(attachment)
-    Rails.cache.write(cache_key(attachment), "pending", expires_in: 1.day.from_now)
+    Rails.cache.write(cache_key(attachment), "pending", expires_in: 1.day)
   end
 
   def self.success!(attachment)
@@ -36,8 +36,8 @@ class AttachmentUploadStatus < ApplicationRecord
   def self.failed!(attachment, error)
     attachment.shard.activate do
       create!(
-        attachment: attachment,
-        error: error
+        attachment:,
+        error:
       ).tap { Rails.cache.delete(cache_key(attachment)) }
     end
   end

@@ -26,7 +26,7 @@ def nodeRequirementsTemplate() {
     ]
   ]
 
-  def containers = ['code', 'feature-flag', 'groovy', 'master-bouncer', 'webpack', 'yarn'].collect { containerName ->
+  def containers = ['bundle', 'code', 'feature-flag', 'groovy', 'master-bouncer', 'webpack', 'yarn'].collect { containerName ->
     baseTestContainer + [name: containerName]
   }
 
@@ -49,7 +49,8 @@ def tearDownNode() {
 def codeStage(stages) {
   { ->
     def codeEnvVars = [
-      "SKIP_ESLINT=${configuration.getBoolean('skip-eslint', 'false')}"
+      "PRIVATE_PLUGINS=${commitMessageFlag('canvas-lms-private-plugins') as String}",
+      "SKIP_ESLINT=${commitMessageFlag('skip-eslint') as Boolean}",
     ]
 
     callableWithDelegate(queueTestStage())(stages,
@@ -78,31 +79,25 @@ def masterBouncerStage(stages) {
   }
 }
 
-def featureFlagStage(stages, buildConfig) {
+def bundleStage(stages, buildConfig) {
   { ->
-    extendedStage('Linters - feature-flag')
-      .hooks(buildSummaryReportHooks.call())
-      .nodeRequirements(container: 'feature-flag')
-      .obeysAllowStages(false)
-      .required(filesChangedStage.hasFeatureFlagFiles(buildConfig) && env.GERRIT_CHANGE_ID != "0")
-      .queue(stages) {
-        slackSend(
-          channel: configuration.getString('feature-flag-report-channel'),
-          color: 'warning',
-          message: "Patchset <${env.GERRIT_CHANGE_URL}|${env.GERRIT_CHANGE_SUBJECT}> by ${env.GERRIT_EVENT_ACCOUNT_NAME} is changing a feature flag"
-        )
+    def bundleEnvVars = [
+      "PLUGINS_LIST=${commitMessageFlag('canvas-lms-plugins') as String}"
+    ]
 
-        node('master') {
-          gerrit.addReviewers(Arrays.asList(configuration.getString('feature-flag-report-emails').split(',')))
-        }
-      }
+    callableWithDelegate(queueTestStage())(stages,
+      name: 'bundle',
+      envVars: bundleEnvVars,
+      required: filesChangedStage.hasBundleFiles(buildConfig),
+      command: './build/new-jenkins/linters/run-gergich-bundle.sh',
+    )
   }
 }
 
 def yarnStage(stages, buildConfig) {
   { ->
     def yarnEnvVars = [
-      "PLUGINS_LIST=${configuration.plugins().join(' ')}"
+      "PLUGINS_LIST=${commitMessageFlag('canvas-lms-plugins') as String}"
     ]
 
     callableWithDelegate(queueTestStage())(stages,
@@ -134,7 +129,7 @@ def queueTestStage() {
       .queue(stages) {
         sh(opts.command)
 
-        if (configuration.getBoolean('force-failure-linters', 'false')) {
+        if (commitMessageFlag('force-failure-linters') as Boolean) {
           error 'lintersStage: force failing due to flag'
         }
       }

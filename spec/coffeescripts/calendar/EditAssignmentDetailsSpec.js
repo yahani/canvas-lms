@@ -16,12 +16,12 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Backbone from '@canvas/backbone'
 import $ from 'jquery'
-import EditAssignmentDetails from 'ui/features/calendar/backbone/views/EditAssignmentDetails.js'
-import fcUtil from '@canvas/calendar/jquery/fcUtil.coffee'
+import 'jquery-migrate'
+import EditAssignmentDetails from 'ui/features/calendar/backbone/views/EditAssignmentDetails'
+import fcUtil from '@canvas/calendar/jquery/fcUtil'
 import timezone from 'timezone'
-import tzInTest from '@canvas/timezone/specHelpers'
+import tzInTest from '@canvas/datetime/specHelpers'
 import detroit from 'timezone/America/Detroit'
 import french from 'timezone/fr_FR'
 import fakeENV from 'helpers/fakeENV'
@@ -43,7 +43,7 @@ QUnit.module('EditAssignmentDetails', {
             concluded: false,
             k5_course: true,
             can_create_assignments: true,
-            assignment_groups: [{id: '9', name: 'Assignments'}]
+            assignment_groups: [{id: '9', name: 'Assignments'}],
           },
           {
             name: 'Normal Course',
@@ -52,8 +52,18 @@ QUnit.module('EditAssignmentDetails', {
             concluded: false,
             k5_course: false,
             can_create_assignments: true,
-            assignment_groups: [{id: '9', name: 'Assignments'}]
-          }
+            assignment_groups: [{id: '9', name: 'Assignments'}],
+          },
+          {
+            name: 'Course Pacing',
+            asset_string: 'course_3',
+            id: '3',
+            concluded: false,
+            course_pacing_enabled: true,
+            k5_course: false,
+            can_create_assignments: true,
+            assignment_groups: [{id: '9', name: 'Assignments'}],
+          },
         ]
       },
       isNewEvent() {
@@ -62,7 +72,6 @@ QUnit.module('EditAssignmentDetails', {
       startDate() {
         return fcUtil.wrap('2015-08-07T17:00:00Z')
       },
-      allDay: false
     }
     fakeENV.setup()
   },
@@ -71,7 +80,7 @@ QUnit.module('EditAssignmentDetails', {
     document.getElementById('fixtures').innerHTML = ''
     fakeENV.teardown()
     tzInTest.restore()
-  }
+  },
 })
 const createView = function (model, event) {
   const view = new EditAssignmentDetails(fixtures, event, null, null)
@@ -94,8 +103,8 @@ const nameLengthHelper = function (
     {
       assignment: {
         name,
-        post_to_sis: postToSis
-      }
+        post_to_sis: postToSis,
+      },
     },
     []
   )
@@ -111,19 +120,13 @@ test('should have blank input when no start date', function () {
   equal(view.$('.datetime_field').val(), '')
 })
 
-test('should include start date only if all day', function () {
-  this.event.allDay = true
-  const view = createView(commonEvent(), this.event)
-  equal(view.$('.datetime_field').val(), 'Fri Aug 7, 2015')
-})
-
 test('should treat start date as fudged', function () {
   tzInTest.configureAndRestoreLater({
     tz: timezone(detroit, 'America/Detroit'),
     tzData: {
-      'America/Detroit': detroit
+      'America/Detroit': detroit,
     },
-    formats: getI18nFormats()
+    formats: getI18nFormats(),
   })
   const view = createView(commonEvent(), this.event)
   equal(view.$('.datetime_field').val(), 'Fri Aug 7, 2015 1:00pm')
@@ -135,10 +138,10 @@ test('should localize start date', function () {
     momentLocale: 'fr',
     formats: {
       'date.formats.full_with_weekday': '%a %-d %b %Y %-k:%M',
-      'date.formats.medium': '%a %-d %b %Y %-k:%M',
+      'date.formats.medium_with_weekday': '%a %-d %b %Y',
       'date.month_names': ['août'],
-      'date.abbr_month_names': ['août']
-    }
+      'date.abbr_month_names': ['août'],
+    },
   })
   const view = createView(commonEvent(), this.event)
   equal(view.$('.datetime_field').val(), 'ven. 7 août 2015 17:00')
@@ -149,8 +152,8 @@ test('requires name to save assignment event', function () {
   const data = {
     assignment: {
       name: '',
-      post_to_sis: ''
-    }
+      post_to_sis: '',
+    },
   }
   const errors = view.validateBeforeSave(data, [])
   ok(errors['assignment[name]'])
@@ -209,8 +212,8 @@ test('requires due_at to save assignment event if there is no date and post_to_s
     assignment: {
       name: 'Too much tuna',
       post_to_sis: '1',
-      due_at: ''
-    }
+      due_at: '',
+    },
   }
   const errors = view.validateBeforeSave(data, [])
   ok(errors['assignment[due_at]'])
@@ -224,8 +227,8 @@ test('allows assignment event to save if there is no date and post_to_sis is fal
     assignment: {
       name: 'Too much tuna',
       post_to_sis: '0',
-      due_at: ''
-    }
+      due_at: '',
+    },
   }
   const errors = view.validateBeforeSave(data, [])
   equal(errors.length, 0)
@@ -250,4 +253,12 @@ test('Should include the important date value when submitting', function () {
   view.$('#calendar_event_important_dates').click()
   const dataToSubmit = view.getFormData()
   equal(dataToSubmit.assignment.important_dates, true)
+})
+
+test('Should disable changing the date if course pacing is enabled', function () {
+  this.event.contextInfo = {course_pacing_enabled: true}
+  const view = createView(commonEvent(), this.event)
+  view.setContext('course_3')
+  view.contextChange({target: '#assignment_context'}, false)
+  equal(view.$('#assignment_due_at').prop('disabled'), true)
 })

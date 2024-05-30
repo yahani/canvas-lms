@@ -16,6 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+import $ from 'jquery'
 import customPropTypes from '@canvas/files/react/modules/customPropTypes'
 
 export default {
@@ -26,7 +27,7 @@ export default {
 
   propTypes: {
     contextType: customPropTypes.contextType.isRequired,
-    contextId: customPropTypes.contextId.isRequired
+    contextId: customPropTypes.contextId.isRequired,
   },
 
   update() {
@@ -42,5 +43,5 @@ export default {
 
   componentWillUnmount() {
     clearInterval(this.interval)
-  }
+  },
 }

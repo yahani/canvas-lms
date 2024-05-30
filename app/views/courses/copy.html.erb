@@ -18,6 +18,9 @@
 
 <% provide :page_title, t('titles.copy_course', 'Copy Course') %>
 <% add_crumb t('#crumbs.copy_course', 'Copy Course') %>
+<div id="warning_messages_modal_container"></div>
+<% js_bundle :copy_warnings_modal %>
+
 
 <h1><%= t'headings.copy_course', 'Copy %{course}', :course => @context.name %></h1>
 <p>
@@ -96,6 +99,15 @@
           <%= t('select_all_content', 'All content') %>
         </label>
       </div>
+
+      <% if MasterCourses::MasterTemplate.is_master_course?(@context) %>
+        <div class="controls import-blueprint-settings" style="margin-left: 2em; padding-bottom: 0.75em;">
+          <label class="checkbox">
+            <input type="checkbox" name="settings[import_blueprint_settings]">
+            <%= t('Copy Blueprint Course settings') %>
+          </label>
+        </div>
+      <% end %>
 
       <div class="radio">
         <label>

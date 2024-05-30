@@ -18,15 +18,16 @@
 
 import {useState, useEffect, useReducer} from 'react'
 import {svgSettings as svgSettingsReducer, defaultState} from '../reducers/svgSettings'
-import {ICON_MAKER_ATTRIBUTE, ICON_MAKER_DOWNLOAD_URL_ATTR, SVG_XML_TYPE} from './constants'
-import RceApiSource from '../../../../rcs/api'
+import {ICON_MAKER_ATTRIBUTE, ICON_MAKER_DOWNLOAD_URL_ATTR} from './constants'
 import {modes} from '../reducers/imageSection'
 import iconsLabels from '../utils/iconsLabels'
+import {createCroppedImageSvg} from '../../shared/ImageCropper/imageCropUtils'
+import {convertFileToBase64} from '../../shared/fileUtils'
 
 export const statuses = {
   ERROR: 'error',
   LOADING: 'loading',
-  IDLE: 'idle'
+  IDLE: 'idle',
 }
 
 const getImageNode = (editor, editing) => {
@@ -56,32 +57,24 @@ const getImageNode = (editor, editing) => {
   return iconMaker
 }
 
-const buildFilesUrl = (fileId, rcsConfig) => {
-  // http://canvas.docker/files/2169/download?download_frd=1&amp;icon_maker_icon=1
+const buildMetadataUrl = (fileId, canvasOrigin) => {
+  // http://canvas.docker/api/v1/files/2169/icon_metadata
 
-  const downloadURL = new URL(`${rcsConfig.canvasUrl}/files/${fileId}/download`)
-
-  // Adding the Course ID to the request causes Canvas to follow the chain
-  // of files that were uploaded and "replaced" previous versions of the file.
-  downloadURL.searchParams.append('replacement_chain_context_type', 'course')
-  downloadURL.searchParams.append('replacement_chain_context_id', rcsConfig.contextId)
-
-  // Prevent the browser from using an old cached SVGs
-  downloadURL.searchParams.append('ts', Date.now())
-
-  // Yes, we want do download for real dude
-  downloadURL.searchParams.append('download_frd', 1)
-
+  const downloadURL = new URL(`${canvasOrigin}/api/v1/files/${fileId}/icon_metadata`)
   return downloadURL.toString()
 }
 
-export function useSvgSettings(editor, editing, rcsConfig) {
+export function useSvgSettings(editor, editing, canvasOrigin) {
   const [settings, dispatch] = useReducer(svgSettingsReducer, defaultState)
   const [status, setStatus] = useState(statuses.IDLE)
 
   const imgNode = getImageNode(editor, editing)
   const urlFromNode = imgNode?.getAttribute(ICON_MAKER_DOWNLOAD_URL_ATTR)
   const altText = imgNode?.getAttribute('alt')
+
+  const customStyle = imgNode?.getAttribute('style')
+  const customWidth = imgNode?.getAttribute('width')
+  const customHeight = imgNode?.getAttribute('height')
 
   useEffect(() => {
     const fetchSvgSettings = async () => {
@@ -93,25 +86,15 @@ export function useSvgSettings(editor, editing, rcsConfig) {
         // Parse out the file ID from something like
         // /courses/1/files/3/preview?...
         const fileId = urlFromNode.split('files/')[1]?.split('/')[0]
-        const downloadUrl = buildFilesUrl(fileId, rcsConfig)
+        const downloadUrl = buildMetadataUrl(fileId, canvasOrigin)
 
-        // Parse SVG. If no SVG found, return defaults
-        const svg = await svgFromUrl(downloadUrl)
-        if (!svg) return
-
-        // Parse metadata. If no metadata found, return defaults
-        const metadata = svg.querySelector('metadata')?.innerHTML
+        // Download icon metadata. If no metadata found, return defaults
+        const response = await fetch(downloadUrl)
+        const metadata = await response.text()
         if (!metadata) return
 
-        const rcs = new RceApiSource(rcsConfig)
-
-        const fileData = await rcs.getFile(fileId, {
-          replacement_chain_context_type: rcsConfig.contextType,
-          replacement_chain_context_id: rcsConfig.contextId
-        })
-        const fileName = fileData.name.replace(/\.[^\.]+$/, '')
-
         const metadataJson = JSON.parse(metadata)
+        const fileName = metadataJson.name.replace(/\.[^\.]+$/, '')
         metadataJson.name = fileName
         metadataJson.originalName = fileName
 
@@ -121,7 +104,30 @@ export function useSvgSettings(editor, editing, rcsConfig) {
           metadataJson.alt = altText
         }
 
+        // Include external details on metadata
+        if (customWidth && customHeight) {
+          metadataJson.externalWidth = customWidth
+          metadataJson.externalHeight = customHeight
+        }
+
+        if (customStyle) {
+          metadataJson.externalStyle = customStyle
+        }
+
         processMetadataForBackwardCompatibility(metadataJson)
+
+        const {imageSettings} = metadataJson
+        if (imageSettings?.cropperSettings) {
+          const generatedSvg = await createCroppedImageSvg(
+            imageSettings.cropperSettings,
+            imageSettings.image
+          )
+          metadataJson.embedImage = await convertFileToBase64(
+            new Blob([generatedSvg.outerHTML], {type: 'image/svg+xml'})
+          )
+        } else {
+          metadataJson.embedImage = imageSettings?.image || defaultState.embedImage
+        }
 
         // settings found, return parsed results
         dispatch(metadataJson)
@@ -133,16 +139,9 @@ export function useSvgSettings(editor, editing, rcsConfig) {
 
     // If we are editing rather than creating, fetch existing settings
     if (editing) fetchSvgSettings()
-  }, [editor, editing, urlFromNode, rcsConfig, altText])
+  }, [editor, editing, urlFromNode, canvasOrigin, altText, customWidth, customHeight, customStyle])
 
   return [settings, status, dispatch]
-}
-
-export async function svgFromUrl(url) {
-  const response = await fetch(url)
-
-  const data = await response.text()
-  return new DOMParser().parseFromString(data, SVG_XML_TYPE)
 }
 
 function processMetadataForBackwardCompatibility(metadataJson) {
@@ -155,5 +154,34 @@ function processMetadataForBackwardCompatibility(metadataJson) {
     } else {
       metadataJson.imageSettings = null
     }
+  }
+
+  // On old icons we stored the original image inside cropper settings
+  // If that's the case we are copying it to the correct place
+  const cropperSettingsImage = metadataJson?.imageSettings?.cropperSettings?.image
+  const imageSettingsImage = metadataJson?.imageSettings?.image
+  const encodedImage = metadataJson?.encodedImage
+  if (imageSettingsImage && cropperSettingsImage && imageSettingsImage !== cropperSettingsImage) {
+    metadataJson.imageSettings.image =
+      cropperSettingsImage || imageSettingsImage || encodedImage || ''
+    delete metadataJson.imageSettings.cropperSettings.image
+  }
+
+  // Removes old and unused encoded image fields from metadata
+  delete metadataJson.encodedImage
+  delete metadataJson.encodedImageType
+  delete metadataJson.encodedImageName
+
+  // Cleans image settings if there is no image or icon
+  const imageSettingsIcon = metadataJson?.imageSettings?.icon
+  if (!imageSettingsImage && !imageSettingsIcon) {
+    metadataJson.imageSettings = null
+  }
+
+  // Replaces cropper settings' shape using icon's shape
+  const cropperSettingsShape = metadataJson?.imageSettings?.cropperSettings?.shape
+  const shape = metadataJson?.shape
+  if (shape && cropperSettingsShape && shape !== cropperSettingsShape) {
+    metadataJson.imageSettings.cropperSettings.shape = shape
   }
 }

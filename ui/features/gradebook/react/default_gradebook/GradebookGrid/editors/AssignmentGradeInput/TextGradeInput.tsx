@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2018 - present Instructure, Inc.
  *
@@ -17,12 +18,19 @@
  */
 
 import React, {Component} from 'react'
-import {arrayOf, bool, element, instanceOf, oneOf, number, shape, string} from 'prop-types'
 import {TextInput} from '@instructure/ui-text-input'
 import GradeFormatHelper from '@canvas/grading/GradeFormatHelper'
 import {hasGradeChanged, parseTextValue} from '@canvas/grading/GradeInputHelper'
+import type {PendingGradeInfo} from '../../../gradebook.d'
+import type {DeprecatedGradingScheme} from '@canvas/grading/grading.d'
 
-function formatGrade(submission, assignment, gradingScheme, enterGradesAs, pendingGradeInfo) {
+function formatGrade(
+  submission,
+  assignment,
+  gradingScheme,
+  enterGradesAs,
+  pendingGradeInfo: PendingGradeInfo
+) {
   if (pendingGradeInfo) {
     return GradeFormatHelper.formatGradeInfo(pendingGradeInfo, {defaultValue: ''})
   }
@@ -32,7 +40,7 @@ function formatGrade(submission, assignment, gradingScheme, enterGradesAs, pendi
     formatType: enterGradesAs,
     gradingScheme,
     pointsPossible: assignment.pointsPossible,
-    version: 'entered'
+    version: 'entered',
   }
 
   return GradeFormatHelper.formatSubmissionGrade(submission, formatOptions)
@@ -42,44 +50,49 @@ function getGradeInfo(value, props) {
   return parseTextValue(value, {
     enterGradesAs: props.enterGradesAs,
     gradingScheme: props.gradingScheme,
-    pointsPossible: props.assignment.pointsPossible
+    pointsPossible: props.assignment.pointsPossible,
   })
 }
 
-export default class TextGradeInput extends Component {
-  static propTypes = {
-    assignment: shape({
-      pointsPossible: number
-    }).isRequired,
-    disabled: bool,
-    enterGradesAs: oneOf(['gradingScheme', 'passFail', 'percent', 'points']).isRequired,
-    gradingScheme: instanceOf(Array).isRequired,
-    label: element.isRequired,
-    messages: arrayOf(
-      shape({
-        text: string.isRequired,
-        type: string.isRequired
-      })
-    ).isRequired,
-    pendingGradeInfo: shape({
-      excused: bool,
-      grade: string,
-      valid: bool
-    }),
-    submission: shape({
-      enteredGrade: string,
-      enteredScore: number,
-      excused: bool.isRequired,
-      id: string.isRequired
-    }).isRequired
+type Props = {
+  assignment: {
+    pointsPossible: number
   }
+  disabled: boolean
+  enterGradesAs: 'gradingScheme' | 'passFail' | 'percent' | 'points'
+  gradingScheme: DeprecatedGradingScheme[]
+  label: React.ReactElement
+  messages: Array<{
+    text: string
+    type: string
+  }>
+  pendingGradeInfo: PendingGradeInfo
+  submission: {
+    enteredGrade: string
+    enteredScore: number
+    excused: boolean
+    id: string
+  }
+}
+
+type State = {
+  gradeInfo: {
+    excused: boolean
+    grade: string | null
+    valid: boolean
+  }
+  grade: string
+}
+
+export default class TextGradeInput extends Component<Props, State> {
+  textInput: HTMLInputElement | null = null
 
   static defaultProps = {
     disabled: false,
-    pendingGradeInfo: null
+    pendingGradeInfo: null,
   }
 
-  constructor(props) {
+  constructor(props: Props) {
     super(props)
 
     this.bindTextInput = ref => {
@@ -100,16 +113,16 @@ export default class TextGradeInput extends Component {
 
     this.state = {
       gradeInfo: pendingGradeInfo || getGradeInfo(submission.excused ? 'EX' : value, this.props),
-      grade: formatGrade(submission, assignment, gradingScheme, enterGradesAs, pendingGradeInfo)
+      grade: formatGrade(submission, assignment, gradingScheme, enterGradesAs, pendingGradeInfo),
     }
   }
 
-  UNSAFE_componentWillReceiveProps(nextProps) {
+  UNSAFE_componentWillReceiveProps(nextProps: Props) {
     if (!this.isFocused()) {
       const {assignment, enterGradesAs, gradingScheme, pendingGradeInfo, submission} = nextProps
 
       this.setState({
-        grade: formatGrade(submission, assignment, gradingScheme, enterGradesAs, pendingGradeInfo)
+        grade: formatGrade(submission, assignment, gradingScheme, enterGradesAs, pendingGradeInfo),
       })
     }
   }
@@ -147,7 +160,7 @@ export default class TextGradeInput extends Component {
     return hasGradeChanged(this.props.submission, gradeInfo, {
       enterGradesAs: this.props.enterGradesAs,
       gradingScheme: this.props.gradingScheme,
-      pointsPossible: this.props.assignment.pointsPossible
+      pointsPossible: this.props.assignment.pointsPossible,
     })
   }
 
@@ -158,7 +171,7 @@ export default class TextGradeInput extends Component {
   handleTextChange(event) {
     this.setState({
       gradeInfo: getGradeInfo(event.target.value, this.props),
-      grade: event.target.value
+      grade: event.target.value,
     })
   }
 

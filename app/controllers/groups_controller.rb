@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "atom"
-
 # @API Groups
 #
 # Groups serve as the data for a few different ideas in Canvas.  The first is
@@ -151,8 +149,15 @@ class GroupsController < ApplicationController
   include K5Mode
 
   SETTABLE_GROUP_ATTRIBUTES = %w[
-    name description join_level is_public group_category avatar_attachment
-    storage_quota_mb max_membership leader
+    name
+    description
+    join_level
+    is_public
+    group_category
+    avatar_attachment
+    storage_quota_mb
+    max_membership
+    leader
   ].freeze
 
   include TextHelper
@@ -177,7 +182,7 @@ class GroupsController < ApplicationController
              end
 
     users = @context.users_not_in_groups(groups, order: User.sortable_name_order_by_clause("users"))
-                    .paginate(page: page, per_page: per_page)
+                    .paginate(page:, per_page:)
 
     if authorized_action(@context, @current_user, :manage)
       json = {
@@ -188,8 +193,8 @@ class GroupsController < ApplicationController
         total_entries: users.total_entries,
         users: users.map { |u| u.group_member_json(@context) }
       }
-      json[:pagination_html] = render_to_string(partial: "user_pagination", locals: { users: users }) unless params[:no_html]
-      render json: json
+      json[:pagination_html] = render_to_string(partial: "user_pagination", locals: { users: }) unless params[:no_html]
+      render json:
     end
   end
 
@@ -260,8 +265,26 @@ class GroupsController < ApplicationController
     return unless authorized_action(@context, @current_user, :read_roster)
 
     @groups = all_groups = @context.groups.active
-                                   .order(GroupCategory::Bookmarker.order_by, Group::Bookmarker.order_by)
-                                   .eager_load(:group_category).preload(:root_account)
+    unless params[:filter].nil?
+      @groups = all_groups = @groups.left_outer_joins(:users).where("groups.name ILIKE :query OR users.name ILIKE :query", query: "%#{ActiveRecord::Base.sanitize_sql_like(params[:filter])}%")
+    end
+    @groups = all_groups = @groups.order(GroupCategory::Bookmarker.order_by, Group::Bookmarker.order_by)
+                                  .eager_load(:group_category).preload(:root_account)
+
+    # run this only for students
+    if params[:section_restricted] && @context.is_a?(Course) && @context.user_is_student?(@current_user)
+      is_current_user_section_restricted = @context.membership_for_user(@current_user)&.limit_privileges_to_course_section
+      if is_current_user_section_restricted
+        # Gets all groups in the context
+        group_scope = @context.groups.active.eager_load(:group_category).preload(:root_account)
+        # Find all groups from that scope that can be limited from the section restriction parameter
+        groups_with_restricted_categories_or_teacher_assigned = group_scope.where(group_categories: { self_signup: nil }).or(group_scope.where(group_categories: { self_signup: "restricted" }))
+        # Find all groups that have users with different sections than the current user and DONT have the current_user in them
+        groups_with_no_common_section_with_current_user = groups_with_restricted_categories_or_teacher_assigned.reject { |g| g.has_common_section_with_user?(@current_user) || g.includes_user?(@current_user) }
+        # Remove the groups found above from the groups returned by the api
+        @groups = all_groups -= groups_with_no_common_section_with_current_user
+      end
+    end
 
     unless api_request?
       # The Groups end-point relies on the People's tab configuration since it's a subsection of it.
@@ -331,9 +354,8 @@ class GroupsController < ApplicationController
       end
 
       format.atom { render xml: @groups.map(&:to_atom).to_xml }
-
       format.json do
-        path = send("api_v1_#{@context.class.to_s.downcase}_user_groups_url")
+        path = send(:"api_v1_#{@context.class.to_s.downcase}_user_groups_url")
 
         if value_to_boolean(params[:only_own_groups]) || !tab_enabled?(Course::TAB_PEOPLE, no_render: true)
           all_groups = all_groups.merge(@current_user.current_groups)
@@ -341,8 +363,11 @@ class GroupsController < ApplicationController
         @paginated_groups = Api.paginate(all_groups, self, path)
         render json: @paginated_groups.map { |g|
           include_inactive_users = value_to_boolean(params[:include_inactive_users])
-          group_json(g, @current_user, session, include: Array(params[:include]),
-                                                include_inactive_users: include_inactive_users)
+          group_json(g,
+                     @current_user,
+                     session,
+                     include: Array(params[:include]),
+                     include_inactive_users:)
         }
       end
     end
@@ -511,7 +536,7 @@ class GroupsController < ApplicationController
       end
       respond_to do |format|
         if @group.save
-          DueDateCacher.with_executing_user(@current_user) do
+          SubmissionLifecycleManager.with_executing_user(@current_user) do
             @group.add_user(@current_user, "accepted", true) if @group.should_add_creator?(@current_user)
           end
 
@@ -563,6 +588,10 @@ class GroupsController < ApplicationController
   # @argument sis_group_id [String]
   #   The sis ID of the group. Must have manage_sis permission to set.
   #
+  # @argument override_sis_stickiness [boolean]
+  #   Default is true. If false, any fields containing “sticky” changes will not be updated.
+  #   See SIS CSV Format documentation for information on which fields can have SIS stickiness
+  #
   # @example_request
   #     curl https://<canvas>/api/v1/groups/<group_id> \
   #          -X PUT \
@@ -574,8 +603,15 @@ class GroupsController < ApplicationController
   def update
     find_group
     group_params = api_request? ? params : params.require(:group)
-    attrs = group_params.permit(:name, :description, :join_level, :is_public, :avatar_id, :storage_quota_mb, :max_membership,
-                                leader: strong_anything, members: strong_anything)
+    attrs = group_params.permit(:name,
+                                :description,
+                                :join_level,
+                                :is_public,
+                                :avatar_id,
+                                :storage_quota_mb,
+                                :max_membership,
+                                leader: strong_anything,
+                                members: strong_anything)
     attrs[:leader] = nil if group_params.key?(:leader) && group_params[:leader].blank?
 
     if !api_request? && params[:group][:group_category_id]
@@ -607,7 +643,11 @@ class GroupsController < ApplicationController
       end
       respond_to do |format|
         @group.transaction do
-          @group.update(attrs.slice(*SETTABLE_GROUP_ATTRIBUTES))
+          if params[:override_sis_stickiness] && !value_to_boolean(params[:override_sis_stickiness])
+            @group.update(attrs.slice(*(SETTABLE_GROUP_ATTRIBUTES - @group.stuck_sis_fields.map(&:to_s))))
+          else
+            @group.update(attrs.slice(*SETTABLE_GROUP_ATTRIBUTES))
+          end
           if attrs[:members]
             user_ids = Api.value_to_array(attrs[:members]).map(&:to_i).uniq
             users = if @group.context
@@ -680,7 +720,7 @@ class GroupsController < ApplicationController
     if authorized_action(@group, @current_user, :manage)
       root_account = @group.context.try(:root_account) || @domain_root_account
       ul = UserList.new(params[:invitees],
-                        root_account: root_account,
+                        root_account:,
                         search_method: :preferred,
                         current_user: @current_user)
       @memberships = []
@@ -711,7 +751,7 @@ class GroupsController < ApplicationController
   def add_user
     @group = @context
     if authorized_action(@group, @current_user, :manage)
-      DueDateCacher.with_executing_user(@current_user) do
+      SubmissionLifecycleManager.with_executing_user(@current_user) do
         @membership = @group.add_user(User.find(params[:user_id]))
         if @membership.valid?
           @group.touch
@@ -793,12 +833,9 @@ class GroupsController < ApplicationController
   def public_feed
     return unless get_feed_context(only: [:group])
 
-    feed = Atom::Feed.new do |f|
-      f.title = t(:feed_title, "%{course_or_account_name} Feed", course_or_account_name: @context.full_name)
-      f.links << Atom::Link.new(href: group_url(@context), rel: "self")
-      f.updated = Time.now
-      f.id = group_url(@context)
-    end
+    title = t(:feed_title, "%{course_or_account_name} Feed", course_or_account_name: @context.full_name)
+    link = group_url(@context)
+
     @entries = []
     @entries.concat @context.calendar_events.active
     @entries.concat(DiscussionTopic::ScopedToUser.new(@context, @current_user, @context.discussion_topics.published).scope.reject do |dt|
@@ -806,11 +843,9 @@ class GroupsController < ApplicationController
     end)
     @entries.concat WikiPages::ScopedToUser.new(@context, @current_user, @context.wiki_pages.published).scope
     @entries = @entries.sort_by(&:updated_at)
-    @entries.each do |entry|
-      feed.entries << entry.to_atom(context: @context)
-    end
+
     respond_to do |format|
-      format.atom { render plain: feed.to_xml }
+      format.atom { render plain: AtomFeedHelper.render_xml(title:, link:, entries: @entries, context: @context) }
     end
   end
 
@@ -828,7 +863,13 @@ class GroupsController < ApplicationController
   def create_file
     @attachment = Attachment.new(context: @context)
     if authorized_action(@attachment, @current_user, :create)
-      api_attachment_preflight(@context, request, check_quota: true, submit_assignment: value_to_boolean(params[:submit_assignment]))
+      submit_assignment = value_to_boolean(params[:submit_assignment])
+      opts = { check_quota: true, submit_assignment: }
+      if submit_assignment && @context.respond_to?(:submissions_folder)
+        opts[:check_quota] = false
+        opts[:folder] = @context.submissions_folder
+      end
+      api_attachment_preflight(@context, request, opts)
     end
   end
 
@@ -877,7 +918,7 @@ class GroupsController < ApplicationController
   def activity_stream_summary
     get_context
     if authorized_action(@context, @current_user, :read)
-      api_render_stream_summary([@context])
+      api_render_stream_summary(contexts: [@context])
     end
   end
 

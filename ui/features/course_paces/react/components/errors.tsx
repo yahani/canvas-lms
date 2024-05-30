@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -65,12 +66,7 @@ export const Errors = ({errors, responsiveSize, syncUnpublishedChanges}: ErrorsP
               <div ref={result.focusRef} tabIndex={-1}>
                 {msg}
               </div>
-              <Button
-                variant="primary"
-                display="block"
-                margin="x-small 0 0"
-                onClick={syncUnpublishedChanges}
-              >
+              <Button color="primary" margin="x-small 0 0" onClick={syncUnpublishedChanges}>
                 {I18n.t('Retry')}
               </Button>
             </>
@@ -108,7 +104,7 @@ export const Errors = ({errors, responsiveSize, syncUnpublishedChanges}: ErrorsP
   })
 
   return (
-    <View as="div" maxWidth={responsiveSize === 'large' ? '55%' : '100%'} margin="0 auto 0 auto">
+    <View as="div" maxWidth={responsiveSize !== 'small' ? '55%' : '100%'} margin="0 auto 0 auto">
       {alerts.map(a => (
         <ExpandableErrorAlert
           key={a.category}
@@ -129,10 +125,10 @@ export const Errors = ({errors, responsiveSize, syncUnpublishedChanges}: ErrorsP
 const mapStateToProps = (state: StoreState): StoreProps => {
   return {
     errors: getErrors(state),
-    responsiveSize: getResponsiveSize(state)
+    responsiveSize: getResponsiveSize(state),
   }
 }
 
 export default connect(mapStateToProps, {
-  syncUnpublishedChanges: coursePaceActions.syncUnpublishedChanges
+  syncUnpublishedChanges: coursePaceActions.syncUnpublishedChanges,
 })(Errors)

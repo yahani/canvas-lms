@@ -25,23 +25,30 @@ module Lti
     belongs_to :developer_key
 
     before_save :normalize_configuration
+    before_save :update_privacy_level_from_extensions
 
     after_update :update_external_tools!, if: :update_external_tools?
 
     validates :developer_key_id, :settings, presence: true
     validates :developer_key_id, uniqueness: true
-    validate :valid_configuration?, unless: proc { |c| c.developer_key_id.blank? || c.settings.blank? }
-    validate :valid_placements
+    validate :validate_configuration, unless: proc { |c| c.developer_key_id.blank? || c.settings.blank? }
+    validate :validate_placements
+    validate :validate_oidc_initiation_urls
 
-    attr_accessor :configuration_url, :settings_url
+    attr_accessor :settings_url
 
     # settings* was an unfortunate naming choice as there is a settings hash per placement that
     # made it confusing, as well as this being a configuration, not a settings, hash
     alias_attribute :configuration, :settings
-    alias_attribute :configuration_url, :settings_url
+    alias_method :configuration_url, :settings_url
+    alias_method :configuration_url=, :settings_url=
 
     def new_external_tool(context, existing_tool: nil)
-      tool = existing_tool || ContextExternalTool.new(context: context)
+      # disabled tools should stay disabled while getting updated
+      # deleted tools are never updated during a dev key update so can be safely ignored
+      tool_is_disabled = existing_tool&.workflow_state == ContextExternalTool::DISABLED_STATE
+
+      tool = existing_tool || ContextExternalTool.new(context:)
       Importers::ContextExternalToolImporter.import_from_migration(
         importable_configuration,
         context,
@@ -50,8 +57,7 @@ module Lti
         false
       )
       tool.developer_key = developer_key
-      tool.workflow_state = canvas_extensions["privacy_level"] || DEFAULT_PRIVACY_LEVEL
-      tool.use_1_3 = true
+      tool.workflow_state = (tool_is_disabled && ContextExternalTool::DISABLED_STATE) || privacy_level || DEFAULT_PRIVACY_LEVEL
       tool
     end
 
@@ -82,9 +88,48 @@ module Lti
             "custom_fields" => ContextExternalTool.find_custom_fields_from_string(tool_configuration_params[:custom_fields])
           ),
           configuration_url: tool_configuration_params[:settings_url],
-          disabled_placements: tool_configuration_params[:disabled_placements]
+          disabled_placements: tool_configuration_params[:disabled_placements],
+          privacy_level: tool_configuration_params[:privacy_level]
         )
       end
+    end
+
+    # temporary measure since the actual privacy_level column is not fully backfilled
+    # remove with INTEROP-8055
+    def privacy_level
+      self[:privacy_level] || canvas_extensions["privacy_level"]
+    end
+
+    def update_privacy_level_from_extensions
+      ext_privacy_level = canvas_extensions["privacy_level"]
+      if settings_changed? && self[:privacy_level] != ext_privacy_level && ext_privacy_level.present?
+        self[:privacy_level] = ext_privacy_level
+      end
+    end
+
+    def placements
+      return [] if configuration.blank?
+
+      configuration["extensions"]&.find { |e| e["platform"] == CANVAS_EXTENSION_LABEL }&.dig("settings", "placements")&.deep_dup || []
+    end
+
+    def domain
+      return [] if configuration.blank?
+
+      configuration["extensions"]&.find { |e| e["platform"] == CANVAS_EXTENSION_LABEL }&.dig("domain") || ""
+    end
+
+    # @return [String | nil] A warning message about any disallowed placements
+    def verify_placements
+      return unless placements.any? { |p| p["placement"] == "submission_type_selection" }
+      return unless Account.site_admin.feature_enabled?(:lti_placement_restrictions)
+
+      # This is a candidate for a deduplication with the same logic in app/models/context_external_tool.rb#placement_allowed?
+      allowed_domains = Setting.get("submission_type_selection_allowed_launch_domains", "").split(",").map(&:strip).reject(&:empty?)
+      allowed_dev_keys = Setting.get("submission_type_selection_allowed_dev_keys", "").split(",").map(&:strip).reject(&:empty?)
+      return if allowed_domains.include?(domain) || allowed_dev_keys.include?(Shard.global_id_for(developer_key_id).to_s)
+
+      t("Warning: the submission_type_selection placement is only allowed for Instructure approved LTI tools. If you believe you have received this message in error, please contact your support team.")
     end
 
     private
@@ -116,7 +161,7 @@ module Lti
       developer_key.update_external_tools!
     end
 
-    def valid_configuration?
+    def validate_configuration
       if configuration["public_jwk"].blank? && configuration["public_jwk_url"].blank?
         errors.add(:lti_key, "tool configuration must have public jwk or public jwk url")
       end
@@ -126,7 +171,7 @@ module Lti
       end
       schema_errors = Schemas::Lti::ToolConfiguration.simple_validation_errors(configuration.compact)
       errors.add(:configuration, schema_errors) if schema_errors.present?
-      return if errors[:configuration].present?
+      return false if errors[:configuration].present?
 
       tool = new_external_tool(developer_key.owner_account)
       unless tool.valid?
@@ -134,11 +179,26 @@ module Lti
       end
     end
 
-    def valid_placements
+    def validate_placements
       return if disabled_placements.blank?
 
       invalid = disabled_placements.reject { |p| Lti::ResourcePlacement::PLACEMENTS.include?(p.to_sym) }
       errors.add(:disabled_placements, "Invalid placements: #{invalid.join(", ")}") if invalid.present?
+    end
+
+    def validate_oidc_initiation_urls
+      urls_hash = configuration&.dig("oidc_initiation_urls")
+      return unless urls_hash.is_a?(Hash)
+
+      urls_hash.each_value do |url|
+        if url.is_a?(String)
+          CanvasHttp.validate_url(url, allowed_schemes: nil)
+        else
+          errors.add(:configuration, "oidc_initiation_urls must be strings")
+        end
+      end
+    rescue CanvasHttp::Error, URI::Error, ArgumentError
+      errors.add(:configuration, "oidc_initiation_urls must be valid urls")
     end
 
     def importable_configuration
@@ -146,7 +206,7 @@ module Lti
     end
 
     def configuration_to_cet_settings_map
-      { url: configuration["target_link_uri"] }
+      { url: configuration["target_link_uri"], lti_version: "1.3" }
     end
 
     def canvas_extensions

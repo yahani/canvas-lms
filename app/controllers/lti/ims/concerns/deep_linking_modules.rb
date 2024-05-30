@@ -19,13 +19,17 @@
 
 module Lti::IMS::Concerns
   module DeepLinkingModules
-    extend ActiveSupport::Concern
-
     CREATE_NEW_MODULE_PLACEMENTS = %w[course_assignments_menu module_index_menu_modal].freeze
     ALLOW_LINE_ITEM_PLACEMENTS = %w[course_assignments_menu module_index_menu_modal assignment_selection link_selection module_menu_modal].freeze
 
     def create_resources_from_content_items?
-      add_item_to_existing_module = params[:context_module_id].present?
+      # If we are on the "new assignment" screen, we know that we will be creating
+      # a resource link for the newly-created assignment later, when we actually
+      # create the assignment. The assignment_selection placement, therefore, should
+      # not be creating resource links.
+      return true if for_placement?(:assignment_selection)
+
+      add_item_to_existing_module = return_url_parameters[:context_module_id].present?
       create_new_module? || add_item_to_existing_module || add_assignment?
     end
 
@@ -40,13 +44,13 @@ module Lti::IMS::Concerns
     def allow_line_items?
       return false unless @context.root_account.feature_enabled? :lti_deep_linking_line_items
 
-      ALLOW_LINE_ITEM_PLACEMENTS.include?(params[:placement])
+      ALLOW_LINE_ITEM_PLACEMENTS.include?(return_url_parameters[:placement])
     end
 
     def create_new_module?
       return false unless @context.root_account.feature_enabled?(:lti_deep_linking_module_index_menu_modal)
 
-      CREATE_NEW_MODULE_PLACEMENTS.include?(params[:placement])
+      CREATE_NEW_MODULE_PLACEMENTS.include?(return_url_parameters[:placement])
     end
 
     # the iframe property in a deep linking response can contain
@@ -61,11 +65,19 @@ module Lti::IMS::Concerns
       }
     end
 
+    # the window property in a deep linking response can contain
+    # link-specific options. If a targetName is present, it can
+    # be used to determine whether the link should default to
+    # being opened in a new tab or not
+    def open_in_new_tab?(content_item)
+      content_item.dig(:window, :targetName) == "_blank"
+    end
+
     def build_module_item(content_item)
       {
         type: "context_external_tool",
         id: tool.id,
-        new_tab: 0,
+        new_tab: open_in_new_tab?(content_item) ? 1 : 0,
         indent: 0,
         url: content_item[:url],
         title: content_item[:title],
@@ -93,6 +105,7 @@ module Lti::IMS::Concerns
       Assignment.transaction do
         assignment = @context.assignments.active.find_by(id: assignment_id) if assignment_id
         assignment ||= @context.assignments.new(workflow_state: "unpublished")
+
         assignment.update!(
           {
             submission_types: "external_tool",
@@ -105,7 +118,7 @@ module Lti::IMS::Concerns
             external_tool_tag_attributes: {
               content_type: "ContextExternalTool",
               content_id: tool.id,
-              new_tab: 0,
+              new_tab: open_in_new_tab?(content_item) ? 1 : 0,
               url: content_item[:url]
             }
           }
@@ -114,7 +127,7 @@ module Lti::IMS::Concerns
         # make sure custom launch dimensions get to the ContentTag for launch from assignment
         assignment.external_tool_tag.update!(link_settings: launch_dimensions(content_item))
 
-        # default line item is created if assigment has submission_types: external_tool,
+        # default line item is created if assignment has submission_types: external_tool,
         # and an external tool tag
         line_item = assignment.line_items.first
         line_item.update!(

@@ -57,6 +57,7 @@ module CC
             meta_fields[:only_visible_to_overrides] = page.assignment.only_visible_to_overrides
           end
           meta_fields[:todo_date] = page.todo_date
+          meta_fields[:publish_at] = page.publish_at
 
           File.open(path, "w") do |file|
             file << @html_exporter.html_page(page.body, page.title, meta_fields)
@@ -71,7 +72,7 @@ module CC
           end
         rescue
           title = page.title rescue I18n.t("course_exports.unknown_titles.wiki_page", "Unknown wiki page")
-          add_error(I18n.t("course_exports.errors.wiki_page", "The wiki page \"%{title}\" failed to export", title: title), $!)
+          add_error(I18n.t("course_exports.errors.wiki_page", "The wiki page \"%{title}\" failed to export", title:), $!)
         end
       end
     end

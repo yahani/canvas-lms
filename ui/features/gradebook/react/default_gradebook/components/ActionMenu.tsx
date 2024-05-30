@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2017 - present Instructure, Inc.
  *
@@ -19,22 +20,22 @@
 import $ from 'jquery'
 import React from 'react'
 import {IconMiniArrowDownSolid} from '@instructure/ui-icons'
-import {Button} from '@instructure/ui-buttons'
+import {Link} from '@instructure/ui-link'
 import {Menu} from '@instructure/ui-menu'
 import {Text} from '@instructure/ui-text'
 import GradebookExportManager from '../../shared/GradebookExportManager'
 import PostGradesApp from '../../SISGradePassback/PostGradesApp'
-import tz from '@canvas/timezone'
+import * as tz from '@canvas/datetime'
 import DateHelper from '@canvas/datetime/dateHelper'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import '@canvas/rails-flash-notifications'
 
 const I18n = useI18nScope('gradebookActionMenu')
 
-const {Item: MenuItem, Menu: MenuSeparator} = Menu as any
+const {Item: MenuItem, Separator: MenuItemSeparator} = Menu as any
 
 export type ActionMenuProps = {
-  gradingPeriodId: string
+  gradingPeriodId: string | null
   gradebookIsEditable: boolean
   contextAllowsGradebookUploads: boolean
   getAssignmentOrder: any
@@ -55,8 +56,9 @@ export type ActionMenuProps = {
   }
   attachment?: {
     id: string
-    downloadUrl: string
+    downloadUrl: string | null
     updatedAt: string
+    createdAt: string
   }
   postGradesLtis: {
     id: string
@@ -67,6 +69,8 @@ export type ActionMenuProps = {
     isEnabled: boolean
     publishToSisUrl: string
   }
+  updateExportState?: (name?: string, val?: number) => void
+  setExportManager?: (val?: GradebookExportManager) => void
 }
 
 export type ActionMenuState = {
@@ -80,8 +84,8 @@ class ActionMenu extends React.Component<ActionMenuProps, ActionMenuState> {
     attachment: undefined,
     postGradesLtis: [],
     publishGradesToSis: {
-      publishToSisUrl: undefined
-    }
+      publishToSisUrl: undefined,
+    },
   }
 
   static gotoUrl(url) {
@@ -95,7 +99,7 @@ class ActionMenu extends React.Component<ActionMenuProps, ActionMenuState> {
 
     this.state = {
       exportInProgress: false,
-      previousExport: null
+      previousExport: null,
     }
     this.launchPostGrades = this.launchPostGrades.bind(this)
   }
@@ -106,8 +110,23 @@ class ActionMenu extends React.Component<ActionMenuProps, ActionMenuState> {
     this.exportManager = new GradebookExportManager(
       this.props.gradebookExportUrl,
       this.props.currentUserId,
-      existingExport
+      existingExport,
+      undefined,
+      this.props.updateExportState
     )
+
+    if (this.props.setExportManager) {
+      this.props.setExportManager(this.exportManager)
+    }
+
+    const {lastExport} = this.props
+    if (
+      lastExport &&
+      lastExport.workflowState !== 'completed' &&
+      lastExport.workflowState !== 'failed'
+    ) {
+      this.handleResumeExport()
+    }
   }
 
   componentWillUnmount() {
@@ -121,7 +140,7 @@ class ActionMenu extends React.Component<ActionMenuProps, ActionMenuState> {
     return {
       progressId: this.props.lastExport.progressId,
       attachmentId: this.props.attachment.id,
-      workflowState: this.props.lastExport.workflowState
+      workflowState: this.props.lastExport.workflowState,
     }
   }
 
@@ -131,7 +150,7 @@ class ActionMenu extends React.Component<ActionMenuProps, ActionMenuState> {
 
   handleExport(currentView) {
     this.setExportInProgress(true)
-    $.flashMessage(I18n.t('Gradebook export started'))
+    $.flashMessage(I18n.t('Gradebook export has started. This may take a few minutes.'))
 
     return this.exportManager
       ?.startExport(
@@ -141,27 +160,55 @@ class ActionMenu extends React.Component<ActionMenuProps, ActionMenuState> {
         this.props.getStudentOrder,
         currentView
       )
-      .then(resolution => {
-        this.setExportInProgress(false)
+      .then(resolution => this.handleExportSuccess(resolution))
+      .catch(error => this.handleExportError(error))
+  }
 
-        const attachmentUrl = resolution.attachmentUrl
-        const updatedAt = new Date(resolution.updatedAt)
+  handleResumeExport() {
+    new Promise((resolve, reject) => {
+      this.exportManager?.monitorExport(resolve, reject)
+    })
+      .then(resolution => this.handleExportSuccess(resolution))
+      .catch(error => this.handleExportError(error))
+  }
 
-        const previousExport = {
-          label: `${I18n.t('New Export')} (${DateHelper.formatDatetimeForDisplay(updatedAt)})`,
-          attachmentUrl
-        }
+  handleUpdateExportState(name?: string, value?: number) {
+    setTimeout(() => {
+      if (this.props.updateExportState) {
+        this.props.updateExportState(name, value)
+      }
+    }, 3500)
+  }
 
-        this.setState({previousExport})
+  handleExportSuccess(resolution) {
+    this.setExportInProgress(false)
 
-        // Since we're still on the page, let's automatically download the CSV for them as well
-        ActionMenu.gotoUrl(attachmentUrl)
-      })
-      .catch(reason => {
-        this.setExportInProgress(false)
+    if (!resolution) {
+      return
+    }
 
-        $.flashError(I18n.t('Gradebook Export Failed: %{reason}', {reason}))
-      })
+    const attachmentUrl = resolution.attachmentUrl
+    const updatedAt = new Date(resolution.updatedAt)
+
+    const previousExport = {
+      label: `${I18n.t('New Export')} (${DateHelper.formatDatetimeForDisplay(updatedAt)})`,
+      attachmentUrl,
+    }
+
+    this.setState({previousExport})
+
+    // Since we're still on the page, let's automatically download the CSV for them as well
+    ActionMenu.gotoUrl(attachmentUrl)
+
+    this.handleUpdateExportState(undefined, undefined)
+
+    $.flashMessage(I18n.t('Gradebook export has completed'))
+  }
+
+  handleExportError(error) {
+    this.setExportInProgress(false)
+
+    $.flashError(I18n.t('Gradebook Export Failed: %{error}', {error}))
   }
 
   handleImport() {
@@ -199,11 +246,11 @@ class ActionMenu extends React.Component<ActionMenuProps, ActionMenuState> {
 
     if (!completedLastExport || !attachment) return undefined
 
-    const updatedAt = tz.parse(attachment.updatedAt)
+    const createdAt = tz.parse(attachment.createdAt)
 
     return {
-      label: `${I18n.t('Previous Export')} (${DateHelper.formatDatetimeForDisplay(updatedAt)})`,
-      attachmentUrl: attachment.downloadUrl
+      label: `${I18n.t('Previous Export')} (${DateHelper.formatDatetimeForDisplay(createdAt)})`,
+      attachmentUrl: attachment.downloadUrl,
     }
   }
 
@@ -224,7 +271,7 @@ class ActionMenu extends React.Component<ActionMenuProps, ActionMenuState> {
     }
 
     if (tools.length) {
-      tools.push(<MenuSeparator key="postGradesSeparator" />)
+      tools.push(<MenuItemSeparator key="postGradesSeparator" />)
     }
 
     return tools
@@ -271,7 +318,7 @@ class ActionMenu extends React.Component<ActionMenuProps, ActionMenuState> {
       </MenuItem>
     )
 
-    return [<MenuSeparator key="previousExportSeparator" />, previousMenu]
+    return [<MenuItemSeparator key="previousExportSeparator" />, previousMenu]
   }
 
   renderPublishGradesToSis() {
@@ -297,19 +344,19 @@ class ActionMenu extends React.Component<ActionMenuProps, ActionMenuState> {
       weight: 'normal',
       style: 'normal',
       size: 'medium',
-      color: 'primary'
+      color: 'primary',
     }
     const publishGradesToSis = this.renderPublishGradesToSis()
 
     return (
       <Menu
         trigger={
-          <Button variant="link">
+          <Link as="button">
             <Text {...buttonTypographyProps}>
               {I18n.t('Actions')}
               <IconMiniArrowDownSolid />
             </Text>
-          </Button>
+          </Link>
         }
       >
         {this.renderPostGradesTools()}

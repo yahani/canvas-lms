@@ -18,6 +18,10 @@
 
 import fetchMock from 'fetch-mock'
 import RceApiSource from '../api'
+import {saveClosedCaptions, saveClosedCaptionsForAttachment} from '@instructure/canvas-media'
+import RCEGlobals from '../../rce/RCEGlobals'
+
+jest.mock('@instructure/canvas-media')
 
 let apiSource
 
@@ -27,7 +31,7 @@ beforeEach(() => {
     refreshToken: callback => {
       callback('freshJWT')
     },
-    alertFunc: jest.fn()
+    alertFunc: jest.fn(),
   })
 
   apiSource.fetchPage = jest.fn()
@@ -44,9 +48,9 @@ describe('fetchImages()', () => {
   const standardProps = {
     contextType: 'course',
     images: {
-      course: {}
+      course: {},
     },
-    sortBy: 'date'
+    sortBy: 'date',
   }
 
   const subject = () => apiSource.fetchImages(props)
@@ -59,7 +63,7 @@ describe('fetchImages()', () => {
   describe('with "category" set', () => {
     props = {
       category: 'uncategorized',
-      ...standardProps
+      ...standardProps,
     }
   })
 
@@ -83,9 +87,26 @@ describe('fetchFilesForFolder()', () => {
     fetchMock.mock('/api/files', '{"files": []}')
   })
 
-  it('includes the "uncategorized" category in the request', async () => {
+  it('fetches folder files without query params if none supplied in props', async () => {
+    apiProps = {...apiProps}
     await subject()
-    expect(apiSource.fetchPage).toHaveBeenCalledWith('/api/files?&category=uncategorized', 'theJWT')
+    expect(apiSource.fetchPage).toHaveBeenCalledWith('/api/files', 'theJWT')
+  })
+
+  it('fetches folder files using the per_page query param', async () => {
+    apiProps = {...apiProps, perPage: 5}
+    await subject()
+    expect(apiSource.fetchPage).toHaveBeenCalledWith('/api/files?per_page=5', 'theJWT')
+  })
+
+  it('fetches folder files using the encoded searchString query param', async () => {
+    apiProps = {...apiProps, perPage: 5, searchString: 'an awesome file'}
+    const encodedSearchString = encodeURIComponent(apiProps.searchString)
+    await subject()
+    expect(apiSource.fetchPage).toHaveBeenCalledWith(
+      `/api/files?per_page=5&search_term=${encodedSearchString}`,
+      'theJWT'
+    )
   })
 })
 
@@ -102,9 +123,9 @@ describe('fetchMedia', () => {
       media: {course: {}},
       sortBy: {
         sort: 'name',
-        dir: 'asc'
+        dir: 'asc',
       },
-      contextId: 1
+      contextId: 1,
     }
 
     apiSource.apiFetch = jest.fn()
@@ -121,35 +142,120 @@ describe('fetchMedia', () => {
 })
 
 describe('saveClosedCaptions()', () => {
-  let apiProps, media_object_id, subtitles, maxBytes
+  let apiProps, media_object_id, attachment_id, subtitles, maxBytes
 
-  const subject = () =>
-    apiSource.updateClosedCaptions(apiProps, {media_object_id, subtitles}, maxBytes)
+  const subject = params => apiSource.updateClosedCaptions(apiProps, params, maxBytes)
 
   beforeEach(() => {
     apiProps = {host: 'test.com', jwt: 'asd.asdf.asdf'}
     media_object_id = 'm-id'
+    attachment_id = '123'
     subtitles = [
       {
         language: {selectedOptionId: 'en'},
         file: new Blob(['file contents'], {type: 'text/plain'}),
-        isNew: true
-      }
+        isNew: true,
+      },
     ]
-    maxBytes = undefined
+    maxBytes = 10
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
+  it('using media objects url', async () => {
+    saveClosedCaptions.mockImplementation(() => Promise.resolve())
+    await subject({media_object_id, subtitles})
+    expect(saveClosedCaptions).toHaveBeenCalledWith(
+      media_object_id,
+      subtitles,
+      {
+        headers: {
+          Authorization: 'Bearer asd.asdf.asdf',
+        },
+        origin: 'http://test.com',
+      },
+      maxBytes
+    )
+  })
+
+  it('using media objects url due null attachment', async () => {
+    attachment_id = null
+    saveClosedCaptions.mockImplementation(() => Promise.resolve())
+    await subject({media_object_id, attachment_id, subtitles})
+    expect(saveClosedCaptions).toHaveBeenCalledWith(
+      media_object_id,
+      subtitles,
+      {
+        headers: {
+          Authorization: 'Bearer asd.asdf.asdf',
+        },
+        origin: 'http://test.com',
+      },
+      maxBytes
+    )
+  })
+
+  it('using media attachments url', async () => {
+    saveClosedCaptionsForAttachment.mockImplementation(() => Promise.resolve())
+    await subject({media_object_id, attachment_id, subtitles})
+    expect(saveClosedCaptionsForAttachment).toHaveBeenCalledWith(
+      attachment_id,
+      subtitles,
+      {
+        headers: {
+          Authorization: 'Bearer asd.asdf.asdf',
+        },
+        origin: 'http://test.com',
+      },
+      maxBytes
+    )
   })
 
   describe('with a captions file that is too large', () => {
     beforeEach(() => {
+      saveClosedCaptions.mockImplementation(
+        jest.requireActual('@instructure/canvas-media').saveClosedCaptions
+      )
       maxBytes = 5
     })
 
     it('Notifies the user of a file size issue', async () => {
-      await subject()
+      await subject({media_object_id, subtitles})
       expect(apiSource.alertFunc).toHaveBeenCalledWith({
         text: 'Closed caption file must be less than 0.005 kb',
-        variant: 'error'
+        variant: 'error',
       })
     })
+  })
+})
+
+describe('updateMediaData()', () => {
+  const apiProps = {host: 'test.com', jwt: 'asd.asdf.asdf'}
+  const media_object_id = 'm-id',
+    attachment_id = '123'
+
+  it('Uses the media object route with no attachment_id FF ON', async () => {
+    apiSource.apiPost = jest.fn()
+    await apiSource.updateMediaObject(apiProps, {media_object_id, title: '', attachment_id})
+    expect(apiSource.apiPost).toHaveBeenCalledWith(
+      'http://test.com/api/media_objects/m-id?user_entered_title=',
+      expect.anything(),
+      null,
+      expect.anything()
+    )
+  })
+
+  it('Uses the media attachment route with the attachment_id FF ON', async () => {
+    apiSource.apiPost = jest.fn()
+    RCEGlobals.getFeatures = jest.fn().mockReturnValue({media_links_use_attachment_id: true})
+    await apiSource.updateMediaObject(apiProps, {media_object_id, title: '', attachment_id})
+    expect(apiSource.apiPost).toHaveBeenCalledWith(
+      'http://test.com/api/media_attachments/123?user_entered_title=',
+      expect.anything(),
+      null,
+      expect.anything()
+    )
   })
 })

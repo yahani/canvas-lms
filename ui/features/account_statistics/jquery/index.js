@@ -20,7 +20,7 @@ import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import '@canvas/jquery/jquery.ajaxJSON'
 import 'jqueryui/dialog'
-import '@canvas/jquery/jquery.instructure_misc_helpers' // replaceTags
+import replaceTags from '@canvas/util/replaceTags'
 
 const I18n = useI18nScope('accounts.statistics')
 
@@ -31,7 +31,9 @@ function populateDialog(data_points, axis, $link) {
     title: I18n.t('%{data_point} Over Time', {data_point: axis}),
     close: () => {
       $link.focus()
-    }
+    },
+    modal: true,
+    zIndex: 1000,
   })
 
   // google dependencies declared in views/acccounts/statistics since google.load uses document.write :(
@@ -43,7 +45,7 @@ function populateDialog(data_points, axis, $link) {
   data.addColumn('string', 'text1')
 
   const rows = []
-  $.each(data_points, function() {
+  $.each(data_points, function () {
     const date = new Date()
     date.setTime(this[0])
     rows.push(
@@ -59,11 +61,11 @@ function populateDialog(data_points, axis, $link) {
 }
 
 $(document).ready(() => {
-  $('.over_time_link').live('click', function(event) {
+  $(document).on('click', '.over_time_link', function (event) {
     event.preventDefault()
     const $link = $(this)
     const name = $link.attr('data-name')
-    const url = $.replaceTags($('.over_time_url').attr('href'), 'attribute', $link.attr('data-key'))
+    const url = replaceTags($('.over_time_url').attr('href'), 'attribute', $link.attr('data-key'))
     $link.text(I18n.t('loading...'))
     $.ajaxJSON(
       url,

@@ -17,9 +17,7 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
-require_dependency "canvas/cdn/s3_uploader"
-require_dependency "canvas/cdn/registry"
-require_dependency "config_file"
+require "canvas/cdn/registry"
 
 module Canvas
   module Cdn
@@ -29,12 +27,14 @@ module Canvas
           config = ActiveSupport::OrderedOptions.new
           config.enabled = false
           yml = ConfigFile.load("canvas_cdn")
+          creds = Rails.application.credentials.canvas_cdn_creds
           config.merge!(yml.symbolize_keys) if yml
+          config.merge!(creds) if creds
           config
         end
       end
 
-      # Provides an instance of Registry for the current Rails environment.
+      # Provides an instance of Cdn::Registry for the current Rails environment.
       #
       # Set ENV['USE_OPTIMIZED_JS'] to a truthy value to load the optimized
       # version of the JavaScripts even if you're running a development Rails
@@ -47,12 +47,12 @@ module Canvas
                           Rails.env
                         end
 
-          Registry.new(
-            environment: environment,
+          Cdn::Registry.new(
+            environment:,
             cache: if ActionController::Base.perform_caching
-                     Registry::ProcessCache.new
+                     Cdn::Registry::ProcessCache.new
                    else
-                     Registry::RequestCache.new
+                     Cdn::Registry::RequestCache.new
                    end
           )
         end
@@ -72,11 +72,11 @@ module Canvas
         end
       end
 
-      def push_to_s3!(*args, **kwargs, &block)
+      def push_to_s3!(*args, **kwargs, &)
         return unless config.bucket
 
         uploader = Canvas::Cdn::S3Uploader.new(*args, **kwargs)
-        uploader.upload!(&block)
+        uploader.upload!(&)
       end
 
       def enabled?

@@ -87,7 +87,7 @@ describe CoursesHelper do
 
       it "returns the submission's readable_state as the tooltip for a student" do
         submission = @assignment.submit_homework(@student_one, { submission_type: "online_text_entry", body: "..." })
-        check_icon_data(submission.readable_state, "", "icon-check", current_user: @student_one, submission: submission)
+        check_icon_data(submission.readable_state, "", "icon-check", current_user: @student_one, submission:)
       end
 
       it "returns an assignment icon instead of a check icon if show_assignment_type_icon is set" do
@@ -95,7 +95,9 @@ describe CoursesHelper do
         check_icon_data(submission.readable_state,
                         "Assignment",
                         "icon-assignment",
-                        current_user: @student_two, submission: submission, show_assignment_type_icon: true)
+                        current_user: @student_two,
+                        submission:,
+                        show_assignment_type_icon: true)
       end
 
       it "returns a no new submissions tooltip if some assignments have been submitted and graded" do
@@ -138,13 +140,13 @@ describe CoursesHelper do
 
     it "returns the score if graded" do
       assignment = Assignment.new(points_possible: 5, grading_type: "points")
-      submission = Submission.new(grade: 1.33333333, workflow_state: "graded", assignment: assignment)
+      submission = Submission.new(grade: 1.33333333, workflow_state: "graded", assignment:)
       expect(readable_grade(submission)).to eq "1.33 out of 5"
     end
 
     it "does not raise an error when passing a numeric type but grading_type is not 'points'" do
       assignment = Assignment.new(points_possible: 5, grading_type: "percent")
-      submission = Submission.new(grade: 1.33333333, workflow_state: "graded", assignment: assignment)
+      submission = Submission.new(grade: 1.33333333, workflow_state: "graded", assignment:)
       expect(readable_grade(submission)).to eq "1.33333%"
     end
   end
@@ -152,9 +154,9 @@ describe CoursesHelper do
   describe "#user_type" do
     let(:admin) { account_admin_user(account: Account.default, active_user: true) }
     let(:course) { Account.default.courses.create! }
-    let(:teacher) { teacher_in_course(course: course, active_all: true).user }
-    let(:ta) { ta_in_course(course: course, active_all: true).user }
-    let(:student) { student_in_course(course: course, active_all: true).user }
+    let(:teacher) { teacher_in_course(course:, active_all: true).user }
+    let(:ta) { ta_in_course(course:, active_all: true).user }
+    let(:student) { student_in_course(course:, active_all: true).user }
     let(:test_student) { course.student_view_student }
     let(:rando) { User.create! }
     let(:observer) do
@@ -201,6 +203,59 @@ describe CoursesHelper do
     it "returns the correct user type when passed preloaded enrollments" do
       enrollments = teacher && course.enrollments.index_by(&:user_id)
       expect(user_type(course, teacher, enrollments)).to eq "teacher"
+    end
+  end
+
+  describe "#sortable_tabs" do
+    it "returns tool tabs" do
+      tool = external_tool_model(context: course_model)
+      tool.course_navigation = { enabled: true }
+      tool.save
+      controller = CoursesController.new
+      controller.instance_variable_set(:@context, tool.context)
+      tabs = controller.sortable_tabs
+
+      tool_tab = tabs.find { |t| Lti::ExternalToolTab.tool_for_tab(t) == tool }
+      expect(tool_tab[:args][1]).to eq(tool.id)
+    end
+
+    context "when given a quizzes tool tab" do
+      before do
+        allow_any_instance_of(ContextExternalTool).to receive(:quiz_lti?).and_return(true)
+      end
+
+      context "quizzes is enabled for the course" do
+        it "includes the tab" do
+          tool = external_tool_model(context: course_model)
+          tool.course_navigation = { enabled: true }
+          tool.save
+          controller = CoursesController.new
+          controller.instance_variable_set(:@context, tool.context)
+
+          Account.site_admin.enable_feature! :assignments_2_teacher
+          allow(controller).to receive(:new_quizzes_navigation_placements_enabled?).with(tool.context).and_return(true)
+
+          tabs = controller.sortable_tabs
+          tool_tab = tabs.find { |t| Lti::ExternalToolTab.tool_for_tab(t) == tool }
+          expect(tool_tab[:args][1]).to eq(tool.id)
+        end
+      end
+
+      context "quizzes is disabled for the account/course" do
+        it "doesn't include the tab" do
+          tool = external_tool_model(context: course_model)
+          tool.course_navigation = { enabled: true }
+          tool.save
+          controller = CoursesController.new
+          controller.instance_variable_set(:@context, tool.context)
+
+          Account.site_admin.disable_feature! :assignments_2_teacher
+
+          tabs = controller.sortable_tabs
+          tool_tab = tabs.find { |t| Lti::ExternalToolTab.tool_for_tab(t) == tool }
+          expect(tool_tab).to be_nil
+        end
+      end
     end
   end
 end

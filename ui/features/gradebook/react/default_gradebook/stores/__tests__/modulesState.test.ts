@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -19,14 +20,16 @@
 import PerformanceControls from '../../PerformanceControls'
 import {NetworkFake, setPaginationLinkHeader} from '@canvas/network/NetworkFake/index'
 import store from '../index'
+import sinon from 'sinon'
 
 const exampleData = {
-  contextModules: [{id: '2601'}, {id: '2602 '}, {id: '2603'}]
+  contextModules: [{id: '2601'}, {id: '2602 '}, {id: '2603'}],
 }
 
-describe('useModules', () => {
+describe('modulesState', () => {
   const url = '/api/v1/courses/1/modules'
   let network
+  let clock
 
   function getRequests() {
     return network.getRequests(request => request.path === url)
@@ -34,6 +37,11 @@ describe('useModules', () => {
 
   beforeEach(() => {
     network = new NetworkFake()
+    clock = sinon.useFakeTimers()
+  })
+
+  afterEach(() => {
+    clock.restore()
   })
 
   it('sends a request to the context modules url', async () => {
@@ -46,7 +54,7 @@ describe('useModules', () => {
   describe('when sending the initial request', () => {
     it('sets the `per_page` parameter to the configured per page maximum', async () => {
       store.setState({
-        performanceControls: new PerformanceControls({contextModulesPerPage: 45})
+        performanceControls: new PerformanceControls({contextModulesPerPage: 45}),
       })
       store.getState().fetchModules()
       await network.allRequestsReady()
@@ -103,6 +111,7 @@ describe('useModules', () => {
       setPaginationLinkHeader(response, {first: 1, current: 1, next: 2, last: 3})
       response.setJson(exampleData.contextModules.slice(0, 1))
       response.send()
+      clock.tick(1)
       await network.allRequestsReady()
 
       // Resolve the remaining pages
@@ -110,10 +119,12 @@ describe('useModules', () => {
       setPaginationLinkHeader(response, {first: 1, current: 1, next: 2, last: 3})
       request2.response.setJson(exampleData.contextModules.slice(1, 2))
       request2.response.send()
+      clock.tick(1)
 
       setPaginationLinkHeader(response, {first: 1, current: 1, next: 2, last: 3})
       request3.response.setJson(exampleData.contextModules.slice(2, 3))
       request3.response.send()
+      clock.tick(1)
     })
 
     it('includes the loaded context modules when updating the gradebook', () => {

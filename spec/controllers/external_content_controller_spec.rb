@@ -17,6 +17,8 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
+require_relative "lti/concerns/parent_frame_shared_examples"
+
 describe ExternalContentController do
   describe "GET success" do
     it "doesn't require a context" do
@@ -28,6 +30,29 @@ describe ExternalContentController do
       c = course_factory
       get :success, params: { service: "external_tool_dialog", course_id: c.id }
       expect(assigns[:context]).to_not be_nil
+    end
+  end
+
+  describe "GET success/:id" do
+    context "no lti_version is passed" do
+      let(:course) { course_factory }
+      let(:params) do
+        {
+          service: "external_tool_dialog",
+          course_id: course.id,
+          id: 123
+        }
+      end
+
+      before do
+        course_with_teacher
+        user_session(@teacher)
+      end
+
+      it "returns a 401 rather than a 500" do
+        get(:success, params:)
+        expect(response).to have_http_status(:unauthorized)
+      end
     end
   end
 
@@ -51,7 +76,7 @@ describe ExternalContentController do
       let!(:c) { course_factory }
 
       it "js env is set correctly" do
-        post(:success, params: params)
+        post(:success, params:)
 
         data = controller.js_env[:retrieved_data]
         expect(data).to_not be_nil
@@ -87,7 +112,7 @@ describe ExternalContentController do
         params[:lti_errormsg] = { html: "errormsg somehtml" }
         params[:lti_errorlog] = { html: "errorlog somehtml" }
 
-        post(:success, params: params)
+        post(:success, params:)
         env = controller.js_env
 
         expect(env[:message]).to eq('{"html"=>"msg somehtml"}')
@@ -100,6 +125,97 @@ describe ExternalContentController do
           lti_errormsg: '{"html"=>"errormsg somehtml"}',
           lti_errorlog: '{"html"=>"errorlog somehtml"}'
         )
+      end
+
+      it_behaves_like "an endpoint which uses parent_frame_context to set the CSP header" do
+        subject do
+          user_session(account_admin_user(account: Account.site_admin))
+          post(
+            :success,
+            params: {
+              service: "external_tool_dialog",
+              course_id: c.id,
+              parent_frame_context: pfc_tool.id
+            }
+          )
+        end
+
+        let(:pfc_tool_context) { c }
+      end
+
+      describe "DEEP_LINKING_POST_MESSAGE_ORIGIN" do
+        subject do
+          post(
+            :success,
+            params: {
+              service: "external_tool_dialog",
+              course_id: c.id,
+              parent_frame_context: tool.id
+            }
+          )
+        end
+
+        let(:tool) do
+          c.context_external_tools.create!(
+            {
+              name: "test tool",
+              domain: "test.com",
+              consumer_key: "fake_oauth_consumer_key",
+              shared_secret: "secret",
+              developer_key:,
+              url: "http://test.com/login",
+            }
+          )
+        end
+        let(:developer_key) do
+          key = DeveloperKey.new
+          key.generate_rsa_keypair!
+          key.save!
+          key.developer_key_account_bindings.first.update!(
+            workflow_state: "on"
+          )
+          key
+        end
+
+        context "when returning from a non-internal service" do
+          it "does not set the DEEP_LINKING_POST_MESSAGE_ORIGIN value in jsenv" do
+            expect(controller).not_to receive(:js_env).with({ DEEP_LINKING_POST_MESSAGE_ORIGIN: "http://test.com" }, true)
+            subject
+          end
+        end
+
+        context "when returning from an internal service" do
+          before do
+            user_session(account_admin_user(account: Account.site_admin))
+            developer_key.update!(internal_service: true)
+          end
+
+          it "sets the DEEP_LINKING_POST_MESSAGE_ORIGIN value in jsenv" do
+            allow(controller).to receive(:js_env)
+            subject
+            expect(controller).to have_received(:js_env).with({ DEEP_LINKING_POST_MESSAGE_ORIGIN: "http://test.com" }, true)
+          end
+
+          context "when the tool has a domain and not a url" do
+            let(:tool) do
+              c.context_external_tools.create!(
+                {
+                  name: "test tool",
+                  domain: "test.com",
+                  consumer_key: "fake_oauth_consumer_key",
+                  shared_secret: "secret",
+                  developer_key:,
+                }
+              )
+            end
+
+            it "sets the DEEP_LINKING_POST_MESSAGE_ORIGIN value in jsenv" do
+              allow(controller).to receive(:js_env)
+              subject
+              expect(controller).to have_received(:js_env).with({ DEEP_LINKING_POST_MESSAGE_ORIGIN: "https://test.com" }, true)
+            end
+          end
+        end
       end
     end
 
@@ -124,7 +240,7 @@ describe ExternalContentController do
             lti_message_type: "ContentItemSelection",
             lti_version: "LTI-1p0",
             content_items: Rails.root.join("spec/fixtures/lti/content_items.json").read,
-            data: Canvas::Security.create_jwt({ content_item_id: service_id, oauth_consumer_key: oauth_consumer_key }),
+            data: Canvas::Security.create_jwt({ content_item_id: service_id, oauth_consumer_key: }),
             lti_msg: "",
             lti_log: "",
             lti_errormsg: "",
@@ -177,7 +293,7 @@ describe ExternalContentController do
                                            data: Canvas::Security.create_jwt({ content_item_id: "1" })
                                          }
                                        )
-        post(:success, params: params)
+        post(:success, params:)
         expect(response).to have_http_status(:unauthorized)
       end
 
@@ -191,7 +307,7 @@ describe ExternalContentController do
                                            data: Canvas::Security.create_jwt({ content_item_id: service_id, oauth_consumer_key: "invalid" })
                                          }
                                        )
-        post(:success, params: params)
+        post(:success, params:)
         expect(response).to have_http_status(:unauthorized)
       end
     end
@@ -200,7 +316,9 @@ describe ExternalContentController do
   describe "#content_items_for_canvas" do
     it "sets default placement advice" do
       c = course_factory
-      post(:success, params: { service: "external_tool_dialog", course_id: c.id, lti_message_type: "ContentItemSelection",
+      post(:success, params: { service: "external_tool_dialog",
+                               course_id: c.id,
+                               lti_message_type: "ContentItemSelection",
                                lti_version: "LTI-1p0",
                                data: "",
                                content_items: Rails.root.join("spec/fixtures/lti/content_items_2.json").read,
@@ -220,7 +338,9 @@ describe ExternalContentController do
       json = JSON.parse(Rails.root.join("spec/fixtures/lti/content_items_2.json").read)
       json["@graph"][0].delete("url")
       launch_url = "http://example.com/launch"
-      post(:success, params: { service: "external_tool_dialog", course_id: c.id, lti_message_type: "ContentItemSelection",
+      post(:success, params: { service: "external_tool_dialog",
+                               course_id: c.id,
+                               lti_message_type: "ContentItemSelection",
                                lti_version: "LTI-1p0",
                                data: Canvas::Security.create_jwt({ default_launch_url: launch_url }),
                                content_items: json.to_json,
@@ -237,7 +357,9 @@ describe ExternalContentController do
       it "generates a canvas tool launch url" do
         c = course_factory
         json = JSON.parse(Rails.root.join("spec/fixtures/lti/content_items.json").read)
-        post(:success, params: { service: "external_tool_dialog", course_id: c.id, lti_message_type: "ContentItemSelection",
+        post(:success, params: { service: "external_tool_dialog",
+                                 course_id: c.id,
+                                 lti_message_type: "ContentItemSelection",
                                  lti_version: "LTI-1p0",
                                  content_items: json.to_json })
 
@@ -250,7 +372,9 @@ describe ExternalContentController do
         c = course_factory
         json = JSON.parse(Rails.root.join("spec/fixtures/lti/content_items.json").read)
         json["@graph"][0]["placementAdvice"]["presentationDocumentTarget"] = "iframe"
-        post(:success, params: { service: "external_tool_dialog", course_id: c.id, lti_message_type: "ContentItemSelection",
+        post(:success, params: { service: "external_tool_dialog",
+                                 course_id: c.id,
+                                 lti_message_type: "ContentItemSelection",
                                  lti_version: "LTI-1p0",
                                  content_items: json.to_json })
 
@@ -262,7 +386,9 @@ describe ExternalContentController do
         c = course_factory
         json = JSON.parse(Rails.root.join("spec/fixtures/lti/content_items.json").read)
         json["@graph"][0]["placementAdvice"]["presentationDocumentTarget"] = "window"
-        post(:success, params: { service: "external_tool_dialog", course_id: c.id, lti_message_type: "ContentItemSelection",
+        post(:success, params: { service: "external_tool_dialog",
+                                 course_id: c.id,
+                                 lti_message_type: "ContentItemSelection",
                                  lti_version: "LTI-1p0",
                                  content_items: json.to_json })
 
@@ -274,7 +400,7 @@ describe ExternalContentController do
 
   describe "#oembed_retrieve" do
     subject do
-      get(:oembed_retrieve, params: params)
+      get(:oembed_retrieve, params:)
       response
     end
 
@@ -291,7 +417,7 @@ describe ExternalContentController do
     let(:endpoint) { "https://www.test.edu/new/oembed-endpoint?img=21&color=ffcc00" }
     let(:expected_oembed_uri) { "#{endpoint}&url=#{CGI.escape(url)}&format=json" }
     let(:oembed_token) { "" }
-    let(:params) { { endpoint: endpoint, url: url } }
+    let(:params) { { endpoint:, url: } }
     let(:success_double) { double("success", body: oembed_resource.to_json) }
     let(:tool) { external_tool_model }
     let(:url) { "https://www.test.edu/new_actionicons/oembed-endpoint" }
@@ -303,14 +429,14 @@ describe ExternalContentController do
       let(:oembed_token) do
         unsigned_token = JSON::JWT.new(
           {
-            sub: sub,
-            iss: iss,
-            aud: aud,
-            iat: iat,
-            exp: exp,
-            jti: jti,
-            endpoint: endpoint,
-            url: url
+            sub:,
+            iss:,
+            aud:,
+            iat:,
+            exp:,
+            jti:,
+            endpoint:,
+            url:
           }
         )
         unsigned_token.sign(tool.shared_secret).to_s
@@ -321,7 +447,7 @@ describe ExternalContentController do
       let(:iat) { Time.zone.now.to_i }
       let(:iss) { tool.consumer_key }
       let(:jti) { SecureRandom.uuid }
-      let(:params) { { oembed_token: oembed_token } }
+      let(:params) { { oembed_token: } }
       let(:sub) { Lti::Asset.opaque_identifier_for(user) }
 
       context "and an active user session" do
@@ -330,6 +456,13 @@ describe ExternalContentController do
         it "embeds oembed objects" do
           expect(CanvasHttp).to receive(:get).with(expected_oembed_uri)
           expect(subject).to be_successful
+        end
+
+        context "when the disable_oembed_retrieve feature flag is enabled" do
+          it "returns a 410 gone" do
+            Account.default.enable_feature!(:disable_oembed_retrieve)
+            expect(subject.status).to eq(410)
+          end
         end
 
         context "when a disabled tool shares the same consumer key" do
@@ -364,12 +497,13 @@ describe ExternalContentController do
         end
 
         context "when the JTI has been seen already" do
+          specs_require_cache(:redis_cache_store)
           let(:static_uuid) { "d219444f-a608-45c3-b81b-74bf6ac7da25" }
 
           before do
             allow(SecureRandom).to receive(:uuid).and_return(static_uuid)
             # record the JTI as used
-            get(:oembed_retrieve, params: params)
+            get(:oembed_retrieve, params:)
           end
 
           it { is_expected.to be_unauthorized }

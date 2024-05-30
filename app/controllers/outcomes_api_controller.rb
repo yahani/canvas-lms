@@ -82,6 +82,7 @@
 #           "type": "string",
 #           "allowableValues": {
 #             "values": [
+#               "weighted_average",
 #               "decaying_average",
 #               "n_mastery",
 #               "latest",
@@ -164,6 +165,7 @@
 class OutcomesApiController < ApplicationController
   include Api::V1::Outcome
   include Outcomes::Enrollments
+  include CanvasOutcomesHelper
 
   before_action :require_user
   before_action :get_outcome, except: :outcome_alignments
@@ -172,6 +174,11 @@ class OutcomesApiController < ApplicationController
   # @API Show an outcome
   #
   # Returns the details of the outcome with the given id.
+  #
+  # @argument add_defaults [Boolean]
+  #   If defaults are requested, then color and mastery level defaults will be
+  #   added to outcome ratings in the result. This will only take effect if
+  #   the Account Level Mastery Scales FF is DISABLED
   #
   # @returns Outcome
   #
@@ -219,11 +226,19 @@ class OutcomesApiController < ApplicationController
   #   The points corresponding to a new rating level for the embedded rubric
   #   criterion.
   #
-  # @argument calculation_method [String, "decaying_average"|"n_mastery"|"latest"|"highest"|"average"]
-  #   The new calculation method.
+  # @argument calculation_method [String, "weighted_average"|"decaying_average"|"n_mastery"|"latest"|"highest"|"average"]
+  #   The new calculation method. If the
+  #   Outcomes New Decaying Average Calculation Method FF is ENABLED
+  #   then "weighted_average" can be used and it is same as previous "decaying_average"
+  #   and new "decaying_average" will have improved version of calculation.
   #
   # @argument calculation_int [Integer]
   #   The new calculation int.  Only applies if the calculation_method is "decaying_average" or "n_mastery"
+  #
+  # @argument add_defaults [Boolean]
+  #   If defaults are requested, then color and mastery level defaults will be
+  #   added to outcome ratings in the result. This will only take effect if
+  #   the Account Level Mastery Scales FF is DISABLED
   #
   # @returns Outcome
   #
@@ -292,6 +307,72 @@ class OutcomesApiController < ApplicationController
     end
   end
 
+  def add_alignment(course, assignment, outcome_id, associated_asset_id)
+    {
+      learning_outcome_id: outcome_id,
+      title: assignment.title,
+      assignment_id: associated_asset_id,
+      submission_types: assignment.submission_types,
+      url: "#{polymorphic_url([course, :assignments])}/#{associated_asset_id}"
+    }
+  end
+
+  def find_outcomes_service_assignment_alignments(course, student_id)
+    outcomes = ContentTag.active.where(context:).learning_outcome_links
+    student_uuid = User.find(student_id).uuid
+    assignments = Assignment.active.where(context:).quiz_lti
+    return if assignments.nil? || outcomes.nil?
+
+    os_alignments = get_outcome_alignments(context, outcomes.pluck(:content_id).join(","), { includes: "alignments", list_groups: false })
+    os_results = get_lmgb_results(context, assignments.pluck(:id).join(","), "canvas.assignment.quizzes", outcomes.pluck(:content_id).join(","), student_uuid)
+
+    # collecting known alignments from results to fill in if asset information
+    # is missing from get_outcome_alignments using a composite key of
+    # outcomeId_artifactId_artifactType
+    os_alignments_from_results = {}
+    os_results&.each do |r|
+      next if r[:associated_asset_id].nil?
+
+      # using latest attempt to find the aligning question & quiz metadata
+      attempt = r[:attempts]&.max_by { |a| a[:submitted_at] || a[:created_at] }
+      next if attempt.nil? || attempt[:metadata].blank?
+
+      # capturing artifact alignment
+      os_alignments_from_results["#{r[:external_outcome_id]}_#{r[:artifact_id]}_#{r[:artifact_type]}"] = r
+
+      # capturing question alignment(s)
+      question_metadata = attempt[:metadata][:question_metadata]
+      next if question_metadata.blank?
+
+      question_metadata&.each do |question|
+        os_alignments_from_results["#{r[:external_outcome_id]}_#{question[:quiz_item_id]}_quizzes.item"] = r
+      end
+    end
+
+    outcome_assignment_alignments = []
+    os_alignments&.each do |o|
+      next if o[:alignments].nil?
+
+      o[:alignments].each do |a|
+        # for those artifacts that do not have associated_asset_id (aka Canvas assignment id)
+        # populated, try looking for in the lmgb results from outcome service
+        if a[:associated_asset_id].nil? && os_alignments_from_results.present?
+          alignment_from_results = os_alignments_from_results["#{o[:external_id]}_#{a[:artifact_id]}_#{a[:artifact_type]}"]
+          next if alignment_from_results.nil?
+
+          assignment = assignments.find_by(id: alignment_from_results[:associated_asset_id])
+          outcome_assignment_alignments.push(add_alignment(course, assignment, o[:external_id], alignment_from_results[:associated_asset_id]))
+        else
+          assignment = assignments.find_by(id: a[:associated_asset_id])
+          next if assignment.nil?
+
+          outcome_assignment_alignments.push(add_alignment(course, assignment, o[:external_id], a[:associated_asset_id]))
+        end
+      end
+    end
+    outcome_assignment_alignments.uniq
+  end
+
   # @API Get aligned assignments for an outcome in a course for a particular student
   #
   # @argument course_id [Integer]
@@ -355,7 +436,12 @@ class OutcomesApiController < ApplicationController
           }
         end
       end.flatten
-      alignments.concat(quiz_alignments, magic_marker_alignments)
+
+      # find_outcomes_service_assignment_alignments
+      # Returns outcome service aligned assignments for a given course
+      # if the outcome_service_results_to_canvas FF is enabled
+      os_alignments = find_outcomes_service_assignment_alignments(course, student_id)
+      alignments.concat(quiz_alignments, magic_marker_alignments, os_alignments)
 
       render json: alignments
     else

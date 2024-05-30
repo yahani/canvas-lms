@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-shadow */
 /*
  * Copyright (C) 2011 - present Instructure, Inc.
  *
@@ -26,25 +27,19 @@ const I18n = useI18nScope('license_help')
 
 const licenceTypes = ['by', 'nc', 'nd', 'sa']
 const toggleButton = (el, check) =>
-  $(el)
-    .toggleClass('selected', !!check)
-    .attr('aria-checked', !!check)
+  $(el).toggleClass('selected', !!check).attr('aria-checked', !!check)
 const checkButton = el => toggleButton(el, true)
 const uncheckButton = el => toggleButton(el, false)
 
-$('.license_help_link').live('click', function(event) {
+$(document).on('click', '.license_help_link', function (event) {
   event.preventDefault()
   let $dialog = $('#license_help_dialog')
   const $select = $(this).prev('select')
   if (!$dialog.length) {
     $dialog = $('<div/>')
-    $dialog
-      .attr('id', 'license_help_dialog')
-      .hide()
-      .loadingImage()
-      .appendTo('body')
+    $dialog.attr('id', 'license_help_dialog').hide().loadingImage().appendTo('body')
 
-    $dialog.delegate('.option', 'click', function(event) {
+    $dialog.on('click', '.option', function (event) {
       event.preventDefault()
       const select = !$(this).is('.selected')
       toggleButton(this, select)
@@ -61,7 +56,7 @@ $('.license_help_link').live('click', function(event) {
       $dialog.triggerHandler('option_change')
     })
 
-    $dialog.delegate('.select_license', 'click', () => {
+    $dialog.on('click', '.select_license', () => {
       if ($dialog.data('select')) {
         $dialog.data('select').val($dialog.data('current_license') || 'private')
       }
@@ -69,11 +64,7 @@ $('.license_help_link').live('click', function(event) {
     })
 
     $dialog.bind('license_change', (event, license) => {
-      $dialog
-        .find('.license')
-        .removeClass('active')
-        .filter(`.${license}`)
-        .addClass('active')
+      $dialog.find('.license').removeClass('active').filter(`.${license}`).addClass('active')
       uncheckButton($dialog.find('.option'))
       if ($dialog.find('.license.active').length === 0) {
         license = 'private'
@@ -104,7 +95,9 @@ $('.license_help_link').live('click', function(event) {
     $dialog.dialog({
       autoOpen: false,
       title: I18n.t('content_license_help', 'Content Licensing Help'),
-      width: Math.min(window.innerWidth, 620)
+      width: Math.min(window.innerWidth, 620),
+      modal: true,
+      zIndex: 1000,
     })
     $.get('/partials/_license_help.html', html =>
       $dialog

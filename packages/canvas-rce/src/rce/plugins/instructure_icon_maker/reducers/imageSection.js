@@ -27,13 +27,16 @@ export const initialState = {
   collectionOpen: false,
   loading: false,
   error: undefined,
-  cropperSettings: null
+  cropperOpen: false,
+  cropperSettings: null,
+  compressed: false,
 }
 
 export const actions = {
   RESET_ALL: {type: 'ResetAll'},
   SET_IMAGE: {type: 'SetImage'},
   SET_IMAGE_NAME: {type: 'SetImageName'},
+  SET_COMPRESSION_STATUS: {type: 'SetCompressionStatus'},
   CLEAR_IMAGE: {type: 'ClearImage'},
   SET_ICON: {type: 'SetIcon'},
   SET_ICON_FILL_COLOR: {type: 'SetIconFillColor'},
@@ -42,14 +45,15 @@ export const actions = {
   STOP_LOADING: {type: 'StopLoading'},
   CLEAR_MODE: {type: 'ClearMode'},
   UPDATE_SETTINGS: {type: 'UpdateSettings'},
-  SET_CROPPER_SETTINGS: {type: 'SetCropperSettings'}
+  SET_CROPPER_OPEN: {type: 'SetCropperOpen'},
+  SET_CROPPER_SETTINGS: {type: 'SetCropperSettings'},
 }
 
 export const modes = {
   courseImages: {type: 'Course', label: formatMessage('Course Images')},
   uploadImages: {type: 'Upload', label: formatMessage('Upload Image')},
   singleColorImages: {type: 'SingleColor', label: formatMessage('Single Color Image')},
-  multiColorImages: {type: 'MultiColor', label: formatMessage('Multi Color Image')}
+  multiColorImages: {type: 'MultiColor', label: formatMessage('Multi Color Image')},
 }
 
 const imageSection = (state, action) => {
@@ -62,8 +66,10 @@ const imageSection = (state, action) => {
       return {...state, image: action.payload}
     case actions.SET_IMAGE_NAME.type:
       return {...state, imageName: action.payload}
+    case actions.SET_COMPRESSION_STATUS.type:
+      return {...state, compressed: action.payload}
     case actions.CLEAR_IMAGE.type:
-      return {...state, image: '', imageName: ''}
+      return {...state, image: '', imageName: '', compressed: false}
     case actions.SET_ICON.type:
       return {...state, icon: action.payload}
     case actions.SET_ICON_FILL_COLOR.type:
@@ -84,6 +90,8 @@ const imageSection = (state, action) => {
       return {...state, mode: modes.courseImages.type}
     case actions.UPDATE_SETTINGS.type:
       return {...state, ...action.payload}
+    case actions.SET_CROPPER_OPEN.type:
+      return {...state, cropperOpen: action.payload}
     case actions.SET_CROPPER_SETTINGS.type:
       return {...state, cropperSettings: action.payload}
     default:

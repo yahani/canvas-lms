@@ -16,12 +16,16 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+def getFuzzyTagSuffix() {
+  return "fuzzy-${env.IMAGE_CACHE_MERGE_SCOPE}"
+}
+
 def getRailsLoadAllLocales() {
-  return configuration.isChangeMerged() ? 1 : (configuration.getBoolean('rails-load-all-locales', 'false') ? 1 : 0)
+  return configuration.isChangeMerged() ? 1 : commitMessageFlag('rails-load-all-locales').asBooleanInteger()
 }
 
 def handleDockerBuildFailure(imagePrefix, e) {
-  if (configuration.isChangeMerged() || configuration.getBoolean('upload-docker-image-failures', 'false')) {
+  if (configuration.isChangeMerged() || commitMessageFlag('upload-docker-image-failures') as Boolean) {
     // DEBUG: In some cases, such as the the image build failing only on Jenkins, it can be useful to be able to
     // download the last successful layer to debug locally. If we ever start using buildkit for the relevant
     // images, then this approach will have to change as buildkit doesn't save the intermediate layers as images.
@@ -91,7 +95,6 @@ def jsImage() {
         "CACHE_LOAD_SCOPE=${env.IMAGE_CACHE_MERGE_SCOPE}",
         "CACHE_LOAD_FALLBACK_SCOPE=${env.IMAGE_CACHE_BUILD_SCOPE}",
         "CACHE_SAVE_SCOPE=${cacheScope}",
-        "KARMA_BUILDER_PREFIX=${env.KARMA_BUILDER_PREFIX}",
         "PATCHSET_TAG=${env.PATCHSET_TAG}",
         "RAILS_LOAD_ALL_LOCALES=${getRailsLoadAllLocales()}",
         "WEBPACK_BUILDER_IMAGE=${env.WEBPACK_BUILDER_IMAGE}",
@@ -102,7 +105,6 @@ def jsImage() {
 
       sh """
         ./build/new-jenkins/docker-with-flakey-network-protection.sh push $KARMA_RUNNER_IMAGE
-        ./build/new-jenkins/docker-with-flakey-network-protection.sh push -a $KARMA_BUILDER_PREFIX
       """
     } catch (e) {
       handleDockerBuildFailure(KARMA_RUNNER_IMAGE, e)
@@ -117,6 +119,20 @@ def lintersImage() {
   }
 }
 
+def preloadCacheImagesAsync() {
+  // Start loading webpack-assets immediately in case this build will re-use it.
+  libraryScript.load('bash/docker-with-flakey-network-protection.sh', '/tmp/docker-with-flakey-network-protection.sh')
+
+  sh """#!/bin/bash
+    /tmp/docker-with-flakey-network-protection.sh pull starlord.inscloudgate.net/jenkins/dockerfile:1.5.2 &
+    {
+      /tmp/docker-with-flakey-network-protection.sh pull ${env.WEBPACK_ASSETS_PREFIX}:${getFuzzyTagSuffix()}
+      /tmp/docker-with-flakey-network-protection.sh pull ${env.WEBPACK_BUILDER_PREFIX}:${getFuzzyTagSuffix()}
+    } &
+    /tmp/docker-with-flakey-network-protection.sh pull ${env.WEBPACK_CACHE_PREFIX}:${getFuzzyTagSuffix()} &
+  """
+}
+
 def premergeCacheImage() {
   credentials.withStarlordCredentials {
     withEnv([
@@ -126,12 +142,17 @@ def premergeCacheImage() {
       "CACHE_SAVE_SCOPE=${env.IMAGE_CACHE_MERGE_SCOPE}",
       'COMPILE_ADDITIONAL_ASSETS=0',
       "CRYSTALBALL_MAP=${env.CRYSTALBALL_MAP}",
-      'JS_BUILD_NO_UGLIFY=1',
+      'SKIP_SOURCEMAPS=0',
       'RAILS_LOAD_ALL_LOCALES=0',
       "RUBY_RUNNER_PREFIX=${env.RUBY_RUNNER_PREFIX}",
       "WEBPACK_BUILDER_PREFIX=${env.WEBPACK_BUILDER_PREFIX}",
-      "WEBPACK_CACHE_PREFIX=${env.WEBPACK_CACHE_PREFIX}",
+      "WEBPACK_ASSETS_FUZZY_SAVE_TAG=${env.WEBPACK_ASSETS_PREFIX}:${getFuzzyTagSuffix()}",
+      "WEBPACK_ASSETS_PREFIX=${env.WEBPACK_ASSETS_PREFIX}",
+      "WEBPACK_BUILDER_FUZZY_SAVE_TAG=${env.WEBPACK_BUILDER_PREFIX}:${getFuzzyTagSuffix()}",
+      "WEBPACK_CACHE_FUZZY_SAVE_TAG=${env.WEBPACK_CACHE_PREFIX}:${getFuzzyTagSuffix()}",
       "YARN_RUNNER_PREFIX=${env.YARN_RUNNER_PREFIX}",
+      "READ_BUILD_CACHE=0",
+      "WRITE_BUILD_CACHE=1",
     ]) {
       slackSendCacheBuild {
         try {
@@ -148,15 +169,19 @@ def premergeCacheImage() {
         ./build/new-jenkins/docker-with-flakey-network-protection.sh push -a $YARN_RUNNER_PREFIX || true
         ./build/new-jenkins/docker-with-flakey-network-protection.sh push -a $RUBY_RUNNER_PREFIX || true
         ./build/new-jenkins/docker-with-flakey-network-protection.sh push -a $BASE_RUNNER_PREFIX || true
-        ./build/new-jenkins/docker-with-flakey-network-protection.sh push -a $WEBPACK_CACHE_PREFIX
+        ./build/new-jenkins/docker-with-flakey-network-protection.sh push -a $WEBPACK_ASSETS_PREFIX
+        ./build/new-jenkins/docker-with-flakey-network-protection.sh push -a $WEBPACK_CACHE_PREFIX || true
       """, label: 'upload cache images')
     }
   }
 }
 
-def patchsetImage() {
+def patchsetImage(asyncStepsStr = '', platformSuffix = '') {
   credentials.withStarlordCredentials {
     def cacheScope = configuration.isChangeMerged() ? env.IMAGE_CACHE_MERGE_SCOPE : env.IMAGE_CACHE_BUILD_SCOPE
+    def readBuildCache = configuration.isChangeMerged() ? 0 : 1
+    def webpackAssetsFuzzyTag = configuration.isChangeMerged() ? "" : "${env.WEBPACK_ASSETS_PREFIX}:${getFuzzyTagSuffix()}"
+    def webpackCacheFuzzyTag = configuration.isChangeMerged() ? "" : "${env.WEBPACK_CACHE_PREFIX}:${getFuzzyTagSuffix()}"
 
     slackSendCacheBuild {
       withEnv([
@@ -167,26 +192,37 @@ def patchsetImage() {
         "CACHE_UNIQUE_SCOPE=${env.IMAGE_CACHE_UNIQUE_SCOPE}",
         "COMPILE_ADDITIONAL_ASSETS=${configuration.isChangeMerged() ? 1 : 0}",
         "CRYSTALBALL_MAP=${env.CRYSTALBALL_MAP}",
-        "JS_BUILD_NO_UGLIFY=${configuration.isChangeMerged() ? 0 : 1}",
+        "SKIP_SOURCEMAPS=0",
+        "PLATFORM_SUFFIX=${platformSuffix}",
         "RAILS_LOAD_ALL_LOCALES=${getRailsLoadAllLocales()}",
         "RUBY_RUNNER_PREFIX=${env.RUBY_RUNNER_PREFIX}",
         "WEBPACK_BUILDER_PREFIX=${env.WEBPACK_BUILDER_PREFIX}",
-        "WEBPACK_CACHE_PREFIX=${env.WEBPACK_CACHE_PREFIX}",
+        "WEBPACK_ASSETS_FUZZY_LOAD_TAG=${webpackAssetsFuzzyTag}",
+        "WEBPACK_ASSETS_PREFIX=${env.WEBPACK_ASSETS_PREFIX}",
+        "WEBPACK_CACHE_FUZZY_LOAD_TAG=${webpackCacheFuzzyTag}",
         "YARN_RUNNER_PREFIX=${env.YARN_RUNNER_PREFIX}",
+        "READ_BUILD_CACHE=${readBuildCache}",
+        "WRITE_BUILD_CACHE=0",
       ]) {
         try {
-          sh "build/new-jenkins/docker-build.sh $PATCHSET_TAG"
+          sh """#!/bin/bash
+          set -ex
+
+          build/new-jenkins/docker-build.sh $PATCHSET_TAG$platformSuffix
+
+           $asyncStepsStr
+          """
         } catch (e) {
-          handleDockerBuildFailure(PATCHSET_TAG, e)
+          handleDockerBuildFailure("$PATCHSET_TAG$platformSuffix", e)
         }
       }
     }
 
-    sh "./build/new-jenkins/docker-with-flakey-network-protection.sh push $PATCHSET_TAG"
+    sh "./build/new-jenkins/docker-with-flakey-network-protection.sh push $PATCHSET_TAG$platformSuffix"
 
     if (configuration.isChangeMerged()) {
       final GIT_REV = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
-      sh "docker tag \$PATCHSET_TAG \$BUILD_IMAGE:${GIT_REV}"
+      sh "docker tag $PATCHSET_TAG$platformSuffix \$BUILD_IMAGE:${GIT_REV}"
 
       sh "./build/new-jenkins/docker-with-flakey-network-protection.sh push \$BUILD_IMAGE:${GIT_REV}"
     }
@@ -196,12 +232,12 @@ def patchsetImage() {
       ./build/new-jenkins/docker-with-flakey-network-protection.sh push -a $YARN_RUNNER_PREFIX || true
       ./build/new-jenkins/docker-with-flakey-network-protection.sh push -a $RUBY_RUNNER_PREFIX || true
       ./build/new-jenkins/docker-with-flakey-network-protection.sh push -a $BASE_RUNNER_PREFIX || true
-      ./build/new-jenkins/docker-with-flakey-network-protection.sh push -a $WEBPACK_CACHE_PREFIX
+      ./build/new-jenkins/docker-with-flakey-network-protection.sh push -a $WEBPACK_ASSETS_PREFIX
     """, label: 'upload cache images')
   }
 }
 
-def i18nGenerate() {
+def i18nExtract() {
   def dest = 's3://instructure-translations/sources/canvas-lms/en/en.yml'
   def roleARN = 'arn:aws:iam::307761260553:role/translations-jenkins'
 
@@ -215,7 +251,7 @@ def i18nGenerate() {
         -e COMPILE_ASSETS_BRAND_CONFIGS=0 \
         -e COMPILE_ASSETS_BUILD_JS=0 \
         $PATCHSET_TAG \
-          bundle exec rake canvas:compile_assets i18n:generate
+          bundle exec rake canvas:compile_assets i18n:extract
     """
   )
 

@@ -46,7 +46,7 @@ export default class BaseUploader {
       on_duplicate: this.options.dup || 'rename',
       parent_folder_id: this.folder.id,
       no_redirect: true,
-      category: this.options.category
+      category: this.options.category,
     }
   }
 
@@ -71,7 +71,7 @@ export default class BaseUploader {
       method: 'POST',
       data: this.createPreFlightParams(),
       responseType: 'json',
-      cancelToken: this._cancelToken
+      cancelToken: this._cancelToken,
     })
       .then(this.onPreflightComplete)
       .catch(failReason => {
@@ -93,14 +93,15 @@ export default class BaseUploader {
       ajaxLib: axios,
       onProgress: this.trackProgress,
       ajaxLibOptions: {
-        cancelToken: this._cancelToken
-      }
+        cancelToken: this._cancelToken,
+      },
     }).then(this.onUploadPosted)
   }
 
   // be careful if you ever need to change this implementation there
   // is other code that replaces BaseUploader.prototype.onUploadPosted
-  onUploadPosted() {}
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  onUploadPosted(attachment) {}
 
   onUploadCancelled(_file) {
     this.inFlight = false

@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -17,18 +18,20 @@
  */
 
 import {useScope as useI18nScope} from '@canvas/i18n'
-import '@canvas/jquery/jquery.instructure_misc_helpers' // $.toSentence
+import type Gradebook from '../../Gradebook'
 import {
   getSecondaryDisplayInfo,
   getEnrollmentLabel,
   getOptions,
-  renderCell
+  renderCell,
 } from './StudentCellFormatter.utils'
 
 const I18n = useI18nScope('gradebook')
 
 export default class StudentLastNameCellFormatter {
-  constructor(gradebook) {
+  options: ReturnType<typeof getOptions>
+
+  constructor(gradebook: Gradebook) {
     this.options = getOptions(gradebook)
   }
 
@@ -45,7 +48,7 @@ export default class StudentLastNameCellFormatter {
       enrollmentLabel: getEnrollmentLabel(student),
       secondaryInfo: getSecondaryDisplayInfo(student, secondaryInfo, this.options),
       studentId: student.id,
-      url: `${student.enrollments[0].grades.html_url}#tab-assignments`
+      url: `${student.enrollments[0].grades.html_url}#tab-assignments`,
     }
 
     return renderCell(options)

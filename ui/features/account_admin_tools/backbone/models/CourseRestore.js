@@ -18,7 +18,7 @@
 import Backbone from '@canvas/backbone'
 import $ from 'jquery'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import '@canvas/jquery/jquery.instructure_forms'
 
 const I18n = useI18nScope('course_restore')
 
@@ -45,10 +45,9 @@ export default class CourseRestore extends Backbone.Model {
         const account_id = this.get('account_id')
         this.clear({silent: true})
         this.set('account_id', account_id, {silent: true})
-        const message = $.parseJSON(response.responseText)
         this.set(response)
         return model.trigger('doneSearching')
-      }
+      },
     })
   }
 
@@ -76,15 +75,18 @@ export default class CourseRestore extends Backbone.Model {
     const setTakingTooLong = () => (takingTooLong = true)
     setTimeout(setTakingTooLong, 60000)
 
+    let restoreError
+    let restoreSuccess
+
     const ajaxRequest = (url, method = 'GET') =>
       $.ajax({
         url,
         type: method,
         success: restoreSuccess,
-        error: restoreError
+        error: restoreError,
       })
 
-    var restoreError = (response = {}) => {
+    restoreError = (_response = {}) => {
       $.flashError(
         I18n.t(
           'restore_error',
@@ -94,7 +96,7 @@ export default class CourseRestore extends Backbone.Model {
       return deferred.reject()
     }
 
-    var restoreSuccess = response => {
+    restoreSuccess = response => {
       if (takingTooLong) {
         return restoreError()
       }

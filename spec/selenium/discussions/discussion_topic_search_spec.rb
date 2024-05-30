@@ -24,6 +24,9 @@ describe "Discussion Topic Search" do
   context "when Discussions Redesign feature flag is ON" do
     before :once do
       Account.default.enable_feature!(:react_discussions_post)
+    end
+
+    before do
       course_with_teacher(active_course: true, active_all: true, name: "teacher")
       @topic_title = "Our Discussion Topic"
       @topic = @course.discussion_topics.create!(
@@ -48,11 +51,62 @@ describe "Discussion Topic Search" do
       user_session(student)
       get "/courses/#{@course.id}/discussion_topics/#{@topic.id}"
       f("input[placeholder='Search entries or author...']").send_keys("bar")
-      # rubocop:disable Lint/NoSleep
-      sleep(5) # Selenium cannot catch the frontend interval to run the automark as read mutation
-      # rubocop:enable Lint/NoSleep
+      wait_for_ajaximations
+      wait_for(method: nil, timeout: 5) { fj("span:contains('bar')").displayed? }
       expect(fj("span:contains('bar')")).to be_present
       expect(f("#content")).not_to contain_jqcss("span:contains('foo')")
+    end
+
+    it "cannot search by entry author when partially_anonymous" do
+      @teacher.name = "Blue"
+      @teacher.save!
+
+      partial_anonymity_topic = @course.discussion_topics.create!(
+        title: "Partial Anonymity Topic",
+        user: @teacher,
+        anonymous_state: "partial_anonymity"
+      )
+
+      partial_anonymity_topic.discussion_entries.create!(
+        user: @teacher,
+        message: "Green",
+        is_anonymous_author: true
+      )
+
+      user_session(@teacher)
+      get "/courses/#{@course.id}/discussion_topics/#{partial_anonymity_topic.id}"
+      search_input = f("input[placeholder='Search entries...']")
+      search_input.send_keys("Blue")
+      wait_for(method: nil, timeout: 5) { fj("span:contains('No Results Found')").displayed? }
+      expect(fj("span:contains('No Results Found')")).to be_present
+      get "/courses/#{@course.id}/discussion_topics/#{partial_anonymity_topic.id}"
+      search_input = f("input[placeholder='Search entries...']")
+      search_input.send_keys("Green")
+      wait_for(method: nil, timeout: 5) { fj("span:contains('1 results found')").displayed? }
+      expect(fj("span:contains('1 result found')")).to be_present
+    end
+
+    it "preserves search term upon changing filter" do
+      @topic.discussion_entries.create!(
+        user: @teacher,
+        message: "foo bar"
+      )
+
+      student = student_in_course(course: @course, name: "Jeff", active_all: true).user
+      user_session(student)
+
+      get "/courses/#{@course.id}/discussion_topics/#{@topic.id}"
+      wait_for_ajaximations
+
+      f("input[placeholder='Search entries or author...']").send_keys("foo")
+      wait_for(method: nil, timeout: 5) { fj("span:contains('foo bar)").displayed? }
+      expect(fj("span:contains('foo bar')")).to be_present
+      f("span.discussions-filter-by-menu").click
+      wait_for_ajaximations
+      fj("li li:contains('Unread')").click
+      wait_for_ajaximations
+
+      expect(f("input[data-testid='search-filter']").attribute("value")).to eq "foo"
     end
 
     it "resets to page 1 upon clearing search term" do
@@ -94,6 +148,41 @@ describe "Discussion Topic Search" do
       expect(fj("h2:contains('#{@topic_title}')")).to be_present
       expect(fj("button[aria-current='page']:contains('1')")).to be_present
       expect(fj("span:contains('bar')")).to be_present
+    end
+
+    it "resets to page 1 upon changing filter" do
+      # 10 is needed so that they don't get all marked as read on initial view
+      (1..10).each do |number|
+        @topic.discussion_entries.create!(
+          user: @teacher,
+          message: "foo #{number}"
+        )
+      end
+
+      student = student_in_course(course: @course, name: "Jeff", active_all: true).user
+      user_session(student)
+
+      get "/courses/#{@course.id}/discussion_topics/#{@topic.id}"
+      # rubocop:disable Specs/NoExecuteScript
+      driver.execute_script("ENV.per_page = 1")
+      # rubocop:enable Specs/NoExecuteScript
+
+      wait_for_ajaximations
+
+      expect(fj("span:contains('foo 10')")).to be_present
+      expect(f("#content")).not_to contain_jqcss("span:contains('foo 9')")
+
+      fj("button:contains('2')").click
+      wait_for_ajaximations
+      expect(fj("span:contains('foo 9')")).to be_present
+      expect(fj("button[aria-current='page']:contains('2')")).to be_present
+
+      f("span.discussions-filter-by-menu").click
+      wait_for_ajaximations
+      fj("li li:contains('Unread')").click
+      wait_for_ajaximations
+
+      expect(fj("button[aria-current='page']:contains('1')")).to be_present
     end
   end
 end

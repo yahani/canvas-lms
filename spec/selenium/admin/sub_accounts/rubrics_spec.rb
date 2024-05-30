@@ -29,6 +29,7 @@ describe "sub account shared rubric specs" do
   let(:who_to_login) { "admin" }
 
   before do
+    Account.site_admin.disable_feature!(:enhanced_rubrics)
     course_with_admin_logged_in
   end
 
@@ -50,10 +51,5 @@ describe "sub account shared rubric specs" do
 
   it "rounds to an integer when splitting" do
     should_round_to_an_integer_when_splitting
-  end
-
-  it "picks the lower value when splitting without room for an integer" do
-    skip("fragile - need to refactor split_ratings method")
-    should_pick_the_lower_value_when_splitting_without_room_for_an_integer
   end
 end

@@ -20,20 +20,20 @@ export function videoFromTray() {
   return {
     class: 'instructure_file_link', // if from tray
     content_type: 'video/quicktime',
-    embedded_iframe_url: '/media_objects_iframe/17',
+    embedded_iframe_url: 'https://mycanvas.com:3000/media_objects_iframe/17',
     href: '/media_objects_iframe/17',
     id: 17,
     target: '_blank',
-    title: 'filename.mov'
+    title: 'filename.mov',
   }
 }
 export function videoFromUpload() {
   return {
     id: 'maybe',
-    embedded_iframe_url: '/url/to/m-media-id',
+    embedded_iframe_url: 'https://mycanvas.com:3000/url/to/m-media-id',
     media_id: 'm-media-id',
     title: 'filename.mov',
-    type: 'video'
+    type: 'video',
   }
 }
 
@@ -41,18 +41,18 @@ export function audioFromTray() {
   return {
     class: 'instructure_file_link',
     content_type: 'audio/mp3',
-    href: 'url/to/course/file',
+    href: '/url/to/course/file',
     id: 29,
     target: '_blank',
-    text: 'filename.mp3'
+    text: 'filename.mp3',
   }
 }
 export function audioFromUpload() {
   return {
     id: 'maybe',
-    embedded_iframe_url: '/url/to/m-media-id',
+    embedded_iframe_url: 'https://mycanvas.com:3000/url/to/m-media-id',
     media_id: 'm-media-id',
     title: 'filename.mp3',
-    type: 'audio'
+    type: 'audio',
   }
 }

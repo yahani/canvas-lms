@@ -190,7 +190,7 @@ describe "quizzes" do
 
       it "shows a warning for groups picking too many questions from a bank", priority: "2" do
         bank = @course.assessment_question_banks.create!
-        assessment_question_model(bank: bank)
+        assessment_question_model(bank:)
 
         get "/courses/#{@course.id}/quizzes"
         click_new_quiz_button
@@ -316,7 +316,8 @@ describe "quizzes" do
                                             "question_type" => "multiple_choice_question",
                                             "answers" => answers,
                                             :points_possible => 1
-                                          }, assessment_question: a)
+                                          },
+                                          assessment_question: a)
 
       q.generate_quiz_data
       q.time_limit = 10
@@ -339,7 +340,7 @@ describe "quizzes" do
 
       quiz_original_end_time = Quizzes::QuizSubmission.last.end_at
       submission = Quizzes::QuizSubmission.last
-      submission.end_at = Time.zone.now + 20.minutes
+      submission.end_at = 20.minutes.from_now
       submission.save!
       expect(quiz_original_end_time).to be < Quizzes::QuizSubmission.last.end_at
 
@@ -362,7 +363,7 @@ describe "quizzes" do
 
     def file_upload_submission_data
       @quiz.reload.quiz_submissions.first
-           .submission_data["question_#{@question.id}".to_sym]
+           .submission_data[:"question_#{@question.id}"]
     end
 
     def file_upload_attachment
@@ -382,7 +383,8 @@ describe "quizzes" do
                                              "question_text" => "file upload question maaaan",
                                              "answers" => answers,
                                              :points_possible => 1
-                                           }, assessment_question: a)
+                                           },
+                                           assessment_question: a)
       q.generate_quiz_data
       q.save!
       _filename, @fullpath, _data = get_file "testfile1.txt"
@@ -444,9 +446,17 @@ describe "quizzes" do
 
       it "shows the course pacing notice" do
         create_quiz_with_due_date
+        add_quiz_to_module
         get "/courses/#{@course.id}/quizzes/#{@quiz.id}"
         expect(f("[data-testid='CoursePacingNotice']")).to be_displayed
         expect(f("#content")).not_to contain_css("table.assignment_dates")
+      end
+
+      it "does not show course pacing notice if quiz is not a module item" do
+        create_quiz_with_due_date
+        get "/courses/#{@course.id}/quizzes/#{@quiz.id}"
+        expect(f("#content")).not_to contain_css("[data-testid='CoursePacingNotice']")
+        expect(f("table.assignment_dates")).to be_displayed
       end
     end
   end

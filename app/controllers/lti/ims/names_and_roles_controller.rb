@@ -331,11 +331,13 @@ module Lti::IMS
     end
 
     def find_memberships_page
-      { url: request.url }.reverse_merge(new_provider.find)
+      canonical_url = URI.parse(request.url)
+      canonical_url.host = context.root_account.environment_specific_domain
+      { url: canonical_url.to_s }.reverse_merge(new_provider.find)
     end
 
     def new_provider
-      Providers.const_get("#{context.class}MembershipsProvider").new(context, self, tool)
+      Providers.const_get(:"#{context.class}MembershipsProvider").new(context, self, tool)
     end
   end
 end

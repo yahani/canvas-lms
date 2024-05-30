@@ -76,11 +76,11 @@ describe "blueprint courses quizzes" do
 
   context "in the associated course" do
     before :once do
-      due_date = format_date_for_view(Time.zone.now - 1.month)
+      due_date = format_date_for_view(1.month.ago)
       @copy_from = course_factory(active_all: true)
       @template = MasterCourses::MasterTemplate.set_as_master_course(@copy_from)
       @original_quiz = @copy_from.quizzes.create!(title: "blah", description: "bloo", due_at: due_date)
-      @original_quiz.quiz_questions.create! question_data: question_data
+      @original_quiz.quiz_questions.create!(question_data:)
       @tag = @template.create_content_tag_for!(@original_quiz)
 
       course_with_teacher(active_all: true)
@@ -89,7 +89,7 @@ describe "blueprint courses quizzes" do
       @quiz_copy = @copy_to.quizzes.new(title: "blah", description: "bloo", due_at: due_date) # just create a copy directly instead of doing a real migration
       @quiz_copy.migration_id = @tag.migration_id
       @quiz_copy.save!
-      @quiz_copy.quiz_questions.create! question_data: question_data
+      @quiz_copy.quiz_questions.create!(question_data:)
       @quiz_copy.save!
     end
 
@@ -151,8 +151,8 @@ describe "blueprint courses quizzes" do
       get "/courses/#{@copy_to.id}/quizzes/#{@quiz_copy.id}/edit"
 
       # open the questions tab
-      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"]')
-      expect(f("#quiz_edit_wrapper #questions_tab").displayed?).to eq  true
+      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"] .ui-tabs-anchor')
+      expect(f("#quiz_edit_wrapper #questions_tab").displayed?).to be true
 
       # hover the question description and the edit/pencil link should not appear
       hover(f(".question_text"))
@@ -175,8 +175,8 @@ describe "blueprint courses quizzes" do
       get "/courses/#{@copy_to.id}/quizzes/#{@quiz_copy.id}/edit"
 
       # open the questions tab
-      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"]')
-      expect(f("#quiz_edit_wrapper #questions_tab").displayed?).to eq  true
+      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"] .ui-tabs-anchor')
+      expect(f("#quiz_edit_wrapper #questions_tab").displayed?).to be true
 
       # hover the question description and the edit/pencil link should not appear
       hover(f(".question_text"))
@@ -195,8 +195,8 @@ describe "blueprint courses quizzes" do
 
       get "/courses/#{@copy_to.id}/quizzes/#{@quiz_copy.id}/edit"
 
-      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"]')
-      expect(f("#quiz_edit_wrapper #questions_tab").displayed?).to eq  true
+      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"] .ui-tabs-anchor')
+      expect(f("#quiz_edit_wrapper #questions_tab").displayed?).to be true
 
       # questions can be edited but not deleted
       hover(f(".question_text"))
@@ -211,12 +211,12 @@ describe "blueprint courses quizzes" do
 
   context "question groups in associated course" do
     before :once do
-      due_date = format_date_for_view(Time.zone.now - 1.month)
+      due_date = format_date_for_view(1.month.ago)
       @copy_from = course_factory(active_all: true)
       @template = MasterCourses::MasterTemplate.set_as_master_course(@copy_from)
       @original_quiz = @copy_from.quizzes.create!(title: "blah", description: "bloo", due_at: due_date)
       original_group = @original_quiz.quiz_groups.create! name: "Eh", pick_count: 1, question_points: 10
-      original_group.quiz_questions.create! quiz: @original_quiz, question_data: question_data
+      original_group.quiz_questions.create!(quiz: @original_quiz, question_data:)
       @tag = @template.create_content_tag_for!(@original_quiz)
 
       course_with_teacher(active_all: true)
@@ -226,7 +226,7 @@ describe "blueprint courses quizzes" do
       @quiz_copy.migration_id = @tag.migration_id
       @quiz_copy.save!
       copy_group = @quiz_copy.quiz_groups.create! name: "Eh", pick_count: 1, question_points: 10
-      copy_group.quiz_questions.create! quiz: @quiz_copy, question_data: question_data
+      copy_group.quiz_questions.create! quiz: @quiz_copy, question_data:
     end
 
     before do
@@ -235,8 +235,8 @@ describe "blueprint courses quizzes" do
 
     it "allows editing/deleting the quiz group when nothing is locked" do
       get "/courses/#{@copy_to.id}/quizzes/#{@quiz_copy.id}/edit"
-      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"]')
-      expect(f("#quiz_edit_wrapper #questions_tab").displayed?).to eq  true
+      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"] .ui-tabs-anchor')
+      expect(f("#quiz_edit_wrapper #questions_tab").displayed?).to be true
 
       expect(f(".group_top")).to contain_css(".delete_group_link")
       f(".group_top .edit_group_link").click
@@ -248,8 +248,8 @@ describe "blueprint courses quizzes" do
       @tag.update(restrictions: { content: false, points: true, due_dates: true, availability_dates: true })
 
       get "/courses/#{@copy_to.id}/quizzes/#{@quiz_copy.id}/edit"
-      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"]')
-      expect(f("#quiz_edit_wrapper #questions_tab").displayed?).to eq  true
+      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"] .ui-tabs-anchor')
+      expect(f("#quiz_edit_wrapper #questions_tab").displayed?).to be true
 
       expect(f(".group_top")).not_to contain_css(".delete_group_link")
       f(".group_top .edit_group_link").click
@@ -261,8 +261,8 @@ describe "blueprint courses quizzes" do
       @tag.update(restrictions: { content: true, points: true, due_dates: true, availability_dates: true })
 
       get "/courses/#{@copy_to.id}/quizzes/#{@quiz_copy.id}/edit"
-      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"]')
-      expect(f("#quiz_edit_wrapper #questions_tab").displayed?).to eq  true
+      hover_and_click('#quiz_tabs_tab_list li[aria-controls="questions_tab"] .ui-tabs-anchor')
+      expect(f("#quiz_edit_wrapper #questions_tab").displayed?).to be true
 
       expect(f(".group_top")).not_to contain_css(".edit_group_link")
       expect(f(".group_top")).not_to contain_css(".delete_group_link")

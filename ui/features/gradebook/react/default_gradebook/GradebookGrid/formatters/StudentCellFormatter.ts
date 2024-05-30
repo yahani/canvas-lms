@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2017 - present Instructure, Inc.
  *
@@ -16,16 +17,18 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import '@canvas/jquery/jquery.instructure_misc_helpers' // $.toSentence
 import {
   getSecondaryDisplayInfo,
   getEnrollmentLabel,
   getOptions,
-  renderCell
+  renderCell,
 } from './StudentCellFormatter.utils'
+import type Gradebook from '../../Gradebook'
 
 export default class StudentCellFormatter {
-  constructor(gradebook) {
+  options: ReturnType<typeof getOptions>
+
+  constructor(gradebook: Gradebook) {
     this.options = getOptions(gradebook)
   }
 
@@ -43,7 +46,7 @@ export default class StudentCellFormatter {
       enrollmentLabel: getEnrollmentLabel(student),
       secondaryInfo: getSecondaryDisplayInfo(student, secondaryInfo, this.options),
       studentId: student.id,
-      url: `${student.enrollments[0].grades.html_url}#tab-assignments`
+      url: `${student.enrollments[0].grades.html_url}#tab-assignments`,
     }
 
     return renderCell(options)

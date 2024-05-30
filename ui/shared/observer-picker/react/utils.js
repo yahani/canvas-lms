@@ -24,7 +24,7 @@ export const parseObservedUsersList = users =>
     ? users.map(u => ({
         id: u.id,
         name: u.name,
-        avatarUrl: u.avatar_url
+        avatarUrl: u.avatar_url,
       }))
     : []
 
@@ -37,7 +37,7 @@ export const parseObservedUsersResponse = (enrollments, isOnlyObserver, currentU
           id: e.observed_user.id,
           name: e.observed_user.name,
           sortableName: e.observed_user.sortable_name,
-          avatarUrl: e.observed_user.avatar_url
+          avatarUrl: e.observed_user.avatar_url,
         })
       }
       return acc
@@ -47,11 +47,11 @@ export const parseObservedUsersResponse = (enrollments, isOnlyObserver, currentU
     users.unshift({
       id: currentUser.id,
       name: currentUser.display_name,
-      avatarUrl: currentUser.avatar_image_url
+      avatarUrl: currentUser.avatar_image_url,
     })
   }
   return users
 }
 
 export const fetchShowK5Dashboard = () =>
-  doFetchApi({path: `/api/v1/show_k5_dashboard`}).then(({json}) => json.show_k5_dashboard)
+  doFetchApi({path: `/api/v1/show_k5_dashboard`}).then(({json}) => json)

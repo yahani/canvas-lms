@@ -17,8 +17,17 @@
  */
 
 import React, {Suspense, useCallback, useEffect, useRef, useState} from 'react'
-import {arrayOf, bool, func, instanceOf, number, oneOfType, shape, string} from 'prop-types'
-import formatMessage from 'format-message'
+import {
+  arrayOf,
+  bool,
+  func,
+  instanceOf,
+  number,
+  oneOfType,
+  shape,
+  string,
+  element,
+} from 'prop-types'
 
 import {Billboard} from '@instructure/ui-billboard'
 import {Button} from '@instructure/ui-buttons'
@@ -32,6 +41,7 @@ import {Text} from '@instructure/ui-text'
 import {px} from '@instructure/ui-utils'
 import {MediaPlayer} from '@instructure/ui-media-player'
 import {TextInput} from '@instructure/ui-text-input'
+import formatMessage from './format-message'
 
 import LoadingIndicator from './shared/LoadingIndicator'
 import RocketSVG from './RocketSVG'
@@ -45,14 +55,15 @@ export default function ComputerPanel({
   accept,
   hasUploadedFile,
   label,
-  languages,
   liveRegion,
   setFile,
   setHasUploadedFile,
   theFile,
   uploadMediaTranslations,
   updateSubtitles,
-  bounds
+  userLocale,
+  bounds,
+  mountNode,
 }) {
   const {ADD_CLOSED_CAPTIONS_OR_SUBTITLES, LOADING_MEDIA} =
     uploadMediaTranslations.UploadMediaStrings
@@ -79,12 +90,14 @@ export default function ComputerPanel({
 
   const handlePlayerSize = useCallback(
     _event => {
+      if (previewPanelRef.current === null) return
+
       const player = previewPanelRef.current.querySelector('video')
       let boundingBox = {width, height}
       if (document.fullscreenElement || document.webkitFullscreenElement) {
         boundingBox = {
           width: window.innerWidth,
-          height: window.innerHeight
+          height: window.innerHeight,
         }
       }
       const sz = sizeMediaPlayer(player, theFile.type, boundingBox)
@@ -175,10 +188,11 @@ export default function ComputerPanel({
             {mediaTracksCheckbox && (
               <Suspense fallback={LoadingIndicator(LOADING_MEDIA)}>
                 <ClosedCaptionPanel
-                  languages={languages}
+                  userLocale={userLocale}
                   liveRegion={liveRegion}
                   uploadMediaTranslations={uploadMediaTranslations}
                   updateSubtitles={updateSubtitles}
+                  mountNode={mountNode}
                 />
               </Suspense>
             )}
@@ -205,7 +219,7 @@ export default function ComputerPanel({
           setMessages(msgs =>
             msgs.concat({
               text: uploadMediaTranslations.UploadMediaStrings.INVALID_FILE_TEXT,
-              type: 'error'
+              type: 'error',
             })
           )
         }}
@@ -226,12 +240,6 @@ ComputerPanel.propTypes = {
   accept: oneOfType([string, arrayOf(string)]),
   hasUploadedFile: bool,
   label: string.isRequired,
-  languages: arrayOf(
-    shape({
-      id: string,
-      label: string
-    })
-  ),
   liveRegion: func,
   setFile: func.isRequired,
   setHasUploadedFile: func.isRequired,
@@ -240,6 +248,8 @@ ComputerPanel.propTypes = {
   updateSubtitles: func.isRequired,
   bounds: shape({
     width: number.isRequired,
-    height: number.isRequired
-  })
+    height: number.isRequired,
+  }),
+  userLocale: string.isRequired,
+  mountNode: oneOfType([element, func]),
 }

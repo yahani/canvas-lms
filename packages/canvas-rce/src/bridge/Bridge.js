@@ -30,9 +30,10 @@ export default class Bridge {
     })
 
     this.trayProps = new WeakMap()
-    this._languages = []
+    this.userLocale = 'en'
     this._controller = {}
     this._uploadMediaTranslations = null
+    this._canvasOrigin = ''
   }
 
   get editorRendered() {
@@ -82,12 +83,12 @@ export default class Bridge {
     this._mediaServerUploader = new K5Uploader(session)
   }
 
-  get languages() {
-    return this._languages
+  get canvasOrigin() {
+    return this._canvasOrigin
   }
 
-  set languages(langs) {
-    this._languages = langs
+  set canvasOrigin(origin) {
+    this._canvasOrigin = origin
   }
 
   // we have to defer importing mediaTranslations until they are asked for
@@ -155,9 +156,9 @@ export default class Bridge {
       const {selection} = this.focusedEditor.props.tinymce.get(this.focusedEditor.props.textareaId)
       link.selectionDetails = {
         node: selection.getNode(),
-        range: selection.getRng()
+        range: selection.getRng(),
       }
-      if (!link.text) {
+      if (!link.text || link.text.trim().length === 0) {
         link.text = link.title || link.href
       }
       this.focusedEditor.insertLink(link)
@@ -183,8 +184,9 @@ export default class Bridge {
 
   insertImage(image) {
     if (this.focusedEditor) {
-      this.focusedEditor.insertImage(image)
+      const result = this.focusedEditor.insertImage(image)
       this.controller(this.focusedEditor.id)?.hideTray()
+      return result
     } else {
       console.warn('clicked sidebar image without a focused editor')
     }
@@ -192,7 +194,8 @@ export default class Bridge {
 
   insertImagePlaceholder(fileMetaProps) {
     if (this.focusedEditor) {
-      // don't insert a placeholder if the user has selected content
+      // don't insert a placeholder if the user has selected content, because in some cases the selected
+      // content will be used as the content of a link
       if (!this.existingContentToLink()) {
         this.focusedEditor.insertImagePlaceholder(fileMetaProps)
       }
@@ -211,7 +214,7 @@ export default class Bridge {
     if (this.focusedEditor) {
       this.focusedEditor.addAlert({
         text: err.toString(),
-        type: 'error'
+        type: 'error',
       })
     }
   }
@@ -221,7 +224,7 @@ export default class Bridge {
       this.insertLink({
         title: image.display_name,
         href: image.href,
-        embed: {type: 'image'}
+        embed: {type: 'image'},
       })
     } else {
       this.insertImage(image)

@@ -18,18 +18,19 @@
 
 import 'isomorphic-fetch'
 import {parse} from 'url'
-import {saveClosedCaptions} from '@instructure/canvas-media'
+import {
+  saveClosedCaptions,
+  saveClosedCaptionsForAttachment,
+  CONSTANTS,
+} from '@instructure/canvas-media'
 import {downloadToWrap, fixupFileUrl} from '../common/fileUrl'
-import formatMessage from '../format-message'
 import alertHandler from '../rce/alertHandler'
-import {RCS_MAX_BODY_SIZE, RCS_REQUEST_SIZE_BUFFER} from '../rce/plugins/shared/Upload/constants'
-import {DEFAULT_FILE_CATEGORY} from '../sidebar/containers/sidebarHandlers'
 import buildError from './buildError'
+import RCEGlobals from '../rce/RCEGlobals'
 
 export function headerFor(jwt) {
   return {Authorization: 'Bearer ' + jwt}
 }
-
 export function originFromHost(host, windowOverride) {
   let origin = host
 
@@ -66,7 +67,7 @@ function normalizeFileData(file) {
     display_name: file.name,
     ...file,
     // wrap the url
-    href: downloadToWrap(file.href || file.url)
+    href: downloadToWrap(file.href || file.url),
   }
 }
 
@@ -88,6 +89,7 @@ class RceApiSource {
     this.refreshToken = options.refreshToken || defaultRefreshTokenHandler
     this.hasSession = false
     this.alertFunc = options.alertFunc || alertHandler.handleAlert
+    this.canvasOrigin = options.canvasOrigin || window.origin
   }
 
   getSession() {
@@ -109,7 +111,7 @@ class RceApiSource {
       bookmark: this.uriFor(endpoint, props),
       isLoading: false,
       hasMore: true,
-      searchString: props.searchString
+      searchString: props.searchString,
     }
   }
 
@@ -117,7 +119,7 @@ class RceApiSource {
     return {
       uploading: false,
       folders: {},
-      formExpanded: false
+      formExpanded: false,
     }
   }
 
@@ -131,9 +133,9 @@ class RceApiSource {
         files: [],
         bookmark: null,
         isLoading: false,
-        hasMore: true
+        hasMore: true,
       },
-      searchString: ''
+      searchString: '',
     }
   }
 
@@ -145,7 +147,7 @@ class RceApiSource {
     return {
       searchResults: [],
       searching: false,
-      formExpanded: false
+      formExpanded: false,
     }
   }
 
@@ -173,7 +175,9 @@ class RceApiSource {
     return this.apiFetch(uri, headerFor(this.jwt)).then(({bookmark, files}) => {
       return {
         bookmark,
-        files: files.map(f => fixupFileUrl(props.contextType, props.contextId, f))
+        files: files.map(f =>
+          fixupFileUrl(props.contextType, props.contextId, f, this.canvasOrigin)
+        ),
       }
     })
   }
@@ -181,6 +185,18 @@ class RceApiSource {
   fetchMedia(props) {
     const media = props.media[props.contextType]
     const uri = media.bookmark || this.uriFor('media', props)
+
+    if (RCEGlobals.getFeatures()?.media_links_use_attachment_id) {
+      return this.apiFetch(uri, headerFor(this.jwt)).then(({bookmark, files}) => {
+        return {
+          bookmark,
+          files: files.map(f =>
+            fixupFileUrl(props.contextType, props.contextId, f, this.canvasOrigin)
+          ),
+        }
+      })
+    }
+
     return this.apiFetch(uri, headerFor(this.jwt))
   }
 
@@ -188,7 +204,7 @@ class RceApiSource {
     return this.fetchPage(uri).then(({bookmark, files}) => {
       return {
         bookmark,
-        files: files.map(normalizeFileData)
+        files: files.map(normalizeFileData),
       }
     })
   }
@@ -216,33 +232,42 @@ class RceApiSource {
           : 'video',
       context_code: mediaObject.contextCode,
       title: mediaObject.title,
-      user_entered_title: mediaObject.userTitle
+      user_entered_title: mediaObject.userTitle,
     }
 
     return this.apiPost(this.baseUri('media_objects'), headerFor(this.jwt), body)
   }
 
-  updateMediaObject(apiProps, {media_object_id, title}) {
-    const uri = `${this.baseUri(
-      'media_objects',
-      apiProps.host
-    )}/${media_object_id}?user_entered_title=${encodeURIComponent(title)}`
+  updateMediaObject(apiProps, {media_object_id, title, attachment_id}) {
+    const uri =
+      RCEGlobals.getFeatures()?.media_links_use_attachment_id && attachment_id
+        ? `${this.baseUri(
+            'media_attachments',
+            apiProps.host
+          )}/${attachment_id}?user_entered_title=${encodeURIComponent(title)}`
+        : `${this.baseUri(
+            'media_objects',
+            apiProps.host
+          )}/${media_object_id}?user_entered_title=${encodeURIComponent(title)}`
     return this.apiPost(uri, headerFor(this.jwt), null, 'PUT')
   }
 
   // PUT to //RCS/api/media_objects/:mediaId/media_tracks [{locale, content}, ...]
   // receive back a 200 with the new subtitles, or a 4xx error
-  updateClosedCaptions(apiProps, {media_object_id, subtitles}, maxBytes) {
-    return saveClosedCaptions(
-      media_object_id,
-      subtitles,
-      {
-        origin: originFromHost(apiProps.host),
-        headers: headerFor(apiProps.jwt)
-      },
-      maxBytes || RCS_MAX_BODY_SIZE - RCS_REQUEST_SIZE_BUFFER
-    ).catch(e => {
-      console.error('Failed saving CC', e)
+  updateClosedCaptions(
+    apiProps,
+    {media_object_id, attachment_id, subtitles},
+    maxBytes = CONSTANTS.CC_FILE_MAX_BYTES
+  ) {
+    const rcsConfig = {
+      origin: originFromHost(apiProps.host),
+      headers: headerFor(apiProps.jwt),
+    }
+    const saveCaptions = attachment_id
+      ? saveClosedCaptionsForAttachment(attachment_id, subtitles, rcsConfig, maxBytes)
+      : saveClosedCaptions(media_object_id, subtitles, rcsConfig, maxBytes)
+
+    return saveCaptions.catch(e => {
       this.alertFunc(buildError({message: 'failed to save captions'}, e))
     })
   }
@@ -252,7 +277,7 @@ class RceApiSource {
   fetchClosedCaptions(_mediaId) {
     return Promise.resolve([
       {locale: 'af', content: '1\r\n00:00:00,000 --> 00:00:01,251\r\nThis is the content\r\n'},
-      {locale: 'es', content: '1\r\n00:00:00,000 --> 00:00:01,251\r\nThis is the content\r\n'}
+      {locale: 'es', content: '1\r\n00:00:00,000 --> 00:00:01,251\r\nThis is the content\r\n'},
     ])
   }
 
@@ -269,10 +294,13 @@ class RceApiSource {
 
     if (!bookmark) {
       const perPageQuery = props.perPage ? `per_page=${props.perPage}` : ''
-      const categoryQuery = `category=${DEFAULT_FILE_CATEGORY}`
-      uri = `${props.filesUrl}?${perPageQuery}&${categoryQuery}${getSearchParam(
-        props.searchString
-      )}`
+      const searchParam = getSearchParam(props.searchString)
+
+      uri = `${props.filesUrl}`
+      uri += perPageQuery ? `?${perPageQuery}` : ''
+      if (searchParam) {
+        uri += perPageQuery ? `${searchParam}` : `?${searchParam}`
+      }
 
       if (props.sortBy) {
         uri += `${getSortParams(props.sortBy.sort, props.sortBy.order)}`
@@ -292,7 +320,7 @@ class RceApiSource {
       contextId,
       contextType,
       host: this.host,
-      jwt: this.jwt
+      jwt: this.jwt,
     })
     return this.fetchPage(uri)
   }
@@ -319,8 +347,10 @@ class RceApiSource {
     return this.apiFetch(uri, headers).then(({bookmark, files}) => {
       return {
         bookmark,
-        files: files.map(f => fixupFileUrl(props.contextType, props.contextId, f)),
-        searchString: props.searchString
+        files: files.map(f =>
+          fixupFileUrl(props.contextType, props.contextId, f, this.canvasOrigin)
+        ),
+        searchString: props.searchString,
       }
     })
   }
@@ -334,7 +364,7 @@ class RceApiSource {
       file: fileProps,
       no_redirect: true,
       onDuplicate: apiProps.onDuplicate,
-      category: apiProps.category
+      category: apiProps.category,
     }
 
     return this.apiPost(uri, headers, body)
@@ -347,8 +377,13 @@ class RceApiSource {
     })
     data.append('file', fileDomObject)
     const fetchOptions = {method: 'POST', body: data}
-    if (!preflightProps.upload_params['x-amz-signature']) {
+
+    if (
+      !preflightProps.upload_params['x-amz-signature'] &&
+      !preflightProps.upload_url.includes('files_api')
+    ) {
       // _not_ an S3 upload, include the credentials in the upload POST
+      // local uploads can include crendentials for same-origin requests
       fetchOptions.credentials = 'include'
     }
     return fetch(preflightProps.upload_url, fetchOptions)
@@ -406,30 +441,17 @@ class RceApiSource {
     return this.apiFetch(uri, headers)
   }
 
-  searchUnsplash(term, page) {
-    const headers = headerFor(this.jwt)
-    const base = this.baseUri('unsplash/search')
-    const uri = `${base}?term=${encodeURIComponent(term)}&page=${page}&per_page=12`
-    return this.apiFetch(uri, headers)
-  }
-
-  pingbackUnsplash(id) {
-    const headers = headerFor(this.jwt)
-    const base = this.baseUri('unsplash/pingback')
-    const uri = `${base}?id=${id}`
-    return this.apiFetch(uri, headers, {skipParse: true})
-  }
-
   getFile(id, options = {}) {
     const headers = headerFor(this.jwt)
     const base = this.baseUri('file')
 
     // Valid query parameters for getFile
-    const {replacement_chain_context_type, replacement_chain_context_id} = options
+    const {replacement_chain_context_type, replacement_chain_context_id, include} = options
 
     const uri = this.addParamsIfPresent(`${base}/${id}`, {
       replacement_chain_context_type,
-      replacement_chain_context_id
+      replacement_chain_context_id,
+      include,
     })
 
     return this.apiFetch(uri, headers).then(normalizeFileData)
@@ -493,7 +515,7 @@ class RceApiSource {
     headers = {...headers, 'Content-Type': 'application/json'}
     const fetchOptions = {
       method,
-      headers
+      headers,
     }
     if (body) {
       fetchOptions.body = JSON.stringify(body)
@@ -517,9 +539,9 @@ class RceApiSource {
       .then(res => res.json())
       .catch(throwConnectionError)
       .catch(e =>
-        e.response.json().then(body => {
+        e.response.json().then(responseBody => {
           console.error(e) // eslint-disable-line no-console
-          this.alertFunc(buildError(body))
+          this.alertFunc(buildError(responseBody))
           throw e
         })
       )

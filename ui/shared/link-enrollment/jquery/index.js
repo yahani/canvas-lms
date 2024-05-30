@@ -19,18 +19,18 @@
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/forms/jquery/jquery.instructure_forms'/* formSubmit */
+import '@canvas/jquery/jquery.instructure_forms' /* formSubmit */
 import 'jqueryui/dialog'
-import '@canvas/jquery/jquery.instructure_misc_plugins'/* showIf */
+import '@canvas/jquery/jquery.instructure_misc_plugins' /* showIf */
 import '@canvas/util/templateData'
+
 const I18n = useI18nScope('link_enrollment')
 /* fillTemplateData */
 
 /* global link_enrollment */
-window.link_enrollment = (function() {
+window.link_enrollment = (function () {
   return {
     choose(user_name, enrollment_id, current_user_id, callback) {
-      const $user = $(this).parents('.user')
       const $dialog = $('#link_student_dialog')
       const user_data = {}
       user_data.short_name = user_name
@@ -49,22 +49,17 @@ window.link_enrollment = (function() {
           data => {
             for (const idx in data) {
               const user = data[idx]
-              var $option = $('<option/>')
+              const $option = $('<option/>')
               if (user.id && user.name) {
                 $option.val(user.id).text(user.name)
                 $dialog.find('.student_options').append($option)
               }
             }
-            var $option = $('<option/>')
+            const $option = $('<option/>')
             $option.val('none').text(I18n.t('options.no_link', '[ No Link ]'))
             $dialog.find('.student_options').append($option)
 
-            $dialog
-              .find('.loading_message')
-              .hide()
-              .end()
-              .find('.students_link')
-              .show()
+            $dialog.find('.loading_message').hide().end().find('.students_link').show()
 
             link_enrollment.updateDialog($dialog, enrollment_id, current_user_id)
 
@@ -83,16 +78,15 @@ window.link_enrollment = (function() {
 
       $dialog.dialog({
         title: I18n.t('titles.link_to_student', 'Link to Student'),
-        width: 400
+        width: 400,
+        modal: true,
+        zIndex: 1000,
       })
     },
     updateDialog($dialog, enrollment_id, current_user_id) {
       $dialog.find('.enrollment_id').val(enrollment_id)
       $dialog.find('.existing_user').showIf(current_user_id)
-      $dialog
-        .find('.student_options')
-        .val('none')
-        .val(current_user_id)
+      $dialog.find('.student_options').val('none').val(current_user_id)
 
       const user_data = {}
       user_data.existing_user_name = $dialog
@@ -100,10 +94,10 @@ window.link_enrollment = (function() {
         .first()
         .text()
       $dialog.fillTemplateData({data: user_data})
-    }
+    },
   }
 })()
-$(document).ready(function() {
+$(document).ready(function () {
   $(document).bind('enrollment_added', () => {
     $('#link_student_dialog').data('loaded', false)
   })
@@ -111,10 +105,10 @@ $(document).ready(function() {
     $('#link_student_dialog').dialog('close')
   })
   $('#link_student_dialog_form').formSubmit({
-    beforeSubmit(data) {
+    beforeSubmit(_data) {
       $(this)
         .find('button')
-        .attr('disabled', true)
+        .prop('disabled', true)
         .end()
         .find('.save_button')
         .text(I18n.t('messages.linking_to_student', 'Linking to Student...'))
@@ -122,7 +116,7 @@ $(document).ready(function() {
     success(data) {
       $(this)
         .find('button')
-        .attr('disabled', false)
+        .prop('disabled', false)
         .end()
         .find('.save_button')
         .text(I18n.t('buttons.link', 'Link to Student'))
@@ -133,12 +127,12 @@ $(document).ready(function() {
         callback(enrollment)
       }
     },
-    error(data) {
+    error(_data) {
       $(this)
         .find('button')
-        .attr('disabled', false)
+        .prop('disabled', false)
         .find('.save_button')
         .text(I18n.t('errors.link_failed', 'Linking Failed, please try again'))
-    }
+    },
   })
 })

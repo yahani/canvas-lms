@@ -20,8 +20,6 @@
 module ConditionalRelease
   module Concerns
     module ApiToNestedAttributes
-      extend ActiveSupport::Concern
-
       ##
       # Transforms an input hash into a form acceptable to accepts_nested_attributes_for
       # and adds destroy requests for any associations not specified.
@@ -64,7 +62,7 @@ module ConditionalRelease
           updated_ids = collection_params.pluck(:id).map(&:to_i)
           ids_to_destroy = existing_ids - updated_ids
           ids_to_destroy.each do |id|
-            collection_params << { id: id, _destroy: true }
+            collection_params << { id:, _destroy: true }
           end
         end
 

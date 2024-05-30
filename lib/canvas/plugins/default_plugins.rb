@@ -19,7 +19,8 @@
 
 module Canvas::Plugins::DefaultPlugins
   def self.apply_all
-    Canvas::Plugin.register("apple", nil,
+    Canvas::Plugin.register("apple",
+                            nil,
                             name: "Sign in with Apple",
                             description: -> { t :description, "Sign in With Apple" },
                             website: "https://developer.apple.com",
@@ -27,7 +28,8 @@ module Canvas::Plugins::DefaultPlugins
                             author_website: "https://www.instructure.com",
                             version: "1.0.0",
                             settings_partial: "plugins/apple_settings")
-    Canvas::Plugin.register("clever", nil,
+    Canvas::Plugin.register("clever",
+                            nil,
                             name: "Clever",
                             description: -> { t :description, "Clever Login" },
                             website: "https://clever.com",
@@ -36,7 +38,8 @@ module Canvas::Plugins::DefaultPlugins
                             version: "1.0.0",
                             settings_partial: "plugins/clever_settings",
                             encrypted_settings: [:client_secret])
-    Canvas::Plugin.register("facebook", nil,
+    Canvas::Plugin.register("facebook",
+                            nil,
                             name: "Facebook",
                             description: -> { t :description, "Facebook Login" },
                             website: "http://www.facebook.com",
@@ -45,7 +48,8 @@ module Canvas::Plugins::DefaultPlugins
                             version: "2.0.0",
                             settings_partial: "plugins/facebook_settings",
                             encrypted_settings: [:app_secret])
-    Canvas::Plugin.register("github", nil,
+    Canvas::Plugin.register("github",
+                            nil,
                             name: "GitHub",
                             description: -> { t :description, "Github Login" },
                             website: "https://github.com",
@@ -54,7 +58,8 @@ module Canvas::Plugins::DefaultPlugins
                             version: "1.0.0",
                             settings_partial: "plugins/github_settings",
                             encrypted_settings: [:client_secret])
-    Canvas::Plugin.register("linked_in", nil,
+    Canvas::Plugin.register("linked_in",
+                            nil,
                             name: "LinkedIn",
                             description: -> { t :description, "LinkedIn integration" },
                             website: "http://www.linkedin.com",
@@ -62,9 +67,9 @@ module Canvas::Plugins::DefaultPlugins
                             author_website: "http://www.instructure.com",
                             version: "1.0.0",
                             settings_partial: "plugins/linked_in_settings",
-                            validator: "LinkedInValidator",
                             encrypted_settings: [:client_secret])
-    Canvas::Plugin.register("microsoft", nil,
+    Canvas::Plugin.register("microsoft",
+                            nil,
                             name: "Microsoft",
                             description: -> { t :description, "Microsoft Login" },
                             website: "https://apps.dev.microsoft.com",
@@ -83,7 +88,8 @@ module Canvas::Plugins::DefaultPlugins
                               settings_partial: "plugins/diigo_settings",
                               validator: "DiigoValidator"
                             })
-    Canvas::Plugin.register("twitter", nil,
+    Canvas::Plugin.register("twitter",
+                            nil,
                             name: "Twitter",
                             description: -> { t :description, "Twitter notifications" },
                             website: "http://www.twitter.com",
@@ -103,7 +109,8 @@ module Canvas::Plugins::DefaultPlugins
                               settings_partial: "plugins/etherpad_settings",
                               validator: "EtherpadValidator"
                             })
-    Canvas::Plugin.register("google_drive", :collaborations,
+    Canvas::Plugin.register("google_drive",
+                            :collaborations,
                             {
                               name: -> { t :name, "Google Drive" },
                               description: -> { t :description, "Google Drive file sharing" },
@@ -172,7 +179,6 @@ module Canvas::Plugins::DefaultPlugins
                               encrypted_settings: [:secret]
                             })
 
-    require_dependency "cc/importer/cc_worker"
     Canvas::Plugin.register "canvas_cartridge_importer", :export_system, {
       name: -> { I18n.t "canvas_cartridge_name", "Canvas Cartridge Importer" },
       display_name: -> { I18n.t "canvas_cartridge_display", "Canvas Common Cartridge" },
@@ -190,7 +196,6 @@ module Canvas::Plugins::DefaultPlugins
         valid_contexts: %w[Account Course]
       },
     }
-    require_dependency "canvas/migration/worker/course_copy_worker"
     Canvas::Plugin.register "course_copy_importer", :export_system, {
       name: -> { I18n.t :course_copy_name, "Copy Canvas Course" },
       display_name: -> { I18n.t :course_copy_display, "Course Copy" },
@@ -209,7 +214,6 @@ module Canvas::Plugins::DefaultPlugins
         valid_contexts: %w[Course]
       },
     }
-    require_dependency "canvas/migration/worker/zip_file_worker"
     Canvas::Plugin.register "zip_file_importer", :export_system, {
       name: -> { I18n.t :zip_file_name, ".zip file" },
       display_name: -> { I18n.t :zip_file_display, "File Import" },
@@ -400,15 +404,6 @@ module Canvas::Plugins::DefaultPlugins
                               },
                               settings_partial: "plugins/inst_fs_settings",
                               validator: "InstFsValidator"
-                            })
-    Canvas::Plugin.register("unsplash", nil, {
-                              name: -> { t :name, "Unsplash" },
-                              description: -> { t :description, "Unsplash image search service" },
-                              author: "Unsplash",
-                              author_website: "https://unsplash.com/documentation",
-                              version: "1.0.0",
-                              settings: { access_key: nil },
-                              settings_partial: "plugins/unsplash_settings"
                             })
     Canvas::Plugin.register("asset_user_access_logs", nil, {
                               name: -> { t :name, "AUA Logger" },

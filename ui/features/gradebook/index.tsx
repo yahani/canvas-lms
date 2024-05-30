@@ -19,36 +19,52 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
 import GradebookData from './react/default_gradebook/GradebookData'
+import type {GradebookOptions} from './react/default_gradebook/gradebook.d'
 import ready from '@instructure/ready'
 
 import('@canvas/context-cards/react/StudentContextCardTrigger')
 
 ready(() => {
-  const mountPoint = document.querySelector('#gradebook_app')
-  const filterNavNode = document.querySelector('#gradebook-filter-nav')
-  const gradebookMenuNode = document.querySelector('[data-component="GradebookMenu"]')
+  const mountPoint = document.querySelector('#gradebook_app') as HTMLElement
+  const gradebookMenuNode = document.querySelector(
+    '[data-component="GradebookMenu"]'
+  ) as HTMLSpanElement
+  const actionMenuNode = document.querySelector('[data-component="ActionMenu"]') as HTMLSpanElement
+  const enhancedActionMenuNode = document.querySelector(
+    '[data-component="EnhancedActionMenu"]'
+  ) as HTMLSpanElement
   const settingsModalButtonContainer = document.getElementById(
     'gradebook-settings-modal-button-container'
-  )
-  const gridColorNode = document.querySelector('[data-component="GridColor"]')
-  const viewOptionsMenuNode = document.querySelector("[data-component='ViewOptionsMenu']")
+  ) as HTMLSpanElement
+  const gridColorNode = document.querySelector('[data-component="GridColor"]') as HTMLSpanElement
+  const viewOptionsMenuNode = document.querySelector(
+    "[data-component='ViewOptionsMenu']"
+  ) as HTMLSpanElement
   const applyScoreToUngradedModalNode = document.querySelector(
     '[data-component="ApplyScoreToUngradedModal"]'
-  )
-  const gradingPeriodsFilterContainer = document.getElementById('grading-periods-filter-container')
-  const gradebookGridNode = document.getElementById('gradebook_grid')
-  const flashMessageContainer = document.getElementById('flash_message_holder')
+  ) as HTMLSpanElement
+  const gradebookGridNode = document.getElementById('gradebook_grid') as HTMLDivElement
+  const gradebookSettingsModalContainer = document.querySelector(
+    "[data-component='GradebookSettingsModal']"
+  ) as HTMLSpanElement
+  const flashMessageContainer = document.getElementById('flash_message_holder') as HTMLDivElement
+  // AnonymousSpeedGraderAlert
+  const anonymousSpeedGraderAlertNode = document.querySelector(
+    '[data-component="AnonymousSpeedGraderAlert"]'
+  ) as HTMLSpanElement
 
   ReactDOM.render(
     <GradebookData
+      actionMenuNode={actionMenuNode}
+      anonymousSpeedGraderAlertNode={anonymousSpeedGraderAlertNode}
       applyScoreToUngradedModalNode={applyScoreToUngradedModalNode}
-      currentUserId={ENV.current_user_id}
-      filterNavNode={filterNavNode}
+      currentUserId={ENV.current_user_id as string}
+      enhancedActionMenuNode={enhancedActionMenuNode}
       flashMessageContainer={flashMessageContainer}
-      gradebookEnv={ENV.GRADEBOOK_OPTIONS}
+      gradebookEnv={ENV.GRADEBOOK_OPTIONS as GradebookOptions}
       gradebookGridNode={gradebookGridNode}
       gradebookMenuNode={gradebookMenuNode}
-      gradingPeriodsFilterContainer={gradingPeriodsFilterContainer}
+      gradebookSettingsModalContainer={gradebookSettingsModalContainer}
       gridColorNode={gridColorNode}
       locale={ENV.LOCALE}
       settingsModalButtonContainer={settingsModalButtonContainer}

@@ -29,6 +29,7 @@ describe BigBlueButtonConference do
                                                              web_conference_plugin_mock("big_blue_button", {
                                                                                           domain: "bbb.instructure.com",
                                                                                           secret_dec: "secret",
+                                                                                          send_avatar: true,
                                                                                         })
                                                            ])
       @course = course_factory
@@ -57,7 +58,15 @@ describe BigBlueButtonConference do
       @conference.settings[:admin_key] = "admin"
       @conference.settings[:user_key] = "user"
       @conference.save
-      params = { fullName: user_factory.name, meetingID: @conference.conference_key, userID: user_factory.id, createTime: @conference.settings[:create_time] }
+      pronouns = user_factory.pronouns
+      params = {
+        fullName: user_factory.name,
+        meetingID: @conference.conference_key,
+        avatarUrl: user_factory.avatar_url,
+        userID: user_factory.id,
+        createTime: @conference.settings[:create_time]
+      }
+      params[:userdataPronouns] = pronouns unless pronouns.nil?
       admin_params = params.merge(password: "admin").to_query
       user_params = params.merge(password: "user").to_query
       expect(@conference.admin_join_url(@user)).to eql("https://bbb.instructure.com/bigbluebutton/api/join?#{admin_params}&checksum=" +
@@ -133,49 +142,195 @@ describe BigBlueButtonConference do
       expect(BigBlueButtonConference.user_setting_fields[:record][:visible].call).to be_truthy
     end
 
-    it "sends record flag if record user_setting is set" do
-      expect(@bbb).to receive(:send_request).with(:create, hash_including(record: "true"))
+    it "sends course data if parent is a course" do
+      allow(@bbb).to receive(:send_request)
       @bbb.initiate_conference
+      expect(@bbb).to have_received(:send_request).with(:create, hash_including(bbbCanvasCourseName: @course.name))
+    end
+
+    it "sends record flag if record user_setting is set" do
+      allow(@bbb).to receive(:send_request)
+      @bbb.initiate_conference
+      expect(@bbb).to have_received(:send_request).with(:create, hash_including(record: true))
     end
 
     it "does not send record flag if record user setting is unset" do
+      allow(@bbb).to receive(:send_request)
       @bbb.user_settings = { record: false }
       @bbb.save!
-      expect(@bbb).to receive(:send_request).with(:create, hash_including(record: "false"))
       @bbb.initiate_conference
+      expect(@bbb).to have_received(:send_request).with(:create, hash_including(record: false))
+    end
+
+    it "initiates with the correct default values when bbb_modal_update is OFF" do
+      Account.site_admin.disable_feature! :bbb_modal_update
+      allow(@bbb).to receive(:send_request).and_return({ createTime: Time.now })
+      allow(InstStatsd::Statsd).to receive(:increment)
+
+      # these are the defaults defined in the BigBlueButtonConference model
+      @bbb.user_settings = {
+        record: false,
+        scheduled_date: false,
+        create_time: false,
+        share_webcam: true,
+        share_microphone: true,
+        send_public_chat: true,
+        send_private_chat: true,
+        enable_waiting_room: false,
+        share_other_webcams: true
+      }
+
+      @bbb.save!
+      @bbb.initiate_conference
+      expect(@bbb).to have_received(:send_request).with(:create, hash_including(record: false))
+      expect(@bbb).to have_received(:send_request).with(:create, hash_excluding(
+                                                                   {
+                                                                     lockSettingsDisableCam: :any,
+                                                                     lockSettingsDisableMic: :any,
+                                                                     lockSettingsDisablePrivateChat: :any,
+                                                                     lockSettingsDisablePublicChat: :any,
+                                                                     webcamsOnlyForModerator: :any,
+                                                                     guestPolicy: :any
+                                                                   }
+                                                                 ))
+      expect(InstStatsd::Statsd).to have_received(:increment).with("bigbluebutton.started")
+
+      # we will only track these settings when we explicitly include them in the request,
+      # and not rely on BBB provider defaults
+      expect(InstStatsd::Statsd).not_to have_received(:increment).with("bigbluebutton.start.setting.record")
+      expect(InstStatsd::Statsd).not_to have_received(:increment).with("bigbluebutton.start.setting.share_webcam")
+      expect(InstStatsd::Statsd).not_to have_received(:increment).with("bigbluebutton.start.setting.share_microphone")
+      expect(InstStatsd::Statsd).not_to have_received(:increment).with("bigbluebutton.start.setting.send_public_chat")
+      expect(InstStatsd::Statsd).not_to have_received(:increment).with("bigbluebutton.start.setting.send_private_chat")
+      expect(InstStatsd::Statsd).not_to have_received(:increment).with("bigbluebutton.start.setting.enable_waiting_room")
+      expect(InstStatsd::Statsd).not_to have_received(:increment).with("bigbluebutton.start.setting.share_other_webcams")
+    end
+
+    context "when :bbb_modal_update is ON" do
+      before :once do
+        Account.site_admin.enable_feature! :bbb_modal_update
+      end
+
+      it "send the correct bbb_modal_update default params" do
+        allow(@bbb).to receive(:send_request).and_return({ createTime: Time.now })
+        allow(InstStatsd::Statsd).to receive(:increment)
+
+        # these are the defaults defined in the BigBlueButtonConference model
+        @bbb.user_settings = {
+          record: false,
+          scheduled_date: false,
+          create_time: false,
+          share_webcam: true,
+          share_microphone: true,
+          send_public_chat: true,
+          send_private_chat: true,
+          enable_waiting_room: false,
+          share_other_webcams: true
+        }
+
+        @bbb.save!
+        @bbb.initiate_conference
+        expect(@bbb).to have_received(:send_request).with(:create, hash_including(
+                                                                     record: false,
+                                                                     lockSettingsDisableCam: false,
+                                                                     lockSettingsDisableMic: false,
+                                                                     lockSettingsDisablePrivateChat: false,
+                                                                     lockSettingsDisablePublicChat: false,
+                                                                     webcamsOnlyForModerator: false,
+                                                                     guestPolicy: "ALWAYS_ACCEPT"
+                                                                   ))
+        expect(InstStatsd::Statsd).to have_received(:increment).with("bigbluebutton.started")
+
+        expect(InstStatsd::Statsd).not_to have_received(:increment).with("bigbluebutton.start.setting.record")
+        expect(InstStatsd::Statsd).to have_received(:increment).with("bigbluebutton.start.setting.share_webcam")
+        expect(InstStatsd::Statsd).to have_received(:increment).with("bigbluebutton.start.setting.share_microphone")
+        expect(InstStatsd::Statsd).to have_received(:increment).with("bigbluebutton.start.setting.send_public_chat")
+        expect(InstStatsd::Statsd).to have_received(:increment).with("bigbluebutton.start.setting.send_private_chat")
+        expect(InstStatsd::Statsd).to have_received(:increment).with("bigbluebutton.start.setting.share_other_webcams")
+        expect(InstStatsd::Statsd).not_to have_received(:increment).with("bigbluebutton.start.setting.enable_waiting_room")
+      end
+
+      it "send the correct bbb_modal_update supplied params" do
+        allow(@bbb).to receive(:send_request).and_return({ createTime: Time.now })
+        allow(InstStatsd::Statsd).to receive(:increment)
+
+        # these are the opposites of the defaults
+        @bbb.user_settings = {
+          record: true,
+          scheduled_date: false,
+          create_time: false,
+          share_webcam: false,
+          share_microphone: false,
+          send_public_chat: false,
+          send_private_chat: false,
+          enable_waiting_room: true,
+          share_other_webcams: false
+        }
+
+        @bbb.save!
+        @bbb.initiate_conference
+        expect(@bbb).to have_received(:send_request).with(:create, hash_including(
+                                                                     record: true,
+                                                                     lockSettingsDisableCam: true,
+                                                                     lockSettingsDisableMic: true,
+                                                                     lockSettingsDisablePrivateChat: true,
+                                                                     lockSettingsDisablePublicChat: true,
+                                                                     webcamsOnlyForModerator: true,
+                                                                     guestPolicy: "ASK_MODERATOR"
+                                                                   ))
+
+        expect(InstStatsd::Statsd).to have_received(:increment).with("bigbluebutton.started")
+
+        expect(InstStatsd::Statsd).to have_received(:increment).with("bigbluebutton.start.setting.record")
+        expect(InstStatsd::Statsd).not_to have_received(:increment).with("bigbluebutton.start.setting.share_webcam")
+        expect(InstStatsd::Statsd).not_to have_received(:increment).with("bigbluebutton.start.setting.share_microphone")
+        expect(InstStatsd::Statsd).not_to have_received(:increment).with("bigbluebutton.start.setting.send_public_chat")
+        expect(InstStatsd::Statsd).not_to have_received(:increment).with("bigbluebutton.start.setting.send_private_chat")
+        expect(InstStatsd::Statsd).not_to have_received(:increment).with("bigbluebutton.start.setting.share_other_webcams")
+        expect(InstStatsd::Statsd).to have_received(:increment).with("bigbluebutton.start.setting.enable_waiting_room")
+      end
     end
 
     it "properly serializes a response with no recordings" do
-      allow(@bbb).to receive(:conference_key).and_return("12345")
-      response = { returncode: "SUCCESS", recordings: "\n  ",
-                   messageKey: "noRecordings", message: "There are no recordings for the meeting(s)." }
-      allow(@bbb).to receive(:send_request).and_return(response)
+      response = { returncode: "SUCCESS",
+                   recordings: "\n  ",
+                   messageKey: "noRecordings",
+                   message: "There are no recordings for the meeting(s)." }
+      allow(@bbb).to receive_messages(conference_key: "12345", send_request: response)
       expect(@bbb.recordings).to eq []
     end
 
     it "properly serializes a response with recordings" do
-      allow(@bbb).to receive(:conference_key).and_return("12345")
       response = JSON.parse(get_recordings_fixture, { symbolize_names: true })
-      allow(@bbb).to receive(:send_request).and_return(response)
+      allow(@bbb).to receive_messages(conference_key: "12345", send_request: response)
       expect(@bbb.recordings).not_to eq []
     end
 
     it "does not have duration_minutes set to 0" do
-      allow(@bbb).to receive(:conference_key).and_return("12345")
       response = JSON.parse(get_recordings_fixture, { symbolize_names: true })
-      allow(@bbb).to receive(:send_request).and_return(response)
+      allow(@bbb).to receive_messages(conference_key: "12345", send_request: response)
       @bbb.recordings.each do |recording|
         expect(recording[:duration_minutes]).not_to eq(0)
       end
     end
 
     it "includes whether to show to students (and be true for everything but statistics)" do
-      allow(@bbb).to receive(:conference_key).and_return("12345")
       response = JSON.parse(get_recordings_fixture, { symbolize_names: true })
-      allow(@bbb).to receive(:send_request).and_return(response)
+      allow(@bbb).to receive_messages(conference_key: "12345", send_request: response)
       @bbb.recordings.each do |recording|
         recording[:playback_formats].each do |format|
           expect(format[:show_to_students]).to eq(format[:type] != "statistics")
+        end
+      end
+    end
+
+    it "includes translated type for playback format" do
+      response = JSON.parse(get_recordings_fixture, { symbolize_names: true })
+      allow(@bbb).to receive_messages(conference_key: "12345", send_request: response)
+      @bbb.recordings.each do |recording|
+        recording[:playback_formats].each do |format|
+          # turns video into Video, etc.
+          expect(format[:translated_type]).to eq(format[:type].upcase_first)
         end
       end
     end
@@ -218,21 +373,21 @@ describe BigBlueButtonConference do
         recording_id = nil
         allow(@bbb).to receive(:send_request)
         response = @bbb.delete_recording(recording_id)
-        expect(response[:deleted]).to eq false
+        expect(response[:deleted]).to be false
       end
 
       it "doesn't delete the recording if record_id is not found" do
         recording_id = ""
         allow(@bbb).to receive(:send_request).and_return({ returncode: "SUCCESS", deleted: "false" })
         response = @bbb.delete_recording(recording_id)
-        expect(response[:deleted]).to eq false
+        expect(response[:deleted]).to be false
       end
 
       it "does delete the recording if record_id is found" do
         recording_id = "abc123-xyz"
         allow(@bbb).to receive(:send_request).and_return({ returncode: "SUCCESS", deleted: "true" })
         response = @bbb.delete_recording(recording_id)
-        expect(response[:deleted]).to eq true
+        expect(response[:deleted]).to be true
       end
     end
 
@@ -330,7 +485,7 @@ describe BigBlueButtonConference do
       bbb.user = user_factory
       bbb.context = course_factory
       bbb.save!
-      expect(bbb).to receive(:send_request).with(:create, hash_including(record: "false"))
+      expect(bbb).to receive(:send_request).with(:create, hash_including(record: false))
       bbb.initiate_conference
       expect(bbb.user_settings[:record]).to be_falsey
     end

@@ -254,6 +254,16 @@ describe "admin settings tab" do
       check_box_verifier("#account_settings_users_can_edit_name", :users_can_edit_name)
     end
 
+    it "unchecks users_can_edit_profile and check it again" do
+      check_box_verifier("#account_settings_users_can_edit_profile", :users_can_edit_profile, false)
+      check_box_verifier("#account_settings_users_can_edit_profile", :users_can_edit_profile)
+    end
+
+    it "unchecks users_can_edit_comm_channels and check it again" do
+      check_box_verifier("#account_settings_users_can_edit_comm_channels", :users_can_edit_comm_channels, false)
+      check_box_verifier("#account_settings_users_can_edit_comm_channels", :users_can_edit_comm_channels)
+    end
+
     describe "equella settings" do
       def add_equella_feature
         equella_url = "http://oer.equella.com/signon.do"
@@ -307,18 +317,13 @@ describe "admin settings tab" do
     end
 
     it "clicks on the google help dialog" do
-      fj("label['for'='account_services_google_docs_previews'] .icon-question").click
+      f("label[for='account_services_google_docs_previews'] .icon-question").click
       expect(fj(".ui-dialog-title:visible")).to include_text("About Google Docs Previews")
     end
 
     it "unclicks and then click on skype" do
       check_box_verifier("#account_services_skype", { allowed_services: :skype }, false)
       check_box_verifier("#account_services_skype", { allowed_services: :skype })
-    end
-
-    it "unclicks and then click on delicious" do
-      check_box_verifier("#account_services_delicious", { allowed_services: :delicious }, false)
-      check_box_verifier("#account_services_delicious", { allowed_services: :delicious })
     end
 
     it "unclicks and click on google docs previews" do
@@ -426,11 +431,11 @@ describe "admin settings tab" do
       Account.default.settings[:custom_help_links] = [help_link]
       Account.default.save!
 
+      default_links = Account.default.help_links_builder.instantiate_links(Account.default.help_links_builder.default_links)
+      filtered_links = Account.default.help_links_builder.filtered_links(default_links)
       help_links = Account.default.help_links
       expect(help_links).to include(help_link.merge(type: "custom"))
-      expect(help_links & Account.default.help_links_builder.instantiate_links(Account.default.help_links_builder.default_links)).to eq(
-        Account.default.help_links_builder.instantiate_links(Account.default.help_links_builder.default_links)
-      )
+      expect(help_links & filtered_links).to eq(filtered_links)
 
       get "/accounts/#{Account.default.id}/settings"
 
@@ -441,8 +446,8 @@ describe "admin settings tab" do
       click_submit
 
       new_help_links = Account.default.help_links
-      expect(new_help_links.pluck(:id)).to_not include(Account.default.help_links_builder.default_links.first[:id].to_s)
-      expect(new_help_links.pluck(:id)).to include(Account.default.help_links_builder.default_links.last[:id].to_s)
+      expect(new_help_links.pluck(:id)).to_not include(Account.default.help_links_builder.filtered_links(default_links).first[:id].to_s)
+      expect(new_help_links.pluck(:id)).to include(Account.default.help_links_builder.filtered_links(default_links).last[:id].to_s)
       expect(new_help_links.last).to include(help_link)
     end
 
@@ -590,7 +595,7 @@ describe "admin settings tab" do
 
   it "shows all feature flags that are expected to be visible" do
     user = account_admin_user({ active_user: true }.merge(account: Account.site_admin))
-    course_with_admin_logged_in(account: Account.default, user: user)
+    course_with_admin_logged_in(account: Account.default, user:)
     provision_quizzes_next(Account.default)
     get "/accounts/#{Account.default.id}/settings"
     f("#tab-features-link").click
@@ -609,7 +614,7 @@ describe "admin settings tab" do
     end
   end
 
-  context "Canvas for Elementary (enable_as_k5_mode) setting", ignore_js_errors: true do
+  context "Canvas for Elementary (enable_as_k5_mode) setting", :ignore_js_errors do
     before :once do
       @account = Account.default
       @subaccount = Account.create!(name: "subaccount1", parent_account_id: @account.id)

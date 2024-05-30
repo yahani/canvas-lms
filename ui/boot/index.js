@@ -16,18 +16,25 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import canvasBaseTheme from '@instructure/canvas-theme'
-import canvasHighContrastTheme from '@instructure/canvas-high-contrast-theme'
+import {
+  canvas as canvasBaseTheme,
+  canvasHighContrast as canvasHighContrastTheme,
+} from '@instructure/ui-themes'
+import filterUselessConsoleMessages from '../../packages/filter-console-messages'
 import moment from 'moment'
 import './initializers/fakeRequireJSFallback'
+import './initializers/ujsLinks'
 import {up as configureDateTimeMomentParser} from './initializers/configureDateTimeMomentParser'
 import {up as configureDateTime} from './initializers/configureDateTime'
-import {up as enableDTNPI} from './initializers/enableDTNPI'
 import {initSentry} from './initializers/initSentry'
 import {up as renderRailsFlashNotifications} from './initializers/renderRailsFlashNotifications'
 import {up as activateCourseMenuToggler} from './initializers/activateCourseMenuToggler'
-import {up as enhanceUserContent} from './initializers/enhanceUserContent'
-import {isolate} from '@canvas/sentry'
+
+// Import is required, workaround for ARC-8398
+// eslint-disable-next-line import/no-nodejs-modules
+import {Buffer} from 'buffer'
+
+window.Buffer = Buffer
 
 try {
   initSentry()
@@ -43,32 +50,30 @@ moment().locale(ENV.MOMENT_LOCALE)
 let runOnceAfterLocaleFiles = () => {
   configureDateTimeMomentParser()
   configureDateTime()
-  isolate(renderRailsFlashNotifications)()
-  isolate(activateCourseMenuToggler)()
-  isolate(enhanceUserContent)()
+  renderRailsFlashNotifications()
+  activateCourseMenuToggler()
+  import('@canvas/enhanced-user-content')
+    .then(({enhanceTheEntireUniverse}) => {
+      return enhanceTheEntireUniverse()
+    })
+    .catch(e => {
+      // eslint-disable-next-line no-console
+      console.error('Failed to init @canvas/enhanced-user-content', e)
+    })
 }
 
 window.addEventListener('canvasReadyStateChange', function ({detail}) {
-  if (detail === 'localeFiles' || window.canvasReadyState === 'complete') {
+  if (detail === 'capabilities' || window.canvasReadyState === 'complete') {
     runOnceAfterLocaleFiles()
     runOnceAfterLocaleFiles = () => {}
   }
-})
-
-isolate(enableDTNPI)({
-  endpoint: window.ENV.DATA_COLLECTION_ENDPOINT
 })
 
 // In non-prod environments only, arrange for filtering of "useless" console
 // messages, and if deprecation reporting is enabled, arrange to inject and
 // set up Sentry for it.
 if (process.env.NODE_ENV !== 'production') {
-  const setupConsoleMessageFilter = async () => {
-    const {filterUselessConsoleMessages} = await import(
-      /* webpackChunkName: "[request]" */
-      '@instructure/js-utils/es/filterUselessConsoleMessages'
-    )
-
+  const setupConsoleMessageFilter = () => {
     try {
       filterUselessConsoleMessages(console)
     } catch (e) {
@@ -80,17 +85,15 @@ if (process.env.NODE_ENV !== 'production') {
   setupConsoleMessageFilter()
 }
 
-// setup the inst-ui default theme
-// override the fontFamily to include "Lato Extended", which we prefer
+// Set up the default InstUI theme
+// Override the fontFamily to include "Lato Extended", which we prefer
 // to load over plain Lato (see LS-1559)
+const typography = {
+  fontFamily: 'LatoWeb, "Lato Extended", Lato, "Helvetica Neue", Helvetica, Arial, sans-serif',
+}
+
 if (ENV.use_high_contrast) {
-  canvasHighContrastTheme.use({
-    overrides: {
-      typography: {
-        fontFamily: 'LatoWeb, "Lato Extended", Lato, "Helvetica Neue", Helvetica, Arial, sans-serif'
-      }
-    }
-  })
+  canvasHighContrastTheme.use({overrides: {typography}})
 } else {
   const brandvars = window.CANVAS_ACTIVE_BRAND_VARIABLES || {}
 
@@ -99,20 +102,12 @@ if (ENV.use_high_contrast) {
   if (process.env.NODE_ENV === 'test' || window.INST.environment === 'test') {
     transitionOverride = {
       transitions: {
-        duration: '0ms'
-      }
+        duration: '0ms',
+      },
     }
   }
 
-  canvasBaseTheme.use({
-    overrides: {
-      ...transitionOverride,
-      ...brandvars,
-      typography: {
-        fontFamily: 'LatoWeb, "Lato Extended", Lato, "Helvetica Neue", Helvetica, Arial, sans-serif'
-      }
-    }
-  })
+  canvasBaseTheme.use({overrides: {...transitionOverride, ...brandvars, typography}})
 }
 
 /* #__PURE__ */ if (process.env.NODE_ENV === 'test' || window.INST.environment === 'test') {
@@ -124,7 +119,6 @@ if (ENV.use_high_contrast) {
     // 'loadend' gets fired after both successful and errored requests
     this.addEventListener('loadend', () => {
       window.__CANVAS_IN_FLIGHT_XHR_REQUESTS__--
-      window.dispatchEvent(new CustomEvent('canvasXHRComplete'))
     })
     return send.apply(this, arguments)
   }
@@ -137,7 +131,6 @@ if (ENV.use_high_contrast) {
     // eslint-disable-next-line promise/catch-or-return
     promise.finally(() => {
       window.__CANVAS_IN_FLIGHT_XHR_REQUESTS__--
-      window.dispatchEvent(new CustomEvent('canvasXHRComplete'))
     })
     return promise
   }

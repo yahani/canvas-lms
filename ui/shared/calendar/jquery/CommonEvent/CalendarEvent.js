@@ -17,14 +17,14 @@
  */
 
 import {useScope as useI18nScope} from '@canvas/i18n'
-import $ from 'jquery'
-import fcUtil from '../fcUtil.coffee'
+import fcUtil from '../fcUtil'
 import semanticDateRange from '@canvas/datetime/semanticDateRange'
 import CommonEvent from './CommonEvent'
 import natcompare from '@canvas/util/natcompare'
 import {extend} from '@canvas/util/legacyCoffeesScriptHelpers'
-import '@canvas/datetime'
+import '@canvas/datetime/jquery'
 import '@canvas/jquery/jquery.instructure_misc_helpers'
+import replaceTags from '@canvas/util/replaceTags'
 
 const I18n = useI18nScope('calendar')
 
@@ -59,6 +59,12 @@ Object.assign(CalendarEvent.prototype, {
     this.description = data.description
     // in some rare cases, this.contextCode returns a comma separated list
     const contexts = this.contextCode()?.split(',')
+    // when editing events we need to remove the old context class names
+    this.className.forEach(c => {
+      if (c.startsWith('group_')) {
+        this.removeClass(c)
+      }
+    })
     contexts?.forEach(c => {
       this.addClass(`group_${c}`)
     })
@@ -77,6 +83,9 @@ Object.assign(CalendarEvent.prototype, {
     }
     this.webConference = data.web_conference
     this.important_dates = data.important_dates
+    this.series_head = data.series_head
+    this.series_natural_language = data.series_natural_language
+    this.blackout_date = data.blackout_date
     return CalendarEvent.__super__.copyDataFromObject.apply(this, arguments)
   },
 
@@ -100,7 +109,7 @@ Object.assign(CalendarEvent.prototype, {
     if (this.isAppointmentGroupEvent()) {
       return `/appointment_groups/${this.object.appointment_group_id}`
     } else {
-      return $.replaceTags(
+      return replaceTags(
         this.contextInfo.calendar_event_url,
         'id',
         this.calendarEvent.parent_event_id || this.calendarEvent.id
@@ -119,6 +128,8 @@ Object.assign(CalendarEvent.prototype, {
   displayTimeString() {
     if (this.calendarEvent.all_day && this.calendarEvent.start_at === this.calendarEvent.end_at) {
       return this.formatTime(this.startDate(), true)
+    } else if (this.calendarEvent.blackout_date) {
+      return `${this.formatTime(this.startDate(), true)} - ${this.formatTime(this.endDate(), true)}`
     } else {
       return semanticDateRange(this.calendarEvent.start_at, this.calendarEvent.end_at)
     }
@@ -133,7 +144,7 @@ Object.assign(CalendarEvent.prototype, {
       {
         'calendar_event[start_at]': this.start ? fcUtil.unwrap(this.start).toISOString() : '',
         'calendar_event[end_at]': this.end ? fcUtil.unwrap(this.end).toISOString() : '',
-        'calendar_event[all_day]': this.allDay
+        'calendar_event[all_day]': this.allDay,
       },
       success,
       error
@@ -156,7 +167,7 @@ Object.assign(CalendarEvent.prototype, {
     let status = I18n.t('Available')
     if (this.calendarEvent.available_slots > 0) {
       status = I18n.t('%{availableSlots} Available', {
-        availableSlots: I18n.n(this.calendarEvent.available_slots)
+        availableSlots: I18n.n(this.calendarEvent.available_slots),
       })
     }
     if (
@@ -165,7 +176,7 @@ Object.assign(CalendarEvent.prototype, {
       this.calendarEvent.child_events.length
     ) {
       status = I18n.t('%{availableSlots} more available', {
-        availableSlots: I18n.n(this.calendarEvent.available_slots)
+        availableSlots: I18n.n(this.calendarEvent.available_slots),
       })
     }
     if (this.calendarEvent.available_slots === 0) {
@@ -224,5 +235,5 @@ Object.assign(CalendarEvent.prototype, {
       this.calendarEvent.reserved === true ||
       (this.calendarEvent.appointment_group_url && this.calendarEvent.parent_event_id)
     )
-  }
+  },
 })

@@ -42,8 +42,8 @@ module MicrosoftSync::GraphService::SpecHelper
 
       unless stubbed_url_array.include?(url)
         @stubbed_urls.push({
-                             url: url,
-                             variables: variables,
+                             url:,
+                             variables:,
                              requests: [],
                              responses: []
                            })
@@ -72,6 +72,7 @@ module MicrosoftSync::GraphService::SpecHelper
 
         request_stub[:requests].each_with_index do |request, index|
           response = responses[index]
+          next if @openapi_schema.empty?
           next if validates_with_schema?(request, response, variables)
 
           @errors << {

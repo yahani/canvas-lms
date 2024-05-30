@@ -17,7 +17,7 @@
 //
 
 import $ from 'jquery'
-import _ from 'underscore'
+import {once} from 'lodash'
 import TokenSelectorList from './TokenSelectorList'
 import RecipientCollection from '../backbone/collections/RecipientCollection'
 import '@canvas/jquery/jquery.instructure_misc_helpers'
@@ -89,7 +89,7 @@ export default class TokenSelector {
     return this.select($li)
   }
 
-  mouseDown(e) {
+  mouseDown(_e) {
     // sooper hacky... prevent the menu closing on scrollbar drag
     return setTimeout(() => this.input.focus(), 0)
   }
@@ -130,7 +130,7 @@ export default class TokenSelector {
     if (this.uiLocked) {
       return true
     }
-    if (this.$menu.find('.no-results').length > 0 && [13, 'Enter'].includes(keyCode)) {
+    if (this.isShowingNoResults() && [13, 'Enter'].includes(keyCode)) {
       return e.preventDefault()
     }
 
@@ -175,11 +175,9 @@ export default class TokenSelector {
         }
         this.close()
         return true
-        break
       case 'Shift':
       case 16: // noop, but we don't want to set the mode to input
         return false
-        break
       case 'Esc':
       case 'U+001B':
       case 27:
@@ -189,7 +187,6 @@ export default class TokenSelector {
         } else {
           return false
         }
-        break
       case 'U+0020':
       case 32: // space
         if (this.selectionToggleable() && this.mode === 'menu') {
@@ -212,7 +209,6 @@ export default class TokenSelector {
       case 38:
         this.selectPrev()
         return true
-        break
       case 'Right':
       case 39:
         if (this.input.caret() === this.input.val().length && this.expandSelection()) {
@@ -223,7 +219,6 @@ export default class TokenSelector {
       case 40:
         this.selectNext()
         return true
-        break
       case 'U+002B':
       case 187:
       case 107: // plus
@@ -259,8 +254,7 @@ export default class TokenSelector {
       this.list.remove()
     }
     for (let i = 0; i < this.stack.length; i++) {
-      let $selection
-      ;[$selection, list] = this.stack[i]
+      ;[, list] = this.stack[i]
       list.remove()
     }
     this.list = null
@@ -279,10 +273,17 @@ export default class TokenSelector {
   blur() {
     // It seems we can't check focus while it is being changed, so check it later.
     return setTimeout(() => {
-      if (!this.input.hasFocus() && !(this.$container.find(':focus').length > 0)) {
+      if (
+        !this.input.hasFocus() &&
+        (!(this.$container.find('.active').length > 0) || this.isShowingNoResults())
+      ) {
         return this.close()
       }
     }, 0)
+  }
+
+  isShowingNoResults() {
+    return this.$menu.find('.no-results').length > 0
   }
 
   listExpanded() {
@@ -386,7 +387,7 @@ export default class TokenSelector {
         value: id,
         text: (left = $node.data('text')) != null ? left : $node.text(),
         noClear: true,
-        data: $node.data('user_data')
+        data: $node.data('user_data'),
       })
     } else {
       if (!toggleOnly) {
@@ -450,11 +451,7 @@ export default class TokenSelector {
         ? this.selection.next().length
           ? this.selection.next()
           : this.selection.parent('ul').next().length
-          ? this.selection
-              .parent('ul')
-              .next()
-              .find('li')
-              .first()
+          ? this.selection.parent('ul').next().find('li').first()
           : null
         : this.list != null
         ? this.list.first()
@@ -469,16 +466,10 @@ export default class TokenSelector {
   selectPrev() {
     this.select(
       this.selection
-        ? (this.selection != null
-          ? this.selection.prev().length
-          : undefined)
+        ? (this.selection != null ? this.selection.prev().length : undefined)
           ? this.selection.prev()
           : this.selection.parent('ul').prev().length
-          ? this.selection
-              .parent('ul')
-              .prev()
-              .find('li')
-              .last()
+          ? this.selection.parent('ul').prev().find('li').last()
           : null
         : this.list != null
         ? this.list.last()
@@ -496,7 +487,7 @@ export default class TokenSelector {
     clearTimeout(this.timeout)
     this.select(null)
     return (this.timeout = setTimeout(() => {
-      if (this.lastFetch && !this.lastFetch.isResolved()) {
+      if (this.lastFetch && !this.lastFetch.state() === 'resolved') {
         this.nextRequest = true
         return
       }
@@ -563,14 +554,14 @@ export default class TokenSelector {
       parent: this.parent(),
       ancestors: Array.from(this.stack).map(ancestor => ancestor[0].data('id')),
       collection,
-      query
+      query,
     })
     list.render()
 
     if (!collection.atLeastOnePageFetched) {
       collection.on(
         'fetch',
-        _.once(() => {
+        once(() => {
           this.autoSelectFirst(list)
           if (this.nextRequest) {
             this.updateSearch()

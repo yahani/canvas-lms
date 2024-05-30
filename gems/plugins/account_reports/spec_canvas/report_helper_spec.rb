@@ -18,12 +18,38 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
+require_relative "report_spec_helper"
+
 module AccountReports
   class TestReport
     include ReportHelper
 
-    def initialize(account_report)
+    def initialize(account_report, items = [])
       @account_report = account_report
+      @items = items
+    end
+
+    def test_report
+      create_report_runners(@items, @items.size, min: 1)
+      write_report_in_batches(["item"])
+    end
+
+    def test_report_runner(runner)
+      runner.batch_items.each_with_index do |item, i|
+        raise "fail" if item == "fail"
+
+        add_report_row(row: [item], row_number: i, report_runner: runner)
+      end
+    end
+  end
+
+  module Default
+    def self.test_report(account_report)
+      TestReport.new(account_report, account_report.parameters[:items]).test_report
+    end
+
+    def self.parallel_test_report(account_report, runner)
+      TestReport.new(account_report).test_report_runner(runner)
     end
   end
 end
@@ -31,7 +57,7 @@ end
 describe "report helper" do
   let(:account) { Account.default }
   let(:user) { User.create }
-  let(:account_report) { AccountReport.new(report_type: "test_report", account: account, user: user) }
+  let(:account_report) { AccountReport.new(report_type: "test_report", account:, user:) }
   let(:report) { AccountReports::TestReport.new(account_report) }
 
   it "handles basic math" do
@@ -71,16 +97,41 @@ describe "report helper" do
     expect(account_report.parameters["extra_text"]).to eq "Failed, the report failed to generate a file. Please try again."
   end
 
+  describe "parallel run" do
+    include ReportSpecHelper
+
+    before :once do
+      AccountReports.configure_account_report "Default", {
+        "test_report" => {
+          title: -> { "Test Report" },
+        }
+      }
+      @account = Account.default
+    end
+
+    it "assembles rows from each runner" do
+      result = read_report("test_report", params: { items: (1..6).to_a }, order: "skip")
+      expect(result).to match_array([["1"], ["2"], ["3"], ["4"], ["5"], ["6"]])
+    end
+
+    it "handles errors appropriately" do
+      ar = run_report("test_report", params: { items: [1, 2, "fail", 4, 5, 6] })
+      expect(ar).to be_error
+      expect(ar.account_report_runners.group(:workflow_state).count).to eq("completed" => 2, "error" => 1, "aborted" => 3)
+      expect(ErrorReport.last.message).to eq "fail"
+    end
+  end
+
   describe "load pseudonyms" do
     before(:once) do
-      @user = user_with_pseudonym(active_all: true, account: account, user: user)
+      @user = user_with_pseudonym(active_all: true, account:, user:)
       course = account.courses.create!(name: "reports")
       role = Enrollment.get_built_in_role_for_type("StudentEnrollment", root_account_id: account.resolved_root_account_id)
       @enrollmnent = course.enrollments.create!(user: @user,
                                                 workflow_state: "active",
                                                 sis_pseudonym: @pseudonym,
                                                 type: "StudentEnrollment",
-                                                role: role)
+                                                role:)
     end
 
     it "does one query for pseudonyms" do
@@ -226,22 +277,28 @@ describe "report helper" do
       @enrollment_term2.root_account_id = account.id
       @enrollment_term2.save!
 
-      @course1 = Course.new(name: "English 101", course_code: "ENG101",
-                            start_at: 1.day.ago, conclude_at: 4.months.from_now,
+      @course1 = Course.new(name: "English 101",
+                            course_code: "ENG101",
+                            start_at: 1.day.ago,
+                            conclude_at: 4.months.from_now,
                             account: @sub_account1)
       @course1.enrollment_term = @enrollment_term
       @course1.sis_source_id = "SIS_COURSE_ID_1"
       @course1.save!
 
-      @course2 = Course.new(name: "English 102", course_code: "ENG102",
-                            start_at: 1.day.ago, conclude_at: 4.months.from_now,
+      @course2 = Course.new(name: "English 102",
+                            course_code: "ENG102",
+                            start_at: 1.day.ago,
+                            conclude_at: 4.months.from_now,
                             account: @sub_account1)
       @course2.enrollment_term = @enrollment_term
       @course2.sis_source_id = "SIS_COURSE_ID_2"
       @course2.save!
 
-      @course3 = Course.new(name: "English 103", course_code: "ENG103",
-                            start_at: 1.day.ago, conclude_at: 4.months.from_now,
+      @course3 = Course.new(name: "English 103",
+                            course_code: "ENG103",
+                            start_at: 1.day.ago,
+                            conclude_at: 4.months.from_now,
                             account: @sub_account2)
       @course3.enrollment_term = @enrollment_term2
       @course2.sis_source_id = "SIS_COURSE_ID_3"

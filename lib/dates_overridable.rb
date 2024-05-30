@@ -18,8 +18,12 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 
 module DatesOverridable
-  attr_accessor :applied_overrides, :overridden_for_user, :overridden,
-                :has_no_overrides, :has_too_many_overrides, :preloaded_override_students
+  attr_accessor :applied_overrides,
+                :overridden_for_user,
+                :overridden,
+                :has_no_overrides,
+                :has_too_many_overrides,
+                :preloaded_override_students
   attr_writer :without_overrides
 
   include DifferentiableAssignment
@@ -27,10 +31,10 @@ module DatesOverridable
   class NotOverriddenError < RuntimeError; end
 
   def self.included(base)
-    base.has_many :assignment_overrides, dependent: :destroy, inverse_of: base.table_name.singularize
-    base.has_many :active_assignment_overrides, -> { where(workflow_state: "active") }, class_name: "AssignmentOverride", inverse_of: base.table_name.singularize
-    base.has_many :assignment_override_students, -> { where(workflow_state: "active") }, dependent: :destroy
-    base.has_many :all_assignment_override_students, class_name: "AssignmentOverrideStudent", dependent: :destroy
+    base.has_many :assignment_overrides, dependent: :destroy, inverse_of: base.table_name.singularize, foreign_key: "#{base.table_name.singularize}_id"
+    base.has_many :active_assignment_overrides, -> { where(workflow_state: "active") }, class_name: "AssignmentOverride", inverse_of: base.table_name.singularize, foreign_key: "#{base.table_name.singularize}_id"
+    base.has_many :assignment_override_students, -> { where(workflow_state: "active") }, dependent: :destroy, foreign_key: "#{base.table_name.singularize}_id"
+    base.has_many :all_assignment_override_students, class_name: "AssignmentOverrideStudent", dependent: :destroy, foreign_key: "#{base.table_name.singularize}_id"
 
     base.validates_associated :active_assignment_overrides
 
@@ -42,7 +46,10 @@ module DatesOverridable
   end
 
   def overridden_for(user, skip_clone: false)
-    AssignmentOverrideApplicator.assignment_overridden_for(self, user, skip_clone: skip_clone)
+    # TODO: support Attachment in AssignmentOverrideApplicator (LF-1458)
+    return self if is_a?(Attachment)
+
+    AssignmentOverrideApplicator.assignment_overridden_for(self, user, skip_clone:)
   end
 
   # All overrides, not just dates
@@ -61,15 +68,53 @@ module DatesOverridable
 
   def has_overrides?
     if current_version?
-      assignment_overrides.loaded? ? assignment_overrides.any?(&:active?) : assignment_overrides.active.exists?
+      all_assignment_overrides.loaded? ? all_assignment_overrides.any?(&:active?) : all_assignment_overrides.active.exists?
     else
       # the old version's overrides might have be deleted too but it's probably more trouble than it's worth to check here
-      assignment_overrides.loaded? ? assignment_overrides.any? : assignment_overrides.exists?
+      all_assignment_overrides.loaded? ? all_assignment_overrides.any? : all_assignment_overrides.exists?
     end
   end
 
   def has_active_overrides?
     active_assignment_overrides.any?
+  end
+
+  def all_assignment_overrides
+    if Account.site_admin.feature_enabled? :differentiated_modules
+      assignment_overrides.or(context_module_overrides)
+    else
+      assignment_overrides.where.not(set_type: "Course")
+    end
+  end
+
+  def context_module_overrides
+    AssignmentOverride.active.where(context_module_id: assignment_context_modules.select(:id))
+  end
+
+  def visible_to_everyone
+    if Account.site_admin.feature_enabled? :differentiated_modules
+      assignment_overrides.active.where(set_type: "Course").exists? || (!only_visible_to_overrides && (assignment_context_modules.empty? || (assignment_context_modules.any? && assignment_context_modules_without_overrides.any?)))
+    else
+      !only_visible_to_overrides
+    end
+  end
+
+  def assignment_context_modules
+    if is_a?(Assignment) && quiz.present?
+      # if it's another learning object's assignment, the context module content tags are attached to the learning object
+      ContextModule.not_deleted.where(id: quiz.context_module_tags.select(:context_module_id))
+    elsif is_a?(Assignment) && discussion_topic.present?
+      ContextModule.not_deleted.where(id: discussion_topic.context_module_tags.select(:context_module_id))
+    elsif is_a?(Assignment) && wiki_page.present? # wiki pages can have assignments through mastery paths
+      ContextModule.not_deleted.where(id: wiki_page.context_module_tags.select(:context_module_id))
+    else
+      ContextModule.not_deleted.where(id: context_module_tags.select(:context_module_id))
+    end
+  end
+
+  def assignment_context_modules_without_overrides
+    context_modules_with_overrides = context_module_overrides.select(:context_module_id)
+    assignment_context_modules.where.not(id: context_modules_with_overrides)
   end
 
   def multiple_due_dates?
@@ -94,7 +139,7 @@ module DatesOverridable
   end
 
   def all_due_dates
-    due_at_overrides = assignment_overrides.loaded? ? assignment_overrides.select { |ao| ao.active? && ao.due_at_overridden } : assignment_overrides.active.overriding_due_at
+    due_at_overrides = all_assignment_overrides.loaded? ? all_assignment_overrides.select { |ao| ao.active? && ao.due_at_overridden } : all_assignment_overrides.active.overriding_due_at
     dates = due_at_overrides.map(&:as_hash)
     dates << base_due_date_hash unless differentiated_assignments_applies?
     dates
@@ -218,7 +263,7 @@ module DatesOverridable
   end
 
   def due_date_hash
-    hash = { due_at: due_at, unlock_at: unlock_at, lock_at: lock_at }
+    hash = { due_at:, unlock_at:, lock_at: }
     if is_a?(Assignment)
       hash[:all_day] = all_day
       hash[:all_day_date] = all_day_date
@@ -247,7 +292,8 @@ module DatesOverridable
     association(:context).target ||= context
     tag_info = Rails.cache.fetch_with_batched_keys(
       ["context_module_tag_info3", user.cache_key(:enrollments), user.cache_key(:groups)].cache_key,
-      batch_object: self, batched_keys: :availability
+      batch_object: self,
+      batched_keys: :availability
     ) do
       hash = {}
       if user_is_admin && has_too_many_overrides

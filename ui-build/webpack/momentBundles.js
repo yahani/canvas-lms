@@ -18,10 +18,24 @@
 
 const glob = require('glob')
 const path = require('path')
-const { canvasDir } = require('#params')
+const {canvasDir} = require('../params')
 
 // Put any custom moment locales here:
-const customMomentLocales = ['ca', 'de', 'fa', 'fr', 'fr-ca', 'he', 'ht-ht', 'hy-am', 'mi-nz', 'pl', 'sl']
+const customMomentLocales = [
+  'ca',
+  'de',
+  'fa',
+  'fr',
+  'fr-ca',
+  'he',
+  'ht-ht',
+  'hy-am',
+  'mi-nz',
+  'pl',
+  'sl',
+  'ja',
+  'zh-cn',
+]
 
 const momentLocaleBundles = glob
   .sync('moment/locale/**/*.js', {cwd: 'node_modules'})
@@ -34,7 +48,10 @@ const momentLocaleBundles = glob
   }, {})
 
 customMomentLocales.forEach(locale => {
-  const filename = path.resolve(canvasDir, `ui/ext/custom_moment_locales/${locale.replace('-', '_')}.js`)
+  const filename = path.resolve(
+    canvasDir,
+    `ui/ext/custom_moment_locales/${locale.replace('-', '_')}.js`
+  )
   momentLocaleBundles[`moment/locale/${locale}`] = filename
 })
 

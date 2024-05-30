@@ -17,15 +17,13 @@
  */
 
 import $ from 'jquery'
-import '@canvas/datetime'
+import '@canvas/datetime/jquery'
 
-const exports = {}
-
-exports.friendlyDatetime = function(dateTime, perspective) {
+export function friendlyDatetime (dateTime, perspective) {
   const muddledDateTime = dateTime
 
   if (muddledDateTime) {
-    muddledDateTime.clone = function() {
+    muddledDateTime.clone = function () {
       return new Date(muddledDateTime.getTime())
     }
   }
@@ -33,6 +31,4 @@ exports.friendlyDatetime = function(dateTime, perspective) {
   return $.friendlyDatetime(muddledDateTime, perspective)
 }
 
-exports.fudgeDateForProfileTimezone = $.fudgeDateForProfileTimezone
-
-export default exports
+export const fudgeDateForProfileTimezone = $.fudgeDateForProfileTimezone

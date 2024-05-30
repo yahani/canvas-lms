@@ -17,9 +17,10 @@
  */
 
 import $ from 'jquery'
+import '@canvas/jquery/jquery.ajaxJSON'
 import ready from '@instructure/ready'
 import '@canvas/context-modules'
-import WikiPage from '@canvas/wiki/backbone/models/WikiPage.coffee'
+import WikiPage from '@canvas/wiki/backbone/models/WikiPage'
 import WikiPageView from './backbone/views/WikiPageView'
 import MarkAsDone from '@canvas/util/jquery/markAsDone'
 import LockManager from '@canvas/blueprint-courses/react/components/LockManager/index'
@@ -38,7 +39,7 @@ ready(() => {
 
   const wikiPage = new WikiPage(ENV.WIKI_PAGE, {
     revision: ENV.WIKI_PAGE_REVISION,
-    contextAssetString: ENV.context_asset_string
+    contextAssetString: ENV.context_asset_string,
   })
 
   const wikiPageView = new WikiPageView({
@@ -53,7 +54,7 @@ ready(() => {
     course_id: ENV.COURSE_ID,
     course_home: ENV.COURSE_HOME,
     course_title: ENV.COURSE_TITLE,
-    display_show_all_pages: ENV.DISPLAY_SHOW_ALL_LINK
+    display_show_all_pages: ENV.DISPLAY_SHOW_ALL_LINK,
   })
 
   wikiPageView.render()

@@ -18,10 +18,10 @@
 
 const path = require('path')
 const glob = require('glob')
-const { DefinePlugin, EnvironmentPlugin } = require('webpack')
+const {DefinePlugin, EnvironmentPlugin, ProvidePlugin} = require('webpack')
 const partitioning = require('./partitioning')
 const PluginSpecsRunner = require('./PluginSpecsRunner')
-const { canvasDir } = require('#params')
+const {canvasDir} = require('../params')
 
 const {
   CONTEXT_COFFEESCRIPT_SPEC,
@@ -29,9 +29,6 @@ const {
   CONTEXT_JSX_SPEC,
   RESOURCE_COFFEESCRIPT_SPEC,
   RESOURCE_EMBER_GRADEBOOK_SPEC,
-  RESOURCE_JSA_SPLIT_SPEC,
-  RESOURCE_JSG_SPLIT_SPEC,
-  RESOURCE_JSH_SPLIT_SPEC,
   RESOURCE_JSX_SPEC,
 } = partitioning
 
@@ -40,36 +37,41 @@ const WEBPACK_PLUGIN_SPECS = path.join(canvasDir, 'tmp/webpack-plugin-specs.js')
 module.exports = {
   mode: 'development',
   module: {
-    noParse: [
-      require.resolve('@instructure/i18nliner/dist/lib/i18nliner.js'),
-      require.resolve('jquery'),
-      require.resolve('tinymce'),
-    ],
+    noParse: [require.resolve('jquery'), require.resolve('tinymce')],
     rules: [
       {
-        test: /\.(js|ts|tsx)$/,
+        test: /\.(mjs|js|jsx|ts|tsx)$/,
+        type: 'javascript/auto',
+        include: [path.resolve(canvasDir, 'node_modules/graphql')],
+        resolve: {
+          fullySpecified: false,
+        },
+      },
+      {
+        test: /\.(js|jsx|ts|tsx)$/,
+        type: 'javascript/auto',
+        include: [path.resolve(canvasDir, 'node_modules/@instructure')],
+      },
+      {
+        test: /\.(js|jsx|ts|tsx)$/,
         include: [
           path.join(canvasDir, 'ui'),
-          path.join(canvasDir, 'packages/jquery-kyle-menu'),
-          path.join(canvasDir, 'packages/jquery-sticky'),
-          path.join(canvasDir, 'packages/jquery-popover'),
-          path.join(canvasDir, 'packages/jquery-selectmenu'),
-          path.join(canvasDir, 'packages/mathml'),
-          path.join(canvasDir, 'packages/persistent-array'),
-          path.join(canvasDir, 'packages/slickgrid'),
-          path.join(canvasDir, 'packages/with-breakpoints'),
           path.join(canvasDir, 'spec/javascripts/jsx'),
           path.join(canvasDir, 'spec/coffeescripts'),
-          /gems\/plugins\/.*\/app\/(jsx|coffeescripts)\//
+          /gems\/plugins\/.*\/app\/(jsx|coffeescripts)\//,
         ],
         exclude: [/node_modules/],
+        parser: {
+          requireInclude: 'allow',
+        },
         use: {
           loader: 'babel-loader',
           options: {
             cacheDirectory: false,
             configFile: false,
             presets: [
-              ['@babel/preset-react', { useBuiltIns: true }],
+              ['@babel/preset-env'],
+              ['@babel/preset-react', {useBuiltIns: true}],
               ['@babel/preset-typescript'],
             ],
             plugins: [
@@ -79,58 +81,40 @@ module.exports = {
               // symbols is concerned
               '@babel/plugin-transform-modules-commonjs',
               '@babel/plugin-proposal-optional-chaining',
-              '@babel/plugin-proposal-class-properties'
-            ]
-          }
-        }
-      },
-      {
-        test: /\.coffee$/,
-        include: [
-          path.join(canvasDir, 'ui'),
-          path.join(canvasDir, 'spec/coffeescripts'),
-          path.join(canvasDir, 'packages/backbone-input-filter-view/src'),
-          path.join(canvasDir, 'packages/backbone-input-view/src'),
-        ].concat(
-          glob.sync('gems/plugins/*/{app,spec_canvas}/coffeescripts/', {
-            cwd: canvasDir,
-            absolute: true
-          })
-        ),
-        use: ['coffee-loader']
+              '@babel/plugin-proposal-class-properties',
+            ],
+          },
+        },
       },
       {
         test: /\.handlebars$/,
-        include: [
-          path.join(canvasDir, 'ui'),
-          /gems\/plugins\/.*\/app\/views\/jst\//
-        ],
+        include: [path.join(canvasDir, 'ui'), /gems\/plugins\/.*\/app\/views\/jst\//],
         use: [
           {
             loader: require.resolve('#webpack-i18nliner-handlebars-loader'),
             options: {
               // brandable_css assets are not available in test
-              injectBrandableStylesheet: false
-            }
-          }
-        ]
+              injectBrandableStylesheet: false,
+            },
+          },
+        ],
       },
       {
         test: /\.hbs$/,
         include: [path.join(canvasDir, 'ui/features/screenreader_gradebook/jst')],
-        use: [require.resolve('#webpack-ember-handlebars-loader')]
+        use: [require.resolve('#webpack-ember-handlebars-loader')],
       },
       {
         test: /\.css$/,
-        use: ['style-loader', 'css-loader']
+        use: ['style-loader', 'css-loader'],
       },
       {
         test: /\.(png|svg|gif)$/,
-        loader: 'file-loader'
+        loader: 'file-loader',
       },
       {
         test: /\.(woff(2)?|otf|ttf|eot)(\?v=[0-9]\.[0-9]\.[0-9])?$/,
-        use: 'file-loader'
+        use: 'file-loader',
       },
 
       // Our spec files expect qunit's global `test`, `module`, `asyncTest` and
@@ -139,46 +123,57 @@ module.exports = {
       // globals. We should get rid of this and just change our actual source to
       // s/test/qunit.test/ and s/module/qunit.module/
       {
-        test: /\.js$/,
+        test: /\.(js|jsx|ts|tsx)$/,
         include: [
           path.join(canvasDir, 'spec/coffeescripts'),
           path.join(canvasDir, 'spec/javascripts/jsx'),
         ].concat(
           glob.sync('gems/plugins/*/spec_canvas/coffeescripts/', {
             cwd: canvasDir,
-            absolute: true
+            absolute: true,
           })
         ),
 
-        use: ['imports-loader?test=>QUnit.test']
+        use: ['imports-loader?test=>QUnit.test'],
       },
-    ]
+    ],
   },
   resolve: {
     alias: {
-      ['d3']: 'd3/d3',
-      ['node_modules-version-of-backbone$']: require.resolve('backbone'),
-      ['node_modules-version-of-react-modal$']: require.resolve('react-modal'),
-      ['spec/jsx']: path.join(canvasDir, 'spec/javascripts/jsx'),
-      ['ui/boot/initializers']: path.join(canvasDir, 'ui/boot/initializers'),
-      ['ui/ext']: path.join(canvasDir, 'ui/ext'),
-      ['ui/features']: path.join(canvasDir, 'ui/features'),
+      'node_modules-version-of-backbone$': require.resolve('backbone'),
+      'node_modules-version-of-react-modal$': require.resolve('react-modal'),
+      'spec/jsx': path.join(canvasDir, 'spec/javascripts/jsx'),
+      'ui/boot/initializers': path.join(canvasDir, 'ui/boot/initializers'),
+      'ui/ext': path.join(canvasDir, 'ui/ext'),
+      'ui/features': path.join(canvasDir, 'ui/features'),
       [CONTEXT_COFFEESCRIPT_SPEC]: path.join(canvasDir, CONTEXT_COFFEESCRIPT_SPEC),
       [CONTEXT_EMBER_GRADEBOOK_SPEC]: path.join(canvasDir, CONTEXT_EMBER_GRADEBOOK_SPEC),
       [CONTEXT_JSX_SPEC]: path.join(canvasDir, CONTEXT_JSX_SPEC),
+
+      // need to explicitly point this out for whatwg-url otherwise you get an
+      // error like:
+      //
+      //     TypeError: Cannot read properties of undefined (reading 'decode')
+      //
+      // I suspect it's trying to use node's native impl and that doesn't work
+      // when run through webpack
+      punycode: path.join(canvasDir, 'node_modules/punycode/punycode.js'),
     },
-    extensions: ['.mjs', '.js', '.ts', '.tsx', '.coffee'],
+    fallback: {
+      path: false, // for minimatch
+      stream: require.resolve('stream-browserify'),
+    },
+    extensions: ['.mjs', '.js', '.jsx', '.ts', '.tsx'],
     modules: [
-      path.join(canvasDir, 'ui/shims'),
       path.join(canvasDir, 'public/javascripts'),
       path.join(canvasDir, 'gems/plugins'),
       path.join(canvasDir, 'spec/coffeescripts'),
-      'node_modules'
+      'node_modules',
     ],
   },
 
   resolveLoader: {
-    modules: ['node_modules', path.resolve(__dirname, '../webpack')]
+    modules: ['node_modules', path.resolve(__dirname, '../webpack')],
   },
 
   plugins: [
@@ -189,7 +184,8 @@ module.exports = {
       RESOURCE_COFFEESCRIPT_SPEC,
       RESOURCE_EMBER_GRADEBOOK_SPEC,
       RESOURCE_JSX_SPEC,
-      WEBPACK_PLUGIN_SPECS: JSON.stringify(WEBPACK_PLUGIN_SPECS)
+      WEBPACK_PLUGIN_SPECS: JSON.stringify(WEBPACK_PLUGIN_SPECS),
+      process: {browser: true, env: {}},
     }),
 
     new EnvironmentPlugin({
@@ -198,20 +194,31 @@ module.exports = {
       JSPEC_RECURSE: '1',
       JSPEC_VERBOSE: '0',
       A11Y_REPORT: false,
-      GIT_COMMIT: null
+      GIT_COMMIT: null,
     }),
 
     new PluginSpecsRunner({
       pattern: 'gems/plugins/*/spec_canvas/coffeescripts/**/*Spec.js',
-      outfile: WEBPACK_PLUGIN_SPECS
+      outfile: WEBPACK_PLUGIN_SPECS,
+    }),
+
+    // needed for modules that expect Buffer to be present like fetch-mock (or
+    // whatwg-url, its dependency)
+    new ProvidePlugin({
+      Buffer: ['buffer', 'Buffer'],
+      $: 'jquery',
+      jQuery: 'jquery',
+      'window.jQuery': 'jquery',
     }),
   ].concat(
-    process.env.JSPEC_GROUP ? [
-      partitioning.createPlugin({
-        group: process.env.JSPEC_GROUP,
-        nodeIndex: +process.env.CI_NODE_INDEX,
-        nodeTotal: +process.env.CI_NODE_TOTAL,
-      })
-    ] : []
-  )
+    process.env.JSPEC_GROUP
+      ? [
+          partitioning.createPlugin({
+            group: process.env.JSPEC_GROUP,
+            nodeIndex: +process.env.CI_NODE_INDEX,
+            nodeTotal: +process.env.CI_NODE_TOTAL,
+          }),
+        ]
+      : []
+  ),
 }

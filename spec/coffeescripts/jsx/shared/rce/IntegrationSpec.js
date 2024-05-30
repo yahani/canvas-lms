@@ -20,6 +20,7 @@ import {waitFor} from '@testing-library/dom'
 import RichContentEditor from '@canvas/rce/RichContentEditor'
 import RCELoader from '@canvas/rce/serviceRCELoader'
 import $ from 'jquery'
+import 'jquery-migrate'
 import fakeENV from 'helpers/fakeENV'
 import editorUtils from 'helpers/editorUtils'
 
@@ -39,12 +40,12 @@ QUnit.module('Rce Abstraction - integration', {
         const fakeEditor = {
           mceInstance() {
             return {
-              on() {}
+              on() {},
             }
-          }
+          },
         }
         return renderCallback(fakeEditor)
-      }
+      },
     }
     return sandbox.stub(RCELoader, 'loadRCE').callsFake(callback => callback(this.fakeRceModule))
   },
@@ -52,7 +53,7 @@ QUnit.module('Rce Abstraction - integration', {
     fakeENV.teardown()
     $('#fixtures').empty()
     editorUtils.resetRCE()
-  }
+  },
 })
 
 async function loadNewEditor() {
@@ -61,8 +62,8 @@ async function loadNewEditor() {
     const tinyMCEInitOptions = {
       manageParent: true,
       tinyOptions: {
-        init_instance_callback: resolve
-      }
+        init_instance_callback: resolve,
+      },
     }
     RichContentEditor.loadNewEditor($target, tinyMCEInitOptions)
   })

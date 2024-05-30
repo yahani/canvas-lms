@@ -17,7 +17,7 @@
  */
 
 import {createStore, applyMiddleware} from 'redux'
-import ReduxThunk from 'redux-thunk'
+import {withExtraArgument} from 'redux-thunk'
 import rootReducer from './reducers'
 
 export const defaultState = {
@@ -29,17 +29,17 @@ export const defaultState = {
     account: [],
     effective: [],
     inherited: [],
-    tools: {}
-  }
+    tools: {},
+  },
 }
 
 export function configStore(initialState, api, options = {}) {
   const middleware = [
-    ReduxThunk.withExtraArgument({axios: api}),
+    withExtraArgument({axios: api}),
     process.env.NODE_ENV !== 'production' &&
       process.env.NODE_ENV !== 'test' &&
       !options.disableLogger &&
-      require('redux-logger').logger
+      require('redux-logger').logger,
   ].filter(Boolean)
 
   return createStore(rootReducer, initialState, applyMiddleware(...middleware))

@@ -16,8 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import * as AssignmentActions from 'ui/features/assignment_grade_summary/react/assignment/AssignmentActions.js'
-import configureStore from 'ui/features/assignment_grade_summary/react/configureStore.js'
+import * as AssignmentActions from 'ui/features/assignment_grade_summary/react/assignment/AssignmentActions'
+import configureStore from 'ui/features/assignment_grade_summary/react/configureStore'
 
 QUnit.module('GradeSummary assignmentReducer()', suiteHooks => {
   let store
@@ -29,12 +29,12 @@ QUnit.module('GradeSummary assignmentReducer()', suiteHooks => {
         gradesPublished: false,
         id: '2301',
         muted: true,
-        title: 'Example Assignment'
+        title: 'Example Assignment',
       },
       graders: [
         {graderId: '1101', graderName: 'Miss Frizzle'},
-        {graderId: '1102', graderName: 'Mr. Keating'}
-      ]
+        {graderId: '1102', graderName: 'Mr. Keating'},
+      ],
     })
   })
 

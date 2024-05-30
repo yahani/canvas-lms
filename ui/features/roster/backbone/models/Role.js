@@ -16,7 +16,7 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import {Model} from '@canvas/backbone'
-import _ from 'underscore'
+import {isEmpty} from 'lodash'
 
 export default class Role extends Model {
   initialize() {
@@ -42,9 +42,9 @@ export default class Role extends Model {
   //   in the error object to any validation function you make. It's
   //   passed by reference dawg.
   // @api override backbone
-  validate(attrs) {
+  validate(_attrs) {
     const errors = {}
-    if (!_.isEmpty(errors)) return errors
+    if (!isEmpty(errors)) return errors
   }
 
   editable() {

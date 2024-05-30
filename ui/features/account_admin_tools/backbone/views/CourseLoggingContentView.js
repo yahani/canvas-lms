@@ -17,12 +17,12 @@
 
 import Backbone from '@canvas/backbone'
 import $ from 'jquery'
-import PaginatedCollectionView from '@canvas/pagination/backbone/views/PaginatedCollectionView.coffee'
+import PaginatedCollectionView from '@canvas/pagination/backbone/views/PaginatedCollectionView'
 import DateRangeSearchView from './DateRangeSearchView'
 import AutocompleteView from './AutocompleteView'
-import ValidatedMixin from '@canvas/forms/backbone/views/ValidatedMixin.coffee'
+import ValidatedMixin from '@canvas/forms/backbone/views/ValidatedMixin'
 import CourseLoggingItemView from './CourseLoggingItemView'
-import CourseLoggingCollection from '../collections/CourseLoggingCollection.coffee'
+import CourseLoggingCollection from '../collections/CourseLoggingCollection'
 import template from '../../jst/courseLoggingContent.handlebars'
 import courseLoggingResultsTemplate from '../../jst/courseLoggingResults.handlebars'
 import detailsTemplate from '../../jst/courseLoggingDetails.handlebars'
@@ -38,7 +38,7 @@ export default function CourseLoggingContentView(options) {
   this.collection = new CourseLoggingCollection()
   Backbone.View.apply(this, arguments)
   this.dateRangeSearch = new DateRangeSearchView({
-    name: 'courseLogging'
+    name: 'courseLogging',
   })
   this.courseSearch = new AutocompleteView({
     collection: new Backbone.Collection(null, {resourceName: 'courses'}),
@@ -46,13 +46,13 @@ export default function CourseLoggingContentView(options) {
     fieldName: 'course_id',
     placeholder: 'Course ID',
     sourceParameters: {
-      'state[]': 'all'
-    }
+      'state[]': 'all',
+    },
   })
   this.resultsView = new PaginatedCollectionView({
     template: courseLoggingResultsTemplate,
     itemView: CourseLoggingItemView,
-    collection: this.collection
+    collection: this.collection,
   })
 }
 CourseLoggingContentView.mixin(ValidatedMixin)
@@ -70,7 +70,7 @@ Object.assign(CourseLoggingContentView.prototype, {
 
   events: {
     'submit #courseLoggingForm': 'onSubmit',
-    'click #courseLoggingSearchResults .courseLoggingDetails > a': 'showDetails'
+    'click #courseLoggingSearchResults .courseLoggingDetails > a': 'showDetails',
   },
 
   onSubmit(event) {
@@ -87,13 +87,15 @@ Object.assign(CourseLoggingContentView.prototype, {
     const id = $target.data('id')
 
     const model = this.collection.get(id)
-    if (model == null) {
+    if (model === null || typeof model === 'undefined') {
+      // eslint-disable-next-line no-console
       console.warn(`Could not find model for event ${id}.`)
       return
     }
 
     const type = model.get('event_type')
-    if (type == null) {
+    if (type === null || typeof type === 'undefined') {
+      // eslint-disable-next-line no-console
       console.warn(`Could not find type for event ${id}.`)
       return
     }
@@ -103,7 +105,9 @@ Object.assign(CourseLoggingContentView.prototype, {
     const config = {
       title: 'Event Details',
       width: 600,
-      resizable: true
+      resizable: true,
+      modal: true,
+      zIndex: 1000,
     }
     return this.dialog.dialog(config)
   },
@@ -116,7 +120,7 @@ Object.assign(CourseLoggingContentView.prototype, {
       id: null,
       type: null,
       start_time: '',
-      end_time: ''
+      end_time: '',
     }
 
     if (json.start_time) params.start_time = json.start_time
@@ -137,8 +141,8 @@ Object.assign(CourseLoggingContentView.prototype, {
       errors.course_submit = [
         {
           type: 'required',
-          message: 'A valid Course is required to search events.'
-        }
+          message: 'A valid Course is required to search events.',
+        },
       ]
     }
 
@@ -154,7 +158,7 @@ Object.assign(CourseLoggingContentView.prototype, {
     return this.collection.fetch({error: this.onFail})
   },
 
-  onFail(collection, xhr) {
+  onFail(_collection, xhr) {
     // Received a 404, empty the collection and don't let the paginated
     // view try to fetch more.
     this.collection.reset()
@@ -166,8 +170,8 @@ Object.assign(CourseLoggingContentView.prototype, {
       errors.course_id = [
         {
           type: 'required',
-          message: 'A course with that ID could not be found for this account.'
-        }
+          message: 'A course with that ID could not be found for this account.',
+        },
       ]
       if (!$.isEmptyObject(errors)) return this.showErrors(errors)
     }
@@ -177,5 +181,5 @@ Object.assign(CourseLoggingContentView.prototype, {
     const name = model.get('name')
     const code = model.get('course_code')
     return `${model.id} - ${name} - ${code}`
-  }
+  },
 })

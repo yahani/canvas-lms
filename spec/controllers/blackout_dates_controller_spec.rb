@@ -18,7 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-describe BlackoutDatesController, type: :controller do
+describe BlackoutDatesController do
   before :once do
     course_with_teacher(active_all: true)
 
@@ -35,24 +35,24 @@ describe BlackoutDatesController, type: :controller do
 
   describe "GET #index" do
     it "loads all the blackout dates for the context" do
-      get :index, { params: { course_id: @course.id } }
+      get :index, params: { course_id: @course.id }
 
       expect(response).to be_successful
       expect(assigns[:blackout_dates]).to include(@blackout_date)
     end
 
     it "returns a json response if using the API" do
-      get :index, { format: :json, params: { course_id: @course.id } }
+      get :index, format: :json, params: { course_id: @course.id }
 
       expect(response).to be_successful
-      json_response = JSON.parse(response.body)
+      json_response = response.parsed_body
       expect(json_response).to eq([@blackout_date.as_json(include_root: false)].as_json)
     end
   end
 
   describe "GET #show" do
     it "loads the blackout date" do
-      get :show, { params: { course_id: @course.id, id: @blackout_date.id } }
+      get :show, params: { course_id: @course.id, id: @blackout_date.id }
 
       expect(response).to be_successful
       expect(assigns[:blackout_date]).to eq(@blackout_date)
@@ -61,7 +61,7 @@ describe BlackoutDatesController, type: :controller do
 
   describe "GET #new" do
     it "loads an unsaved blackout date" do
-      get :new, { params: { course_id: @course.id } }
+      get :new, params: { course_id: @course.id }
 
       expect(response).to be_successful
       blackout_date = assigns[:blackout_date]
@@ -73,10 +73,10 @@ describe BlackoutDatesController, type: :controller do
 
   describe "POST #create" do
     it "creates a new blackout date" do
-      post :create, { params: { course_id: @course.id, blackout_date: { start_date: "2022-01-01", end_date: "2022-01-02", event_title: "Test" } } }
+      post :create, params: { course_id: @course.id, blackout_date: { start_date: "2022-01-01", end_date: "2022-01-02", event_title: "Test" } }
 
       expect(response).to be_successful
-      json_response = JSON.parse(response.body)
+      json_response = response.parsed_body
       blackout_date = json_response["blackout_date"]
       expect(blackout_date["id"]).not_to be_nil
       expect(blackout_date["context_id"]).to eq(@course.id)
@@ -87,20 +87,20 @@ describe BlackoutDatesController, type: :controller do
     end
 
     it "doesn't allow end_date to be after start_date" do
-      post :create, { params: { course_id: @course.id, blackout_date: { start_date: "2022-02-01", end_date: "2022-01-01", event_title: "Test" } } }
+      post :create, params: { course_id: @course.id, blackout_date: { start_date: "2022-02-01", end_date: "2022-01-01", event_title: "Test" } }
 
       expect(response).not_to be_successful
-      json_response = JSON.parse(response.body)
+      json_response = response.parsed_body
       expect(json_response["errors"]).to eq(["End date can't be before start date"])
     end
   end
 
   describe "PUT #update" do
     it "updates a blackout date" do
-      put :update, { params: { course_id: @course.id, id: @blackout_date.id, blackout_date: { start_date: "2022-01-01", end_date: "2022-01-02", event_title: "Test" } } }
+      put :update, params: { course_id: @course.id, id: @blackout_date.id, blackout_date: { start_date: "2022-01-01", end_date: "2022-01-02", event_title: "Test" } }
 
       expect(response).to be_successful
-      json_response = JSON.parse(response.body)
+      json_response = response.parsed_body
       blackout_date = json_response["blackout_date"]
       expect(blackout_date["id"]).to eq(@blackout_date.id)
       expect(blackout_date["context_id"]).to eq(@course.id)
@@ -111,17 +111,17 @@ describe BlackoutDatesController, type: :controller do
     end
 
     it "doesn't allow end_date to be after start_date" do
-      post :create, { params: { course_id: @course.id, id: @blackout_date.id, blackout_date: { start_date: "2022-02-01", end_date: "2022-01-01", event_title: "Test" } } }
+      post :create, params: { course_id: @course.id, id: @blackout_date.id, blackout_date: { start_date: "2022-02-01", end_date: "2022-01-01", event_title: "Test" } }
 
       expect(response).not_to be_successful
-      json_response = JSON.parse(response.body)
+      json_response = response.parsed_body
       expect(json_response["errors"]).to eq(["End date can't be before start date"])
     end
   end
 
   describe "DELETE #destroy" do
     it "deletes the blackout date" do
-      get :destroy, { params: { course_id: @course.id, id: @blackout_date.id } }
+      get :destroy, params: { course_id: @course.id, id: @blackout_date.id }
 
       expect(response).to be_successful
       expect(BlackoutDate.find_by(id: @blackout_date.id)).to be_nil
@@ -131,15 +131,14 @@ describe BlackoutDatesController, type: :controller do
   describe "PUT #bulk_update" do
     it "syncs the blackout dates with incoming data" do
       blackout_date2 = @course.blackout_dates.create!(start_date: "2022-11-11", end_date: "2022-11-11", event_title: "My birthday")
-      put :bulk_update, {
-        params: {
-          course_id: @course.id,
-          blackout_dates: [
-            { id: blackout_date2.id, start_date: blackout_date2.start_date.iso8601, end_date: blackout_date2.end_date.iso8601, event_title: "update me" },
-            { start_date: "2022-05-31", end_date: "2022-09-01", event_title: "summer break" }
-          ]
-        }
-      }
+      put :bulk_update,
+          params: {
+            course_id: @course.id,
+            blackout_dates: [
+              { id: blackout_date2.id, start_date: blackout_date2.start_date.iso8601, end_date: blackout_date2.end_date.iso8601, event_title: "update me" },
+              { start_date: "2022-05-31", end_date: "2022-09-01", event_title: "summer break" }
+            ]
+          }
       @course.reload
       blackout_dates = @course.blackout_dates
       expect(response).to be_successful

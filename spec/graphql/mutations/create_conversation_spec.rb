@@ -21,6 +21,11 @@
 require_relative "../graphql_spec_helper"
 
 RSpec.describe Mutations::CreateConversation do
+  before do
+    allow(InstStatsd::Statsd).to receive(:count)
+    allow(InstStatsd::Statsd).to receive(:increment)
+  end
+
   before(:once) do
     course_with_teacher(active_all: true)
     student_in_course(active_all: true)
@@ -114,9 +119,9 @@ RSpec.describe Mutations::CreateConversation do
 
   def run_mutation(opts = {}, current_user = @student)
     result = CanvasSchema.execute(
-      mutation_str(opts),
+      mutation_str(**opts),
       context: {
-        current_user: current_user,
+        current_user:,
         domain_root_account: @course.account.root_account,
         request: ActionDispatch::TestRequest.create
       }
@@ -129,8 +134,39 @@ RSpec.describe Mutations::CreateConversation do
     enrollment = @course.enroll_student(new_user)
     enrollment.workflow_state = "active"
     enrollment.save
-    result = run_mutation(recipients: [new_user.id.to_s], body: "yo", context_code: @course.asset_string)
+    @student.media_objects.where(media_id: "m-whatever", media_type: "video/mp4").first_or_create!
+    result = run_mutation(recipients: [new_user.id.to_s], body: "yo", context_code: @course.asset_string, media_comment_id: "m-whatever", media_comment_type: "video")
+    expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.created.react")
+    expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.message.sent.react")
+    expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.sent.react")
+    expect(InstStatsd::Statsd).to have_received(:count).with("inbox.message.sent.recipients.react", 1)
+    expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.message.sent.media.react")
+    expect(result.dig("data", "createConversation", "errors")).to be_nil
+    expect(
+      result.dig("data", "createConversation", "conversations", 0, "conversation", "conversationMessagesConnection", "nodes", 0, "body")
+    ).to eq "yo"
+  end
 
+  it "creates a conversation with an attachment" do
+    new_user = User.create
+    attachment = @user.conversation_attachments_folder.attachments.create!(filename: "somefile.doc", context: @user, uploaded_data: StringIO.new("test"))
+    enrollment = @course.enroll_student(new_user)
+    enrollment.workflow_state = "active"
+    enrollment.save
+    @student.media_objects.where(media_id: "m-whatever", media_type: "video/mp4").first_or_create!
+    result = run_mutation(
+      recipients: [new_user.id.to_s],
+      body: "yo",
+      context_code: @course.asset_string,
+      media_comment_id: "m-whatever",
+      media_comment_type: "video",
+      attachment_ids: [attachment.id]
+    )
+    expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.created.react")
+    expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.sent.react")
+    expect(InstStatsd::Statsd).to have_received(:count).with("inbox.message.sent.recipients.react", 1)
+    expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.message.sent.media.react")
+    expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.message.sent.attachment.react")
     expect(result.dig("data", "createConversation", "errors")).to be_nil
     expect(
       result.dig("data", "createConversation", "conversations", 0, "conversation", "conversationMessagesConnection", "nodes", 0, "body")
@@ -158,20 +194,131 @@ RSpec.describe Mutations::CreateConversation do
 
     result = run_mutation(recipients: [@teacher.id.to_s], body: "yo", context_code: @course.asset_string)
 
-    expect(result.dig("data", "createConversation", "conversations")).to be nil
+    expect(result.dig("data", "createConversation", "conversations")).to be_nil
     expect(
       result.dig("data", "createConversation", "errors", 0, "message")
     ).to eq "Unable to send messages to users in #{@course.name}"
   end
 
-  it "allows creating conversations in concluded courses for teachers" do
+  it "does not allow creating conversations in concluded courses for teachers" do
     teacher2 = teacher_in_course(active_all: true).user
-    @course.update!(workflow_state: "claimed")
+    @course.update!(workflow_state: "completed")
 
     result = run_mutation({ recipients: [teacher2.id.to_s], body: "yo", context_code: @course.asset_string }, @teacher)
+
+    expect(result.dig("data", "createConversation", "conversations")).to be_nil
     expect(
-      result.dig("data", "createConversation", "conversations", 0, "conversation", "conversationMessagesConnection", "nodes", 0, "body")
-    ).to eq "yo"
+      result.dig("data", "createConversation", "errors", 0, "message")
+    ).to eq "Unable to send messages to users in #{@course.name}"
+  end
+
+  context "soft-concluded course with with active enrollment overrides" do
+    before do
+      course_with_student(active_all: true)
+      @course.enrollment_term.start_at = 2.days.ago
+      @course.enrollment_term.end_at = 1.day.ago
+      @course.restrict_student_future_view = true
+      @course.restrict_student_past_view = true
+      @course.enrollment_term.set_overrides(Account.default, "TeacherEnrollment" => { start_at: 1.day.ago, end_at: 2.days.from_now })
+      @course.enrollment_term.set_overrides(Account.default, "StudentEnrollment" => { start_at: 1.day.ago, end_at: 2.days.from_now })
+      @course.save!
+      @course.enrollment_term.save!
+    end
+
+    it "allows a student to create a new conversation in soft_concluded course if enrollment override is active" do
+      expect(@course.soft_concluded?).to be_truthy
+      result = run_mutation(recipients: [@teacher.id.to_s], body: "yo", context_code: @course.asset_string)
+      expect(result.dig("data", "createConversation", "errors")).to be_nil
+      expect(
+        result.dig("data", "createConversation", "conversations", 0, "conversation", "conversationMessagesConnection", "nodes", 0, "body")
+      ).to eq "yo"
+    end
+
+    it "allows a teacher to create a new conversation in soft_concluded course if enrollment override is active" do
+      expect(@course.soft_concluded?).to be_truthy
+      result = run_mutation({ recipients: [@student.id.to_s], body: "yo", context_code: @course.asset_string }, @teacher)
+      expect(result.dig("data", "createConversation", "errors")).to be_nil
+      expect(
+        result.dig("data", "createConversation", "conversations", 0, "conversation", "conversationMessagesConnection", "nodes", 0, "body")
+      ).to eq "yo"
+    end
+  end
+
+  context "soft concluded course with non-concluded section override" do
+    before do
+      @student1 = course_with_student(active_all: true).user
+      @student2 = course_with_student(active_all: true).user
+      @course.start_at = 2.days.ago
+      @course.conclude_at = 1.day.ago
+      @course.restrict_enrollments_to_course_dates = true
+      @course.save!
+
+      @my_section = @course.course_sections.create!(name: "test section")
+      @my_section.start_at = 1.day.ago
+      @my_section.end_at = 5.days.from_now
+      @my_section.restrict_enrollments_to_section_dates = true
+      @my_section.save!
+
+      @course.enroll_student(@student1,
+                             allow_multiple_enrollments: true,
+                             enrollment_state: "active",
+                             section: @my_section)
+
+      @course.enroll_teacher(@teacher,
+                             allow_multiple_enrollments: true,
+                             enrollment_state: "active",
+                             section: @my_section)
+    end
+
+    it "allows a student to create a new conversation in soft_concluded course if section override is active" do
+      expect(@course.soft_concluded?).to be_truthy
+      result = run_mutation({ recipients: [@teacher.id.to_s], body: "yo", context_code: @course.asset_string }, @student1)
+      expect(result.dig("data", "createConversation", "errors")).to be_nil
+      expect(
+        result.dig("data", "createConversation", "conversations", 0, "conversation", "conversationMessagesConnection", "nodes", 0, "body")
+      ).to eq "yo"
+    end
+
+    it "allows a teacher to create a new conversation in soft_concluded course if section override is active" do
+      expect(@course.soft_concluded?).to be_truthy
+      result = run_mutation({ recipients: [@student1.id.to_s], body: "yo", context_code: @course.asset_string }, @teacher)
+      expect(result.dig("data", "createConversation", "errors")).to be_nil
+      expect(
+        result.dig("data", "createConversation", "conversations", 0, "conversation", "conversationMessagesConnection", "nodes", 0, "body")
+      ).to eq "yo"
+    end
+
+    it "does not allow a student that is not part of the section override to send messages" do
+      expect(@course.soft_concluded?).to be_truthy
+      result = run_mutation({ recipients: [@student.id.to_s], body: "yo", context_code: @course.asset_string }, @student2)
+      expect(result.dig("data", "createConversation", "conversations")).to be_nil
+      expect(
+        result.dig("data", "createConversation", "errors", 0, "message")
+      ).to eq "Unable to send messages to users in #{@course.name}"
+    end
+  end
+
+  it "does not allow creating conversations in soft concluded courses for students" do
+    @course.soft_conclude!
+    @course.save
+    result = run_mutation(recipients: [@teacher.id.to_s], body: "yo", context_code: @course.asset_string)
+
+    expect(result.dig("data", "createConversation", "conversations")).to be_nil
+    expect(
+      result.dig("data", "createConversation", "errors", 0, "message")
+    ).to eq "Course concluded, unable to send messages"
+  end
+
+  it "does not allow creating conversations in soft concluded courses for teachers" do
+    teacher2 = teacher_in_course(active_all: true).user
+    @course.soft_conclude!
+    @course.save
+    result = run_mutation({ recipients: [teacher2.id.to_s], body: "yo", context_code: @course.asset_string }, @teacher)
+
+    expect(result.dig("data", "createConversation", "conversations")).to be_nil
+    expect(
+      result.dig("data", "createConversation", "errors", 0, "message")
+    ).to eq "Course concluded, unable to send messages"
   end
 
   it "requires permissions for sending to other students" do
@@ -282,12 +429,35 @@ RSpec.describe Mutations::CreateConversation do
     end
 
     it "creates one conversation per recipient" do
-      result = run_mutation(recipients: [@new_user1.id.to_s, @new_user2.id.to_s], body: "yo", group_conversation: false, context_code: @course.asset_string)
+      user_type = GraphQLTypeTester.new(@student, current_user: @student, domain_root_account: @student.account, request: ActionDispatch::TestRequest.create)
+      @student.media_objects.where(media_id: "m-whatever", media_type: "video/mp4").first_or_create!
 
-      expect(
-        result.dig("data", "createConversation", "conversations").count
-      ).to eql 2
-      expect(Conversation.count).to eql(@old_count + 2)
+      run_mutation(recipients: [@new_user1.id.to_s, @new_user2.id.to_s], subject: "yo 1", group_conversation: true, bulk_message: true, context_code: @course.asset_string, media_comment_id: "m-whatever", media_comment_type: "video")
+      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.sent.individual_message_option.react")
+      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.sent.react")
+      expect(InstStatsd::Statsd).to have_received(:count).with("inbox.message.sent.recipients.react", 2)
+      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.message.sent.media.react")
+      run_mutation(recipients: [@new_user1.id.to_s, @new_user2.id.to_s], subject: "yo 2", group_conversation: true, bulk_message: true, context_code: @course.asset_string, media_comment_id: "m-whatever", media_comment_type: "video")
+      expect(InstStatsd::Statsd).to have_received(:count).with("inbox.conversation.created.react", 2).at_least(:twice)
+      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.message.sent.react").at_least(:twice)
+      expect(InstStatsd::Statsd).to have_received(:count).with("inbox.message.sent.recipients.react", 2).at_least(:twice)
+      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.message.sent.media.react").at_least(:twice)
+      expect(Conversation.count).to eql(@old_count + 4)
+      result = user_type.resolve("conversationsConnection(scope: \"sent\") { nodes { conversation { subject } } }")
+      expect(result).to match(["yo 2", "yo 2", "yo 1", "yo 1"])
+    end
+
+    context "private conversation" do
+      it "returns one private conversation per user-recipient pair" do
+        user_type = GraphQLTypeTester.new(@student, current_user: @student, domain_root_account: @student.account, request: ActionDispatch::TestRequest.create)
+
+        run_mutation(recipients: [@new_user1.id.to_s, @new_user2.id.to_s], subject: "yo 1", group_conversation: false, bulk_message: true, context_code: @course.asset_string)
+        run_mutation(recipients: [@new_user1.id.to_s, @new_user2.id.to_s], subject: "yo 2", group_conversation: false, bulk_message: true, context_code: @course.asset_string)
+
+        expect(Conversation.count).to eql(@old_count + 2)
+        result = user_type.resolve("conversationsConnection(scope: \"sent\") { nodes { conversation { subject } } }")
+        expect(result).to match(["yo 1", "yo 1"])
+      end
     end
 
     it "sets the root account id to the participants for group conversations" do
@@ -305,7 +475,7 @@ RSpec.describe Mutations::CreateConversation do
       @course.account.role_overrides.create!(permission: :send_messages, role: student_role, enabled: false)
       result = run_mutation(recipients: [@new_user2.id.to_s], body: "ooo eee", group_conversation: true, context_code: @course.asset_string)
 
-      expect(result.dig("data", "createConversation", "conversations")).to be nil
+      expect(result.dig("data", "createConversation", "conversations")).to be_nil
       expect(
         result.dig("data", "createConversation", "errors", 0, "message")
       ).to eql "Invalid recipients"
@@ -318,15 +488,28 @@ RSpec.describe Mutations::CreateConversation do
       @students = create_users_in_course(@course, 2, account_associations: true, return_type: :record)
     end
 
-    it "creates user notes" do
-      run_mutation({ recipients: @students.map(&:id).map(&:to_s), body: "yo", subject: "greetings", user_note: true, context_code: @course.asset_string }, @teacher)
-      @students.each { |x| expect(x.user_notes.size).to be(1) }
+    context "when the deprecate_faculty_journal feature flag is disabled" do
+      before { Account.site_admin.disable_feature!(:deprecate_faculty_journal) }
+
+      it "creates user notes" do
+        run_mutation({ recipients: @students.map { |u| u.id.to_s }, body: "yo", subject: "greetings", user_note: true, context_code: @course.asset_string }, @teacher)
+        @students.each { |x| expect(x.user_notes.size).to be(1) }
+        expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.sent.faculty_journal.react")
+      end
+
+      it "includes the domain root account in the user note" do
+        run_mutation({ recipients: @students.map { |u| u.id.to_s }, body: "hi there", subject: "hi there", user_note: true, context_code: @course.asset_string }, @teacher)
+        note = UserNote.last
+        expect(note.root_account_id).to eql Account.default.id
+      end
     end
 
-    it "includes the domain root account in the user note" do
-      run_mutation({ recipients: @students.map(&:id).map(&:to_s), body: "hi there", subject: "hi there", user_note: true, context_code: @course.asset_string }, @teacher)
-      note = UserNote.last
-      expect(note.root_account_id).to eql Account.default.id
+    context "when the deprecate_faculty_journal feature flag is enabled" do
+      it "does not create user notes" do
+        run_mutation({ recipients: @students.map { |u| u.id.to_s }, body: "yo", subject: "greetings", user_note: true, context_code: @course.asset_string }, @teacher)
+        @students.each { |x| expect(x.user_notes.size).to be(0) }
+        expect(InstStatsd::Statsd).to_not have_received(:increment).with("inbox.conversation.sent.faculty_journal.react")
+      end
     end
   end
 
@@ -334,7 +517,7 @@ RSpec.describe Mutations::CreateConversation do
     it "fails for normal users" do
       result = run_mutation(recipients: [User.create.id.to_s], body: "foo")
 
-      expect(result.dig("data", "createConversation", "conversations")).to be nil
+      expect(result.dig("data", "createConversation", "conversations")).to be_nil
       expect(
         result.dig("data", "createConversation", "errors", 0, "message")
       ).to eql "Invalid recipients"
@@ -346,6 +529,7 @@ RSpec.describe Mutations::CreateConversation do
       expect(
         result.dig("data", "createConversation", "conversations", 0, "conversation", "conversationMessagesConnection", "nodes", 0, "body")
       ).to eql "foo"
+      expect(InstStatsd::Statsd).to have_received(:increment).with("inbox.conversation.sent.account_context.react")
     end
   end
 end

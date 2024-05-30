@@ -17,7 +17,6 @@
 # You should have received a copy of the GNU Affero General Public License along
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
-require_dependency "lib/canvas/oauth/client_credentials_provider"
 
 class Lti::TokenController < ApplicationController
   include SupportHelpers::ControllerHelpers
@@ -44,9 +43,10 @@ class Lti::TokenController < ApplicationController
   def lti_2_token
     unless tool_proxy
       return render json: {
-        status: :bad_request,
-        errors: [{ message: "Unable to find tool for given parameters" }]
-      }, status: :bad_request
+                      status: :bad_request,
+                      errors: [{ message: "Unable to find tool for given parameters" }]
+                    },
+                    status: :bad_request
     end
     token = Lti::OAuth2::AccessToken.create_jwt(aud: request.host, sub: tool_proxy.guid)
     render plain: token.to_s
@@ -58,9 +58,10 @@ class Lti::TokenController < ApplicationController
     return if key&.is_lti_key
 
     render json: {
-      status: :bad_request,
-      errors: [{ message: "Tool/Developer Key must be for LTI 1.3 tool" }]
-    }, status: :bad_request
+             status: :bad_request,
+             errors: [{ message: "Tool/Developer Key must be for LTI 1.3 tool" }]
+           },
+           status: :bad_request
   end
 
   def key

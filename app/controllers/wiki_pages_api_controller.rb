@@ -68,7 +68,7 @@
 #           "$ref": "User"
 #         },
 #         "body": {
-#           "description": "the page content, in HTML (present when requesting a single page; omitted when listing pages)",
+#           "description": "the page content, in HTML (present when requesting a single page; optionally included when listing pages)",
 #           "example": "<p>Page Content</p>",
 #           "type": "string"
 #         },
@@ -76,6 +76,11 @@
 #           "description": "whether the page is published (true) or draft state (false).",
 #           "example": true,
 #           "type": "boolean"
+#         },
+#         "publish_at": {
+#           "description": "scheduled publication date for this page",
+#           "example": "2022-09-01T00:00:00",
+#           "type": "datetime"
 #         },
 #         "front_page": {
 #           "description": "whether this page is the front page for the wiki",
@@ -152,9 +157,9 @@
 #
 class WikiPagesApiController < ApplicationController
   before_action :require_context
-  before_action :get_wiki_page, except: [:create, :index]
-  before_action :require_wiki_page, except: %i[create update update_front_page index]
-  before_action :was_front_page, except: [:index]
+  before_action :get_wiki_page, except: %i[create index check_title_availability]
+  before_action :require_wiki_page, except: %i[create update update_front_page index check_title_availability]
+  before_action :was_front_page, except: [:index, :check_title_availability]
   before_action only: %i[show update destroy revisions show_revision revert] do
     check_differentiated_assignments(@page) if @context.conditional_release?
   end
@@ -249,6 +254,8 @@ class WikiPagesApiController < ApplicationController
   #   If true, include only published paqes. If false, exclude published
   #   pages. If not present, do not filter on published status.
   #
+  # @argument include[] [String, "body"]
+  #   - "enrollments": Optionally include the page body with each Page.
   #
   # @example_request
   #     curl -H 'Authorization: Bearer <token>' \
@@ -259,8 +266,10 @@ class WikiPagesApiController < ApplicationController
     if authorized_action(@context.wiki, @current_user, :read) && tab_enabled?(@context.class::TAB_PAGES)
       log_api_asset_access(["pages", @context], "pages", "other")
       pages_route = polymorphic_url([:api_v1, @context, :wiki_pages])
-      # omit body from selection, since it's not included in index results
-      scope = @context.wiki_pages.select(WikiPage.column_names - ["body"]).preload(:user)
+      includes = Array(params[:include])
+      scope_columns = WikiPage.column_names
+      scope_columns -= ["body"] unless includes.include?("body")
+      scope = @context.wiki_pages.select(scope_columns).preload(:user)
       scope = if params.key?(:published)
                 value_to_boolean(params[:published]) ? scope.published : scope.unpublished
               else
@@ -294,7 +303,7 @@ class WikiPagesApiController < ApplicationController
       if @context.wiki.grants_right?(@current_user, :update)
         mc_status = setup_master_course_restrictions(wiki_pages, @context)
       end
-      render json: wiki_pages_json(wiki_pages, @current_user, session, master_course_status: mc_status)
+      render json: wiki_pages_json(wiki_pages, @current_user, session, includes.include?("body"), master_course_status: mc_status)
     end
   end
 
@@ -326,6 +335,11 @@ class WikiPagesApiController < ApplicationController
   # @argument wiki_page[front_page] [Boolean]
   #   Set an unhidden page as the front page (if true)
   #
+  # @argument wiki_page[publish_at] [Optional, DateTime]
+  #   Schedule a future date/time to publish the page. This will have no effect unless the
+  #   "Scheduled Page Publication" feature is enabled in the account. If a future date is
+  #   supplied, the page will be unpublished and wiki_page[published] will be ignored.
+  #
   # @example_request
   #     curl -X POST -H 'Authorization: Bearer <token>' \
   #     https://<canvas>/api/v1/courses/123/pages \
@@ -340,7 +354,9 @@ class WikiPagesApiController < ApplicationController
     @wiki = @context.wiki
     @page = @wiki.build_wiki_page(@current_user, initial_params)
     if authorized_action(@page, @current_user, :create)
-      update_params = get_update_params(Set[:title, :body])
+      allowed_fields = Set[:title, :body]
+      allowed_fields << :block_editor_attributes if @context.account.feature_enabled?(:block_editor)
+      update_params = get_update_params(allowed_fields)
       assign_todo_date
       if !update_params.is_a?(Symbol) && @page.update(update_params) && process_front_page
         log_asset_access(@page, "wiki", @wiki, "participate")
@@ -396,6 +412,11 @@ class WikiPagesApiController < ApplicationController
   # @argument wiki_page[published] [Boolean]
   #   Whether the page is published (true) or draft state (false).
   #
+  # @argument wiki_page[publish_at] [Optional, DateTime]
+  #   Schedule a future date/time to publish the page. This will have no effect unless the
+  #   "Scheduled Page Publication" feature is enabled in the account. If a future date is
+  #   set and the page is already published, it will be unpublished.
+  #
   # @argument wiki_page[front_page] [Boolean]
   #   Set an unhidden page as the front page (if true)
   #
@@ -415,6 +436,7 @@ class WikiPagesApiController < ApplicationController
     if @page.new_record?
       perform_update = true if authorized_action(@page, @current_user, [:create])
       allowed_fields = Set[:title, :body]
+      allowed_fields << :block_editor_attributes if @context.account.feature_enabled?(:block_editor)
     elsif authorized_action(@page, @current_user, [:update, :update_content])
       perform_update = true
       allowed_fields = Set[]
@@ -564,6 +586,15 @@ class WikiPagesApiController < ApplicationController
     end
   end
 
+  def check_title_availability
+    return render status: :not_found, json: { errors: [message: "The specified resource does not exist."] } unless Account.site_admin.feature_enabled?(:permanent_page_links)
+
+    return render_json_unauthorized unless @context.wiki.grants_right?(@current_user, :read) && tab_enabled?(@context.class::TAB_PAGES)
+
+    title = params.require(:title)
+    render json: { conflict: @context.wiki.wiki_pages.not_deleted.where(title:).count > 0 }
+  end
+
   protected
 
   def is_front_page_action?
@@ -611,7 +642,9 @@ class WikiPagesApiController < ApplicationController
 
   def get_update_params(allowed_fields = Set[])
     # normalize parameters
-    page_params = params[:wiki_page] ? params[:wiki_page].permit(*%w[title body notify_of_update published front_page editing_roles]) : {}
+    wiki_page_params = %w[title body notify_of_update published front_page editing_roles publish_at]
+    wiki_page_params += [block_editor_attributes: [:time, :version, { blocks: [:id, :type, { data: strong_anything }] }]] if @context.account.feature_enabled?(:block_editor)
+    page_params = params[:wiki_page] ? params[:wiki_page].permit(*wiki_page_params) : {}
 
     if page_params.key?(:published)
       published_value = page_params.delete(:published)
@@ -637,6 +670,10 @@ class WikiPagesApiController < ApplicationController
     end
     change_front_page = !!@set_front_page
 
+    if page_params.key?(:block_editor_attributes)
+      page_params[:block_editor_attributes][:root_account_id] = @context.root_account_id
+    end
+
     # check user permissions
     rejected_fields = Set[]
     if @wiki.grants_right?(@current_user, session, :update)
@@ -655,6 +692,7 @@ class WikiPagesApiController < ApplicationController
 
       unless @page.grants_right?(@current_user, session, :update)
         allowed_fields << :body
+        allowed_fields << :block_editor_attributes if @context.account.feature_enabled?(:block_editor)
         rejected_fields << :title if page_params.include?(:title) && page_params[:title] != @page.title
 
         rejected_fields << :front_page if change_front_page && !@wiki.grants_right?(@current_user, session, :update)
@@ -675,7 +713,7 @@ class WikiPagesApiController < ApplicationController
     # check for a valid front page
     valid_front_page = true
     if change_front_page || workflow_state
-      new_front_page = change_front_page ? @set_as_front_page : @page.is_front_page?
+      new_front_page = change_front_page ? @set_as_front_page : @page.is_front_page? && request.put?
       new_workflow_state = workflow_state || @page.workflow_state
       valid_front_page = false if new_front_page && new_workflow_state != "active"
       if new_front_page && new_workflow_state != "active"

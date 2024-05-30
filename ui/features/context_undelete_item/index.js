@@ -24,12 +24,12 @@ import '@canvas/jquery/jquery.instructure_misc_plugins'
 const I18n = useI18nScope('context.undelete_index')
 
 $(document).ready(() =>
-  $('.restore_link').click(function(event) {
+  $('.restore_link').click(function (event) {
     event.preventDefault()
     const $link = $(this)
     const $item = $link.parents('.item')
     const item_name = $.trim($item.find('.name').text())
-    const result = confirm(
+    const result = window.confirm(
       I18n.t('are_you_sure', 'Are you sure you want to restore %{item_name}?', {item_name})
     )
     if (result) {

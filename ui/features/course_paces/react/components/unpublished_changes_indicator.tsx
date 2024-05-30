@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2021 - present Instructure, Inc.
  *
@@ -17,7 +18,7 @@
  */
 
 import React, {useEffect} from 'react'
-import {CondensedButton} from '@instructure/ui-buttons'
+import {Link} from '@instructure/ui-link'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import {getPacePublishing, getUnpublishedChangeCount} from '../reducers/course_paces'
 import {getBlackoutDatesSyncing} from '../shared/reducers/blackout_dates'
@@ -42,7 +43,7 @@ type StateProps = {
 type PassedProps = {
   onClick?: () => void
   onUnpublishedNavigation?: (e: BeforeUnloadEvent) => void
-  margin?: any // type from CondensedButtonProps; passed through
+  margin?: any // type from Link props; passed through
   readonly newPace: boolean
 }
 
@@ -50,12 +51,16 @@ export type UnpublishedChangesIndicatorProps = StateProps & PassedProps
 
 const text = (changeCount: number) => {
   if (changeCount < 0) throw Error(`changeCount cannot be negative (${changeCount})`)
-  if (changeCount === 0) return I18n.t('All changes published')
+  if (changeCount === 0) {
+    return window.ENV.FEATURES.course_paces_redesign
+      ? I18n.t('No pending changes to apply')
+      : I18n.t('All changes published')
+  }
 
   return I18n.t(
     {
       one: '1 unpublished change',
-      other: '%{count} unpublished changes'
+      other: '%{count} unpublished changes',
     },
     {count: changeCount}
   )
@@ -79,7 +84,7 @@ export const UnpublishedChangesIndicator = ({
   pacePublishing,
   isSyncing,
   publishError,
-  onUnpublishedNavigation = triggerBrowserWarning
+  onUnpublishedNavigation = triggerBrowserWarning,
 }: UnpublishedChangesIndicatorProps) => {
   const hasChanges = changeCount > 0
 
@@ -100,7 +105,7 @@ export const UnpublishedChangesIndicator = ({
 
   let publishingMessage
   if (pacePublishing || isSyncing) {
-    publishingMessage = I18n.t('Publishing pace...')
+    publishingMessage = I18n.t('Publishing...')
   } else if (blackoutDatesSyncing) {
     publishingMessage = I18n.t('Saving blackout dates...')
   }
@@ -108,10 +113,20 @@ export const UnpublishedChangesIndicator = ({
   if (isSyncing) {
     return (
       <View>
-        <Spinner size="x-small" margin="0 x-small 0" renderTitle={I18n.t('Publishing pace...')} />
-        <PresentationContent>
+        {window.ENV.FEATURES.course_paces_redesign ? (
           <Text>{publishingMessage}</Text>
-        </PresentationContent>
+        ) : (
+          <>
+            <Spinner
+              size="x-small"
+              margin="0 x-small 0"
+              renderTitle={I18n.t('Publishing pace...')}
+            />
+            <PresentationContent>
+              <Text>{publishingMessage}</Text>
+            </PresentationContent>
+          </>
+        )}
       </View>
     )
   }
@@ -119,15 +134,21 @@ export const UnpublishedChangesIndicator = ({
   if (newPace && changeCount === 0) {
     return (
       <View margin={margin}>
-        <Text>{I18n.t('Pace is new and unpublished')}</Text>
+        <Text data-testid="publish-status-button">{I18n.t('Pace is new and unpublished')}</Text>
       </View>
     )
   }
 
   return changeCount ? (
-    <CondensedButton data-testid="publish-status-button" onClick={onClick} margin={margin}>
+    <Link
+      isWithinText={false}
+      as="button"
+      data-testid="publish-status-button"
+      onClick={onClick}
+      margin={margin}
+    >
       {text(changeCount)}
-    </CondensedButton>
+    </Link>
   ) : (
     <View margin={margin} data-testid="publish-status">
       {text(changeCount)}
@@ -140,7 +161,7 @@ const mapStateToProps = (state: StoreState) => ({
   blackoutDatesSyncing: getBlackoutDatesSyncing(state),
   pacePublishing: getPacePublishing(state),
   isSyncing: getSyncing(state),
-  publishError: getCategoryError(state, ['publish', 'blackout_dates'])
+  publishError: getCategoryError(state, ['publish', 'blackout_dates']),
 })
 
 export default connect(mapStateToProps)(UnpublishedChangesIndicator)

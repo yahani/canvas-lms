@@ -62,7 +62,7 @@ export default class TokenInput {
     })
 
     this.$tokens.maxTokenWidth = () =>
-      parseInt(this.$tokens.css('width').replace('px', '')) -
+      parseInt(this.$tokens.css('width').replace('px', ''), 10) -
       (this.options.tokenWrapBuffer != null ? this.options.tokenWrapBuffer : 150) +
       'px'
     this.$tokens.resizeTokens = tokens =>
@@ -95,7 +95,7 @@ export default class TokenInput {
       .keyup(e => this.inputKeyUp(e))
 
     if (this.options.selector) {
-      const type = this.options.selector.type != null ? this.options.selector.type : TokenSelector
+      const Type = this.options.selector.type != null ? this.options.selector.type : TokenSelector
       delete this.options.selector.type
       if ((this.browser = this.options.selector.browser)) {
         delete this.options.selector.browser
@@ -113,7 +113,7 @@ export default class TokenInput {
           .appendTo(this.$fakeInput)
         this.$fakeInput.addClass('browsable')
       }
-      this.selector = new type(this, this.$node.data('finder_url'), this.options.selector)
+      this.selector = new Type(this, this.$node.data('finder_url'), this.options.selector)
     }
 
     this.baseExclude = []
@@ -157,10 +157,7 @@ export default class TokenInput {
       $close.append($('<i class="icon-x" aria-hidden="true"></i>'))
       $token.append($close)
       $token.append(
-        $('<input />')
-          .attr('type', 'hidden')
-          .attr('name', `${this.nodeName}[]`)
-          .val(val)
+        $('<input />').attr('type', 'hidden').attr('name', `${this.nodeName}[]`).val(val)
       )
       if (this.options.onNewToken) {
         this.options.onNewToken($token)
@@ -214,11 +211,8 @@ export default class TokenInput {
     return this.reposition()
   }
 
-  removeLastToken(data) {
-    this.$tokens
-      .find('li')
-      .last()
-      .remove()
+  removeLastToken(_data) {
+    this.$tokens.find('li').last().remove()
     if (typeof this.change === 'function') {
       this.change(this.tokenValues())
     }
@@ -266,7 +260,7 @@ export default class TokenInput {
     return Array.from(this.$tokens.find(`[name='${this.nodeName}[]']`)).map(input => input.value)
   }
 
-  inputKeyUp(e) {
+  inputKeyUp(_e) {
     this.reposition()
     return typeof this.keyUpAction === 'function' ? this.keyUpAction() : undefined
   }
@@ -323,8 +317,8 @@ export default class TokenInput {
   }
 }
 
-$.fn.tokenInput = function(options) {
-  return this.each(function() {
+$.fn.tokenInput = function (options) {
+  return this.each(function () {
     return new TokenInput($(this), $.extend(true, {}, options))
   })
 }

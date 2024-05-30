@@ -16,23 +16,24 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import INST from 'browser-sniffer'
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import htmlEscape from 'html-escape'
+import htmlEscape from '@instructure/html-escape'
 import '@canvas/jquery/jquery.ajaxJSON' // ajaxJSON, defaultAjaxError
 import '@canvas/rails-flash-notifications' // flashError
+
+if (!('INST' in window)) window.INST = {}
 
 const I18n = useI18nScope('ajax_errors')
 
 INST.errorCount = 0
-window.onerror = function(msg, url, line, column, errorObj) {
+window.onerror = function (_msg, _url, _line, _column, _errorObj) {
   INST.errorCount += 1
 }
 
 // puts the little red box when something bad happens in ajax.
-$(document).ready(function() {
-  $('#instructure_ajax_error_result').defaultAjaxError(function(
+$(document).ready(function () {
+  $('#instructure_ajax_error_result').defaultAjaxError(function (
     event,
     request,
     settings,
@@ -45,11 +46,45 @@ $(document).ready(function() {
     try {
       status = request.status
       text = request.responseText
-    } catch (e) {}
+    } catch (e) {
+      // no-op
+    }
+
+    const $obj = $(this)
+    const ajaxErrorFlash = function (message, _xhr) {
+      const i = $obj[0]
+      if (!i) {
+        return
+      }
+      const d =
+        i.contentDocument ||
+        (i.contentWindow && i.contentWindow.document) ||
+        window.frames[$obj.attr('id')].document
+      const $body = $(d).find('body')
+      $body.html(
+        $('<h1 />').text(
+          I18n.t('error_heading', 'Ajax Error: %{status_code}', {status_code: status})
+        )
+      )
+      $body.append(htmlEscape(text))
+      $('#instructure_ajax_error_box').hide()
+      message = htmlEscape(message)
+      if (debugOnly) {
+        message += "<br/><span style='font-size: 0.7em;'>(Development Only)</span>"
+      }
+      if (debugOnly || INST.environment !== 'production') {
+        message +=
+          "<br/><a href='#' class='last_error_details_link'>" +
+          htmlEscape(I18n.t('links.details', 'details...')) +
+          '</a>'
+      }
+      $.flashError({html: message})
+    }
+
     $.ajaxJSON(
-      location.protocol +
+      window.location.protocol +
         '//' +
-        location.host +
+        window.location.host +
         '/simple_response.json?rnd=' +
         Math.round(Math.random() * 9999999),
       'GET',
@@ -68,6 +103,7 @@ $(document).ready(function() {
             '</a>'
           $.flashError({html: message}, 30000)
           $('#inactivity_login_link').focus()
+          // eslint-disable-next-line eqeqeq
         } else if (status != 409) {
           ajaxErrorFlash(
             I18n.t('errors.unhandled', "Oops! The last request didn't work out."),
@@ -80,44 +116,13 @@ $(document).ready(function() {
           I18n.t(
             'errors.connection_lost',
             "Connection to %{host} was lost.  Please make sure you're connected to the Internet and try again.",
-            {host: location.host}
+            {host: window.location.host}
           ),
           request
         )
       },
       {skipDefaultError: true}
     )
-    const $obj = $(this)
-    var ajaxErrorFlash = function(message, xhr) {
-      const i = $obj[0]
-      if (!i) {
-        return
-      }
-      const d =
-        i.contentDocument ||
-        (i.contentWindow && i.contentWindow.document) ||
-        window.frames[$obj.attr('id')].document
-      const $body = $(d).find('body')
-      $body.html(
-        $('<h1 />').text(
-          I18n.t('error_heading', 'Ajax Error: %{status_code}', {status_code: status})
-        )
-      )
-      $body.append(htmlEscape(text))
-      $('#instructure_ajax_error_box').hide()
-      const pre = ''
-      message = htmlEscape(message)
-      if (debugOnly) {
-        message += "<br/><span style='font-size: 0.7em;'>(Development Only)</span>"
-      }
-      if (debugOnly || INST.environment != 'production') {
-        message +=
-          "<br/><a href='#' class='last_error_details_link'>" +
-          htmlEscape(I18n.t('links.details', 'details...')) +
-          '</a>'
-      }
-      $.flashError({html: message})
-    }
     window.ajaxErrorFlash = ajaxErrorFlash
     let data = $.ajaxJSON.findRequest(request)
     data = data || {}
@@ -130,7 +135,9 @@ $(document).ready(function() {
     let username = ''
     try {
       username = $('#identity .user_name').text()
-    } catch (e) {}
+    } catch (e) {
+      // no-op
+    }
     if (INST.ajaxErrorURL) {
       const txt =
         '&Msg=' +
@@ -140,7 +147,7 @@ $(document).ready(function() {
         '&URL=' +
         escape(data.url || 'unknown') +
         '&Page=' +
-        escape(location.href) +
+        escape(window.location.href) +
         '&Method=' +
         escape(data.submit_type || 'unknown') +
         '&UserName=' +
@@ -158,7 +165,7 @@ $(document).ready(function() {
       )
     }
   })
-  $('.last_error_details_link').live('click', event => {
+  $(document).on('click', '.last_error_details_link', event => {
     event.preventDefault()
     event.stopPropagation()
     $('#instructure_ajax_error_box').show()

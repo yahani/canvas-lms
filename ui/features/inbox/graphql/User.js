@@ -22,29 +22,37 @@ export const User = {
   fragment: gql`
     fragment User on User {
       _id
+      id
       avatarUrl
       pronouns
       name
+      shortName
     }
   `,
 
   shape: shape({
     _id: string,
+    id: string,
     avatarUrl: string,
     pronouns: string,
-    name: string
+    name: string,
+    shortName: string,
   }),
 
   mock: ({
     avatarUrl = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==',
     name = 'Hank Mccoy',
+    shortName = 'Hank Mccoy',
     pronouns = 'They/Them',
-    _id = '9'
+    _id = '9',
+    id = 'DVSDF',
   } = {}) => ({
     avatarUrl,
     name,
+    shortName,
     pronouns,
     __typename: 'User',
-    _id
-  })
+    _id,
+    id,
+  }),
 }

@@ -18,8 +18,6 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "lib/model_cache"
-
 describe ModelCache do
   before do
     # these classes must be real constants because their name is accessed when cacheable_method is called
@@ -48,10 +46,10 @@ describe ModelCache do
   after do
     ModelCache.keys.delete("TestModelCacheUser")
     ModelCache.keys.delete("TestModelCachePseudonym")
-    ActiveSupport::Dependencies::Reference.instance_variable_get(:@store).delete("TestModelCacheUser")
-    ActiveSupport::Dependencies::Reference.instance_variable_get(:@store).delete("TestModelCachePseudonym")
+    # rubocop:disable RSpec/RemoveConst
     Object.send(:remove_const, :TestModelCacheUser)
     Object.send(:remove_const, :TestModelCachePseudonym)
+    # rubocop:enable RSpec/RemoveConst
   end
 
   it "does not cache by default" do

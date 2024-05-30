@@ -31,6 +31,7 @@ class GradebookExporter
     grading_standard: ["Current Grade", "Unposted Current Grade", "Final Grade", "Unposted Final Grade"].freeze,
     override_score: ["Override Score"].freeze,
     override_grade: ["Override Grade"].freeze,
+    override_status: ["Override Status"].freeze,
     points: ["Current Points", "Final Points"].freeze,
     total_scores: ["Current Score", "Unposted Current Score", "Final Score", "Unposted Final Score"].freeze
   }.freeze
@@ -42,14 +43,14 @@ class GradebookExporter
   end
 
   def to_csv
-    I18n.locale = @options[:locale] || infer_locale(
+    I18n.with_locale(@options[:locale] || infer_locale(
       context: @course,
       user: @user,
       root_account: @course.root_account
-    )
-
-    @options = CSVWithI18n.csv_i18n_settings(@user, @options)
-    csv_data
+    )) do
+      @options = CSVWithI18n.csv_i18n_settings(@user, @options)
+      csv_data
+    end
   end
 
   private
@@ -69,6 +70,11 @@ class GradebookExporter
     end
   end
 
+  def update_completion(completion)
+    progress = @options[:progress]
+    progress&.update_completion!(completion)
+  end
+
   def buffer_columns(column_name, buffer_value = nil)
     column_count = BUFFER_COLUMN_DEFINITIONS.fetch(column_name).length
     Array.new(column_count, buffer_value)
@@ -82,6 +88,7 @@ class GradebookExporter
       include: gradebook_includes(user: @user, course: @course)
     ).preload(:root_account, :sis_pseudonym)
     student_enrollments = enrollments_for_csv(enrollment_scope)
+    update_completion(10)
 
     student_section_names = {}
     student_enrollments.each do |enrollment|
@@ -91,7 +98,8 @@ class GradebookExporter
 
     # remove duplicate enrollments for students enrolled in multiple sections
     student_enrollments = if @options[:current_view]
-                            student_enrollments.select { |s| @options[:student_order].include?(s[:user_id]) }.uniq(&:user_id)
+                            student_order = @options[:student_order].map(&:to_i)
+                            student_enrollments.select { |s| student_order.include?(s[:user_id]) }.uniq(&:user_id)
                           else
                             student_enrollments.uniq(&:user_id)
                           end
@@ -103,9 +111,8 @@ class GradebookExporter
       student_enrollments.map(&:user_id),
       @course,
       ignore_muted: false,
-      grading_period: grading_period
+      grading_period:
     )
-    grades = calc.compute_scores
 
     submissions = {}
     calc.submissions.each { |s| submissions[[s.user_id, s.assignment_id]] = s }
@@ -115,6 +122,7 @@ class GradebookExporter
                     calc.gradable_assignments
                   end
 
+    update_completion(20)
     Assignment.preload_unposted_anonymous_submissions(assignments)
 
     ActiveRecord::Associations.preload(assignments, :assignment_group)
@@ -127,6 +135,7 @@ class GradebookExporter
     should_show_totals = show_totals?
     include_sis_id = @options[:include_sis_id]
 
+    update_completion(30)
     CSVWithI18n.generate(**@options.slice(:encoding, :col_sep, :include_bom)) do |csv|
       # First row
       header = @options[:show_student_first_last_name] ? ["LastName", "FirstName"] : ["Student"]
@@ -156,12 +165,14 @@ class GradebookExporter
         if include_final_grade_override?
           header.concat(buffer_column_headers(:override_score))
           header.concat(buffer_column_headers(:override_grade)) if @course.grading_standard_enabled?
+          header.concat(buffer_column_headers(:override_status)) if custom_statuses_enabled?
         end
       end
       csv << header
 
       group_filler_length = groups.size * column_count_per_group
 
+      update_completion(50)
       # Possible "hidden" (muted or manual posting) row
       if assignments.any? { |assignment| show_as_hidden?(assignment) }
         row = [nil, nil, nil, nil]
@@ -184,12 +195,13 @@ class GradebookExporter
           row.concat([nil] * group_filler_length)
           row.concat(buffer_columns(:points)) if include_points?
           row.concat(buffer_columns(:total_scores))
-        end
 
-        row.concat(buffer_columns(:grading_standard)) if @course.grading_standard_enabled?
-        if include_final_grade_override?
-          row.concat(buffer_columns(:override_score))
-          row.concat(buffer_columns(:override_grade)) if @course.grading_standard_enabled?
+          row.concat(buffer_columns(:grading_standard)) if @course.grading_standard_enabled?
+          if include_final_grade_override?
+            row.concat(buffer_columns(:override_score))
+            row.concat(buffer_columns(:override_grade)) if @course.grading_standard_enabled?
+            row.concat(buffer_columns(:override_status)) if custom_statuses_enabled?
+          end
         end
 
         lengths_match = header.length == row.length
@@ -220,12 +232,11 @@ class GradebookExporter
         row << read_only << read_only << read_only << read_only
         row.concat(buffer_columns(:grading_standard, read_only)) if @course.grading_standard_enabled?
         if include_final_grade_override?
-          allow_importing = Account.site_admin.feature_enabled?(:import_override_scores_in_gradebook)
-          # Override Score is not read-only if the user can import changes
-          row.concat(buffer_columns(:override_score, allow_importing ? nil : read_only))
+          row.concat(buffer_columns(:override_score))
 
           # Override Grade is always read-only
           row.concat(buffer_columns(:override_grade, read_only)) if @course.grading_standard_enabled?
+          row.concat(buffer_columns(:override_status)) if custom_statuses_enabled?
         end
       end
 
@@ -234,8 +245,16 @@ class GradebookExporter
       lengths_match = header.length == row.length
       raise "column lengths don't match" if !lengths_match && !Rails.env.production?
 
+      total_batches = (student_enrollments.length / 100.0).ceil
+      batch_completion_increase = 40.0 / total_batches
+      current_completion = 50
+
       # Rest of the Rows
       student_enrollments.each_slice(100) do |student_enrollments_batch|
+        progress = @options[:progress]
+        progress&.reload
+        return if progress&.failed?
+
         student_ids = student_enrollments_batch.map(&:user_id)
 
         visible_assignments = @course.submissions
@@ -292,22 +311,22 @@ class GradebookExporter
           row.concat(student_submissions)
 
           if should_show_totals
-            student_grades = grades.shift
-
-            row += show_group_totals(student_enrollment, student_grades, groups)
-            row += show_overall_totals(student_enrollment, student_grades)
+            row += show_group_totals(student_enrollment, groups)
+            row += show_overall_totals(student_enrollment)
           end
 
           csv << row
         end
+
+        current_completion += batch_completion_increase
+        update_completion(current_completion)
       end
     end
   end
 
   def sort_assignments(assignments)
-    feature_enabled = Account.site_admin.feature_enabled?(:gradebook_csv_export_order_matches_gradebook_grid)
     assignment_order = @options[:assignment_order]
-    if feature_enabled && assignment_order.present?
+    if assignment_order.present?
       id_to_index = assignment_order.each_with_object({}).with_index { |(id, hash), index| hash[id] = index }
       assignments.sort! do |a1, a2|
         index1 = id_to_index[a1.id]
@@ -350,13 +369,13 @@ class GradebookExporter
     I18n.n(number, precision: 2)
   end
 
-  def show_group_totals(student_enrollment, grade, groups)
+  def show_group_totals(student_enrollment, groups)
     result = []
 
     groups.each do |group|
       if include_points?
-        result << format_numbers(grade[:current_groups][group.id][:score])
-        result << format_numbers(grade[:final_groups][group.id][:score])
+        result << format_numbers(student_enrollment.computed_current_points(assignment_group_id: group.id))
+        result << format_numbers(student_enrollment.computed_final_points(assignment_group_id: group.id))
       end
 
       result << format_numbers(student_enrollment.computed_current_score(assignment_group_id: group.id))
@@ -368,15 +387,15 @@ class GradebookExporter
     result
   end
 
-  def show_overall_totals(student_enrollment, grade)
+  def show_overall_totals(student_enrollment)
     result = []
+    score_opts = grading_period ? { grading_period_id: grading_period.id } : Score.params_for_course
 
     if include_points?
-      result << format_numbers(grade[:current][:total])
-      result << format_numbers(grade[:final][:total])
+      result << format_numbers(student_enrollment.computed_current_points(score_opts))
+      result << format_numbers(student_enrollment.computed_final_points(score_opts))
     end
 
-    score_opts = grading_period ? { grading_period_id: grading_period.id } : Score.params_for_course
     result << format_numbers(student_enrollment.computed_current_score(score_opts))
     result << format_numbers(student_enrollment.unposted_current_score(score_opts))
     result << format_numbers(student_enrollment.computed_final_score(score_opts))
@@ -390,22 +409,28 @@ class GradebookExporter
     end
 
     if include_final_grade_override?
-      result << student_enrollment.override_score(score_opts)
-      result << student_enrollment.override_grade(score_opts) if @course.grading_standard_enabled?
+      score = student_enrollment.find_score(score_opts)
+      result << student_enrollment.override_score(score:)
+      result << student_enrollment.override_grade(score:) if @course.grading_standard_enabled?
+      result << custom_status(score) if custom_statuses_enabled?
     end
 
     result
   end
 
   def show_totals?
-    return false if !@options[:current_view] && @course.grading_periods?
+    # show totals if the course is not using grading periods
     return true unless @course.grading_periods?
-    return true if @options[:grading_period_id].try(:to_i) != 0
 
+    # show totals if we're exporting the gradebook for a specific grading period
+    return true if filter_by_grading_period?
+
+    # otherwise, show or hide totals based on the "Display Totals for All Grading
+    # Periods" option.
     @course.display_totals_for_all_grading_periods?
   end
 
-  STARTS_WITH_EQUAL = /^\s*=/.freeze
+  STARTS_WITH_EQUAL = /^\s*=/
 
   # Returns the student name to use for the export.  If the name
   # starts with =, quote it so anyone pulling the data into Excel
@@ -420,9 +445,14 @@ class GradebookExporter
 
     @grading_period = nil
     # grading_period_id == 0 means no grading period selected
-    if @options[:grading_period_id].to_i != 0
+    if filter_by_grading_period?
       @grading_period = GradingPeriod.for(@course).find_by(id: @options[:grading_period_id])
     end
+  end
+
+  def filter_by_grading_period?
+    gp_id = @options[:grading_period_id]
+    @options[:current_view].present? && gp_id.present? && gp_id.to_i != 0
   end
 
   def custom_gradebook_columns
@@ -462,5 +492,19 @@ class GradebookExporter
     else
       "Manual Posting"
     end
+  end
+
+  def custom_status(score)
+    score&.custom_grade_status_id && custom_statuses[score.custom_grade_status_id]
+  end
+
+  def custom_statuses
+    @custom_statuses ||= @course.custom_grade_statuses.pluck(:id, :name).to_h
+  end
+
+  def custom_statuses_enabled?
+    return @custom_statuses_enabled if defined?(@custom_statuses_enabled)
+
+    @custom_statuses_enabled = Account.site_admin.feature_enabled?(:custom_gradebook_statuses)
   end
 end

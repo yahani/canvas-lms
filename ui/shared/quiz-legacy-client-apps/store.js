@@ -16,24 +16,22 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import _ from 'lodash-underscore'
+import {assignIn} from 'lodash'
 
-const extend = _.extend
-
-const Store = function(key, proto, Dispatcher) {
+const Store = function (key, proto, Dispatcher) {
   const emitChange = this.emitChange.bind(this)
 
-  extend(this, proto || {})
+  assignIn(this, proto || {})
 
   this._key = key
   this.__reset__()
 
   Object.keys(this.actions).forEach(
-    function(action) {
+    function (action) {
       const handler = this.actions[action].bind(this)
       const scopedAction = [key, action].join(':')
 
-      Dispatcher.register(scopedAction, function(params, resolve, reject) {
+      Dispatcher.register(scopedAction, function (params, resolve, reject) {
         try {
           handler(
             params,
@@ -53,7 +51,7 @@ const Store = function(key, proto, Dispatcher) {
   return this
 }
 
-extend(Store.prototype, {
+assignIn(Store.prototype, {
   actions: {},
   addChangeListener(callback) {
     this._callbacks.push(callback)
@@ -67,7 +65,7 @@ extend(Store.prototype, {
   },
 
   emitChange() {
-    this._callbacks.forEach(function(callback) {
+    this._callbacks.forEach(function (callback) {
       callback()
     })
   },
@@ -91,9 +89,9 @@ extend(Store.prototype, {
   },
 
   setState(newState) {
-    extend(this.state, newState)
+    assignIn(this.state, newState)
     this.emitChange()
-  }
+  },
 })
 
 export default Store

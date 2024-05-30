@@ -20,7 +20,7 @@ import sanitizeData from '../sanitizeData'
 
 describe('sanitizeData()', () => {
   let data = {
-    text: '<script>console.log("hi!")</script>'
+    text: '<script>console.log("hi!")</script>',
   }
   const dataItems = ['text']
 
@@ -28,7 +28,7 @@ describe('sanitizeData()', () => {
 
   it('sanitizes the specified fields', () => {
     expect(subject()).toMatchObject({
-      text: ''
+      text: '',
     })
   })
 
@@ -75,13 +75,13 @@ describe('sanitizeData()', () => {
             mozallowfullscreen="mozallowfullscreen"
             allow="geolocation *; microphone *; camera *; midi *; encrypted-media *; autoplay *; clipboard-write *; display-capture *">
           </iframe>
-        `
+        `,
       }
     })
 
     it('allows the elements', () => {
       expect(subject().text).toMatchInlineSnapshot(`
-        " <iframe style=\\"width: 800px; height: 600px;\\" title=\\"It's amazing\\" src=\\"/\\" width=\\"800\\" height=\\"600\\" allowfullscreen=\\"allowfullscreen\\" webkitallowfullscreen=\\"webkitallowfullscreen\\" mozallowfullscreen=\\"mozallowfullscreen\\" allow=\\"geolocation *; microphone *; camera *; midi *; encrypted-media *; autoplay *; clipboard-write *; display-capture *\\">
+        " <iframe style="width: 800px; height: 600px;" title="It's amazing" src="/" width="800" height="600" allowfullscreen="allowfullscreen" webkitallowfullscreen="webkitallowfullscreen" mozallowfullscreen="mozallowfullscreen" allow="geolocation *; microphone *; camera *; midi *; encrypted-media *; autoplay *; clipboard-write *; display-capture *">
                   </iframe> "
       `)
     })

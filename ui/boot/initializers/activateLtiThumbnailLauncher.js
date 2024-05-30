@@ -27,7 +27,7 @@ function handleLaunch(event) {
 
 class LtiThumbnailLauncher {
   constructor() {
-    $(document.body).delegate(selector, 'click', handleLaunch)
+    $(document.body).on('click', selector, handleLaunch)
   }
 
   launch(element) {
@@ -36,7 +36,7 @@ class LtiThumbnailLauncher {
       src: element.attr('href'),
       allowfullscreen: '',
       width: placement.displayWidth || 500,
-      height: placement.displayHeight || 500
+      height: placement.displayHeight || 500,
     })
     element.replaceWith(iframe)
   }

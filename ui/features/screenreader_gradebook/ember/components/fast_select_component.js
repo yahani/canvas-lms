@@ -31,29 +31,38 @@ const FastSelectComponent = Component.extend({
   valueDefault: '',
   value: null,
   selected: null,
+  ariaDescribedBy: null,
 
   tagName: 'select',
 
   didInsertElement() {
     const self = this
-    return this.$().on('change', function() {
+    if (this.get('ariaDescribedBy')) {
+      this.$().attr('aria-describedby', this.get('ariaDescribedBy'))
+    }
+    return this.$().on('change', function () {
       return set(self, 'value', this.value)
     })
   },
 
-  valueDidChange: function() {
-    const {items} = this
-    const {value} = this
+  valueDidChange: function () {
     let selected = null
-    if (value && items) {
-      selected = items.findBy(this.valuePath, value)
+    if (this.value && this.items) {
+      selected = this.items.findBy(this.valuePath, this.value)
     }
-    set(this, 'selected', selected)
-  }
-    .observes('value')
-    .on('init'),
+    set(this, 'selected', selected || null)
+  }.observes('value'),
 
-  itemsWillChange: function() {
+  initialize: function () {
+    const value = this.value || this.valueDefault
+    let selected
+    if (value && this.items) {
+      selected = this.items.findBy(this.valuePath, value)
+    }
+    set(this, 'selected', selected || null)
+  }.on('init'),
+
+  itemsWillChange: function () {
     const {items} = this
     if (items) {
       items.removeArrayObserver(this)
@@ -63,7 +72,7 @@ const FastSelectComponent = Component.extend({
     .observesBefore('items')
     .on('willDestroyElement'),
 
-  itemsDidChange: function() {
+  itemsDidChange: function () {
     const {items} = this
     if (items) {
       items.addArrayObserver(this)
@@ -73,7 +82,7 @@ const FastSelectComponent = Component.extend({
     .observes('items')
     .on('didInsertElement'),
 
-  arrayWillChange(items, start, removeCount, addCount) {
+  arrayWillChange(items, start, removeCount, _addCount) {
     const select = get(this, 'element')
     const options = select.childNodes
     let i = start + removeCount - 1
@@ -91,7 +100,7 @@ const FastSelectComponent = Component.extend({
     })()
   },
 
-  updateSelection: function() {
+  updateSelection: function () {
     const selected = get(this, 'selected')
     if (!selected) {
       return
@@ -104,12 +113,12 @@ const FastSelectComponent = Component.extend({
     }
   }.observes('selected'),
 
-  updateOptions: function() {
+  updateOptions: function () {
     this.arrayWillChange(this.items, 0, get(this.items, 'length'), 0)
     this.arrayDidChange(this.items, 0, 0, get(this.items, 'length'))
   }.observes('labelPath'),
 
-  arrayDidChange(items, start, removeCount, addCount) {
+  arrayDidChange(items, start, _removeCount, addCount) {
     let value
     const select = get(this, 'element')
     const hasDefault = get(this, 'hasDefaultOption')
@@ -127,7 +136,7 @@ const FastSelectComponent = Component.extend({
       const option = doc.createElement('option')
       option.textContent = label
       option.value = value
-      if (this.value === value) {
+      if ((this.value || this.valueDefault) === value) {
         option.selected = true
         set(this, 'selected', item)
       }
@@ -138,7 +147,7 @@ const FastSelectComponent = Component.extend({
     set(this, 'value', select.value)
   },
 
-  insertDefaultOption: function() {
+  insertDefaultOption: function () {
     if (!this.labelDefault || !!this.hasDefaultOption) {
       return
     }
@@ -151,7 +160,7 @@ const FastSelectComponent = Component.extend({
     set(this, 'hasDefaultOption', true)
   }
     .observes('items')
-    .on('didInsertElement')
+    .on('didInsertElement'),
 })
 
 export default FastSelectComponent

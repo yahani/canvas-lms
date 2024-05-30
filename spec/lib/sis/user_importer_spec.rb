@@ -26,8 +26,11 @@ describe SIS::UserImporter do
       messages = []
       account_model
       Setting.set("sis_transaction_seconds", "1")
-      user1 = SIS::Models::User.new(user_id: @user_id, login_id: @login_id, status: "active",
-                                    full_name: "User One", email: "user1@example.com")
+      user1 = SIS::Models::User.new(user_id: @user_id,
+                                    login_id: @login_id,
+                                    status: "active",
+                                    full_name: "User One",
+                                    email: "user1@example.com")
       SIS::UserImporter.new(@account, { batch: @account.sis_batches.create! }).process(messages) do |importer|
         importer.add_user(user1)
       end
@@ -48,12 +51,79 @@ describe SIS::UserImporter do
     end
   end
 
+  describe SIS::UserImporter::Work do
+    let(:account) { account_model }
+    let(:user_sis_id) { "sis_id" }
+    let(:sis_batch) { account.sis_batches.create! }
+    let(:messages) { [] }
+    let(:user_importer) { SIS::UserImporter::Work.new(sis_batch, account, Rails.logger, messages) }
+    let(:sis_user) do
+      SIS::Models::User.new(user_id: user_sis_id,
+                            login_id: "123456",
+                            status: "active",
+                            full_name: "User One",
+                            email: "user1@example.com",
+                            integration_id: "iid1234")
+    end
+
+    context "when a matching login exists" do
+      let(:existing_login) { pseudonym_model(account:, sis_user_id: user_sis_id) }
+
+      before do
+        existing_login
+      end
+
+      context "when the force_new_user? hook implementation raises an ImportError" do
+        let(:error_message) { "existing user sisplosion" }
+
+        before do
+          allow(user_importer).to receive(:force_new_user?).and_raise(SIS::ImportError.new(error_message))
+          user_importer.add_user(sis_user)
+        end
+
+        it "records a sis batch warning" do
+          user_importer.process_batch
+          expect(messages).not_to be_empty
+          expect(messages.first.message).to eq(error_message)
+        end
+      end
+    end
+
+    context "when no matching login exists" do
+      context "when there is a user found in an implementation of the other_user hook" do
+        let(:other_user) { user_model }
+
+        before do
+          allow(user_importer).to receive(:other_user).and_return(other_user)
+        end
+
+        context "when the force_new_user? hook implementation raises an ImportError" do
+          let(:error_message) { "other user sisplosion" }
+
+          before do
+            allow(user_importer).to receive(:force_new_user?).and_raise(SIS::ImportError.new(error_message))
+            user_importer.add_user(sis_user)
+          end
+
+          it "records a sis batch warning" do
+            user_importer.process_batch
+            expect(messages).not_to be_empty
+            expect(messages.first.message).to eq(error_message)
+          end
+        end
+      end
+    end
+  end
+
   it "must raise ImportError when user doesn't have status" do
     messages = []
     account_model
     Setting.set("sis_transaction_seconds", "1")
-    user1 = SIS::Models::User.new(user_id: "sis_id", login_id: "123456", status: nil,
-                                  full_name: "User One", email: "user1@example.com")
+    user1 = SIS::Models::User.new(user_id: "sis_id",
+                                  login_id: "123456",
+                                  status: nil,
+                                  full_name: "User One",
+                                  email: "user1@example.com")
 
     expect do
       SIS::UserImporter.new(@account, { batch: @account.sis_batches.create! }).process(messages) do |importer|
@@ -65,8 +135,11 @@ describe SIS::UserImporter do
   it "populates the deleted_at property when user gets deleted and field is not stuck" do
     account_model
     Setting.set("sis_transaction_seconds", "1")
-    user1 = SIS::Models::User.new(user_id: "sis_id", login_id: "123456", status: "deleted",
-                                  full_name: "User One", email: "user1@example.com")
+    user1 = SIS::Models::User.new(user_id: "sis_id",
+                                  login_id: "123456",
+                                  status: "deleted",
+                                  full_name: "User One",
+                                  email: "user1@example.com")
     SIS::UserImporter.new(@account, { batch: @account.sis_batches.create! }).process([]) do |importer|
       importer.add_user(user1)
     end
@@ -77,8 +150,11 @@ describe SIS::UserImporter do
   it "clears sticky fields, even when there are no changes for the pseudonym" do
     account_model
     Setting.set("sis_transaction_seconds", "1")
-    active_user = SIS::Models::User.new(user_id: "sis_id", login_id: "123", status: "active",
-                                        full_name: "User One", email: "user1@example.com")
+    active_user = SIS::Models::User.new(user_id: "sis_id",
+                                        login_id: "123",
+                                        status: "active",
+                                        full_name: "User One",
+                                        email: "user1@example.com")
     SIS::UserImporter.new(@account, { batch: @account.sis_batches.create! }).process([]) do |importer|
       importer.add_user(active_user)
     end
@@ -88,8 +164,11 @@ describe SIS::UserImporter do
       pseudonym.save!
     end
 
-    unchanged_user = SIS::Models::User.new(user_id: "sis_id", login_id: "321", status: "active",
-                                           full_name: "User One", email: "user1@example.com")
+    unchanged_user = SIS::Models::User.new(user_id: "sis_id",
+                                           login_id: "321",
+                                           status: "active",
+                                           full_name: "User One",
+                                           email: "user1@example.com")
     SIS::UserImporter.new(@account, { batch: @account.sis_batches.create!, clear_sis_stickiness: true }).process([]) do |importer|
       importer.add_user(unchanged_user)
     end
@@ -100,8 +179,11 @@ describe SIS::UserImporter do
   it "does not update deleted_at property when user gets deleted but workflow_state is stuck" do
     account_model
     Setting.set("sis_transaction_seconds", "1")
-    active_user = SIS::Models::User.new(user_id: "sis_id", login_id: "123456", status: "active",
-                                        full_name: "User One", email: "user1@example.com")
+    active_user = SIS::Models::User.new(user_id: "sis_id",
+                                        login_id: "123456",
+                                        status: "active",
+                                        full_name: "User One",
+                                        email: "user1@example.com")
     SIS::UserImporter.new(@account, { batch: @account.sis_batches.create! }).process([]) do |importer|
       importer.add_user(active_user)
     end
@@ -111,8 +193,11 @@ describe SIS::UserImporter do
       pseudonym.save!
     end
 
-    deleted_user = SIS::Models::User.new(user_id: "sis_id", login_id: "123456", status: "deleted",
-                                         full_name: "User One", email: "user1@example.com")
+    deleted_user = SIS::Models::User.new(user_id: "sis_id",
+                                         login_id: "123456",
+                                         status: "deleted",
+                                         full_name: "User One",
+                                         email: "user1@example.com")
     SIS::UserImporter.new(@account, { batch: @account.sis_batches.create! }).process([]) do |importer|
       importer.add_user(deleted_user)
     end
@@ -122,8 +207,11 @@ describe SIS::UserImporter do
   end
 
   it "handles user_ids as integers just in case" do
-    user1 = SIS::Models::User.new(user_id: 12_345, login_id: "user1", status: "active",
-                                  full_name: "User One", email: "user1@example.com")
+    user1 = SIS::Models::User.new(user_id: 12_345,
+                                  login_id: "user1",
+                                  status: "active",
+                                  full_name: "User One",
+                                  email: "user1@example.com")
     SIS::UserImporter.new(account_model, { batch: @account.sis_batches.create! }).process([]) do |importer|
       importer.add_user(user1)
     end

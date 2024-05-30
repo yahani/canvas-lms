@@ -378,7 +378,8 @@ class SisImportsApiController < ApplicationController
 
   def check_account
     return render json: { errors: ["SIS imports can only be executed on root accounts"] }, status: :bad_request unless @account.root_account?
-    return render json: { errors: ["SIS imports are not enabled for this account"] }, status: :forbidden unless @account.allow_sis_import
+
+    render json: { errors: ["SIS imports are not enabled for this account"] }, status: :forbidden unless @account.allow_sis_import
   end
 
   # @API Get SIS import list
@@ -408,8 +409,18 @@ class SisImportsApiController < ApplicationController
         scope = scope.where("created_at < ?", created_before)
       end
 
-      state = Array(params[:workflow_state]) & %w[initializing created importing cleanup_batch imported imported_with_messages
-                                                  aborted failed failed_with_messages restoring partially_restored restored]
+      state = Array(params[:workflow_state]) & %w[initializing
+                                                  created
+                                                  importing
+                                                  cleanup_batch
+                                                  imported
+                                                  imported_with_messages
+                                                  aborted
+                                                  failed
+                                                  failed_with_messages
+                                                  restoring
+                                                  partially_restored
+                                                  restored]
       scope = scope.where(workflow_state: state) if state.present?
 
       # we don't need to know how many there are
@@ -481,6 +492,10 @@ class SisImportsApiController < ApplicationController
   #         -H "Authorization: Bearer <token>" \
   #         https://<canvas>/api/v1/accounts/<account_id>/sis_imports.json?import_type=instructure_csv&batch_mode=1&batch_mode_term_id=15
   #
+  #   If the attachment is a zip file, the uncompressed file(s) cannot be 100x larger than the zip, or the import will fail.
+  #   For example, if the zip file is 1KB but the total size of the uncompressed file(s) is 100KB or greater the import will
+  #   fail. There is a hard cap of 50 GB.
+  #
   # @argument extension [String]
   #   Recommended for raw post request style imports. This field will be used to
   #   distinguish between zip, xml, csv, and other file format extensions that
@@ -505,11 +520,8 @@ class SisImportsApiController < ApplicationController
   #   objects that are deleted during the batch mode cleanup process.
   #
   # @argument override_sis_stickiness [Boolean]
-  #   Many fields on records in Canvas can be marked "sticky," which means that
-  #   when something changes in the UI apart from the SIS, that field gets
-  #   "stuck." In this way, by default, SIS imports do not override UI changes.
-  #   If this field is present, however, it will tell the SIS import to ignore
-  #   "stickiness" and override all fields.
+  #   Default is false. If true, any fields containing “sticky” or UI changes will be overridden.
+  #   See SIS CSV Format documentation for information on which fields can have SIS stickiness
   #
   # @argument add_sis_stickiness [Boolean]
   #   This option, if present, will process all changes as if they were UI
@@ -542,6 +554,11 @@ class SisImportsApiController < ApplicationController
   # @argument diffing_drop_status [String, "deleted"|"completed"|"inactive"]
   #   If diffing_drop_status is passed, this SIS import will use this status for
   #   enrollments that are not included in the sis_batch. Defaults to 'deleted'
+  #
+  # @argument diffing_user_remove_status [String, "deleted"|"suspended"]
+  #   For users removed from one batch to the next one using the same
+  #   diffing_data_set_identifier, set their status to the value of this argument.
+  #   Defaults to 'deleted'.
   #
   # @argument batch_mode_enrollment_drop_status [String, "deleted"|"completed"|"inactive"]
   #   If batch_mode_enrollment_drop_status is passed, this SIS import will use
@@ -587,6 +604,9 @@ class SisImportsApiController < ApplicationController
       file_obj = nil
       if params.key?(:attachment)
         file_obj = params[:attachment]
+      elsif request.content_type == "multipart/form-data"
+        # don't interpret the form itself as a SIS batch
+        return render json: { error: true, error_message: "Missing attachment" }, status: :bad_request
       else
         file_obj = request.body
 
@@ -672,15 +692,17 @@ class SisImportsApiController < ApplicationController
           batch.options[:diffing_drop_status] = (Array(params[:diffing_drop_status]) & SIS::CSV::DiffGenerator::VALID_ENROLLMENT_DROP_STATUS).first
           return render json: { message: "Invalid diffing_drop_status" }, status: :bad_request unless batch.options[:diffing_drop_status]
         end
+        if params[:diffing_user_remove_status].present?
+          batch.options[:diffing_user_remove_status] = (Array(params[:diffing_user_remove_status]) & SIS::CSV::DiffGenerator::VALID_USER_REMOVE_STATUS).first
+          return render json: { message: "Invalid diffing_user_remove_status" }, status: :bad_request unless batch.options[:diffing_user_remove_status]
+        end
         if params[:batch_mode_enrollment_drop_status].present?
           batch.options[:batch_mode_enrollment_drop_status] = (Array(params[:batch_mode_enrollment_drop_status]) & SIS::CSV::DiffGenerator::VALID_ENROLLMENT_DROP_STATUS).first
           return render json: { message: "Invalid batch_mode_enrollment_drop_status" }, status: :bad_request unless batch.options[:batch_mode_enrollment_drop_status]
         end
       end
 
-      unless Setting.get("skip_sis_jobs_account_ids", "").split(",").include?(@account.global_id.to_s)
-        batch.process
-      end
+      batch.process
 
       unless api_request?
         @account.current_sis_batch_id = batch.id
@@ -745,7 +767,7 @@ class SisImportsApiController < ApplicationController
         return render json: "cannot set both undelete_only and unconclude_only", status: :bad_request
       end
 
-      progress = @batch.restore_states_later(batch_mode: batch_mode, undelete_only: undelete_only, unconclude_only: unconclude_only)
+      progress = @batch.restore_states_later(batch_mode:, undelete_only:, unconclude_only:)
       render json: progress_json(progress, @current_user, session)
     end
   end

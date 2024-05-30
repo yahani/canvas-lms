@@ -11,8 +11,6 @@ development:
     canvas:
       # environment
       canvas:
-        encryption-secret: "astringthatisactually32byteslong"
-        signing-secret: "astringthatisactually32byteslong"
         # regexes for matching online meeting urls in calendar events
         # one per line. will get | or'd together to form the regex
         # that's eventually used.
@@ -33,12 +31,6 @@ development:
         application_id: "27627d1e-8a4f-4645-b390-bb396fc83c81"
         client_token: "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r"
         sample_rate_percentage: 0.0 # Between 0.0 and 100.0; 0.0 disables the feature.
-      live-events:
-        aws_endpoint: http://kinesis.canvaslms.docker
-        kinesis_stream_name: live-events
-        aws_access_key_id: key
-        aws_secret_access_key_dec: secret
-        # stub_credentials: true # can be used in dev to print creds to stdout
       live-events-subscription-service:
         # Causes errors installing LTI 2 originality tools if not set up correctly
         # Comment out or set to false to use the live events ecosystem
@@ -47,13 +39,23 @@ development:
         # disabled: true
         app-host: "http://les.docker"
         sad-panda: null
+      lti:
+        # Used by ContextExternalTool#internal_service? to determine if
+        # an Instructure-owned tool is launching to an Instructure-owned URL.
+        # For OSS users: If you have a use case for marking your own tools as
+        # "internal services", then replace this with your tool launch domains,
+        # but this should rarely (if ever) be needed and can be safely ignored.
+        # Domains should not have a preceding "." (ex: "instructure.com")
+        internal_tool_domain_allowlist:
+          - 'docker'
+          - 'localhost'
       math-man:
         base_url: 'http://mathman.docker'
         use_for_svg: 'false'
         use_for_mml: 'false'
-      microsoft-sync:
-        client-id: some_client_id
-        client-secret: some_client_secret
+      pandata/events:
+        enabled_for_canvas: false
+        url: 'https://cbbsk4vb5k.execute-api.us-east-1.amazonaws.com/prod/pandata-event' # dev PandataEvents environment
       rich-content-service:
         # if you're running canvas-rce-api on its own
         app-host: "rce.canvas.docker"
@@ -61,14 +63,7 @@ development:
         app-host: "http://rce.canvas.docker:3000"
       common_cartridge_viewer:
         base_url: "http://localhost:3300"
-      fullstory:
-        sampling_rate: '0.0' # randomly inject this fraction of the time
-        app_key: 'xyzzy'
     # another service
-    inst-fs:
-      app-host: "http://api.instfs.docker"
-      # this is just "super-sekret-value", base64-encoded:
-      secret: "c3VwZXItc2VrcmV0LXZhbHVlCg=="
     pandata:
       ios-pandata-key: IOS_pandata_key
       ios-pandata-secret: teamrocketblastoffatthespeedoflight
@@ -81,21 +76,22 @@ development:
         write_paths:
           - active_record
         read_path: active_record
+      live_events.yml: |-
+        aws_endpoint: http://kinesis.canvaslms.docker
+        kinesis_stream_name: live-events
+        aws_access_key_id: key
+        aws_secret_access_key_dec: secret
+        # stub_credentials: true # can be used in dev to print creds to stdout
       # datadog_apm.yml: |
       #   sample_rate: 0.0
       #   host_sample_rate: 0.0
-      # immersive_reader.yml: |
-      #   ir_tenant_id: ""
-      #   ir_client_id: ""
-      #   ir_client_secret: ""
-      #   ir_subdomain: "canvasir"
       # use a unique subdomain per attachment, so that browsers will enforce security
       # permissions (such as microphone/camera access) per-file. You must have wildcard
       # DNS set up for this to work.
       # attachment_specific_file_domain: true
       # ha_cache.yml: |
       #   cache_store: ha_store
-      #   servers:
+      #   url:
       #    - redis://localhost/2
       #   # keep stale data for up to 1 week in the cache
       #   race_condition_ttl: 604800
@@ -117,6 +113,10 @@ development:
       #   consul_datacenters:
       #   - dc1
       #   - dc2
+      #   connect_timeout: 0.5
+      #   circuit_breaker:
+      #     error_threshold: 1
+      #     error_timeout: 2
       # clone_url_strand.yml: |
       #   lti1.instructure.com: lti1
       #   lti2.instructure.com: lti2
@@ -145,3 +145,9 @@ development:
         jwk-past.json: "{\"kty\":\"RSA\",\"e\":\"AQAB\",\"n\":\"uX1MpfEMQCBUMcj0sBYI-iFaG5Nodp3C6OlN8uY60fa5zSBd83-iIL3n_qzZ8VCluuTLfB7rrV_tiX727XIEqQ\",\"kid\":\"2018-05-18T22:33:20Z\",\"d\":\"pYwR64x-LYFtA13iHIIeEvfPTws50ZutyGfpHN-kIZz3k-xVpun2Hgu0hVKZMxcZJ9DkG8UZPqD-zTDbCmCyLQ\",\"p\":\"6OQ2bi_oY5fE9KfQOcxkmNhxDnIKObKb6TVYqOOz2JM\",\"q\":\"y-UBef95njOrqMAxJH1QPds3ltYWr8QgGgccmcATH1M\",\"dp\":\"Ol_xkL7rZgNFt_lURRiJYpJmDDPjgkDVuafIeFTS4Ic\",\"dq\":\"RtzDY5wXr5TzrwWEztLCpYzfyAuF_PZj1cfs976apsM\",\"qi\":\"XA5wnwIrwe5MwXpaBijZsGhKJoypZProt47aVCtWtPE\"}"
         jwk-present.json: "{\"kty\":\"RSA\",\"e\":\"AQAB\",\"n\":\"uX1MpfEMQCBUMcj0sBYI-iFaG5Nodp3C6OlN8uY60fa5zSBd83-iIL3n_qzZ8VCluuTLfB7rrV_tiX727XIEqQ\",\"kid\":\"2018-06-18T22:33:20Z\",\"d\":\"pYwR64x-LYFtA13iHIIeEvfPTws50ZutyGfpHN-kIZz3k-xVpun2Hgu0hVKZMxcZJ9DkG8UZPqD-zTDbCmCyLQ\",\"p\":\"6OQ2bi_oY5fE9KfQOcxkmNhxDnIKObKb6TVYqOOz2JM\",\"q\":\"y-UBef95njOrqMAxJH1QPds3ltYWr8QgGgccmcATH1M\",\"dp\":\"Ol_xkL7rZgNFt_lURRiJYpJmDDPjgkDVuafIeFTS4Ic\",\"dq\":\"RtzDY5wXr5TzrwWEztLCpYzfyAuF_PZj1cfs976apsM\",\"qi\":\"XA5wnwIrwe5MwXpaBijZsGhKJoypZProt47aVCtWtPE\"}"
         jwk-future.json: "{\"kty\":\"RSA\",\"e\":\"AQAB\",\"n\":\"uX1MpfEMQCBUMcj0sBYI-iFaG5Nodp3C6OlN8uY60fa5zSBd83-iIL3n_qzZ8VCluuTLfB7rrV_tiX727XIEqQ\",\"kid\":\"2018-07-18T22:33:20Z\",\"d\":\"pYwR64x-LYFtA13iHIIeEvfPTws50ZutyGfpHN-kIZz3k-xVpun2Hgu0hVKZMxcZJ9DkG8UZPqD-zTDbCmCyLQ\",\"p\":\"6OQ2bi_oY5fE9KfQOcxkmNhxDnIKObKb6TVYqOOz2JM\",\"q\":\"y-UBef95njOrqMAxJH1QPds3ltYWr8QgGgccmcATH1M\",\"dp\":\"Ol_xkL7rZgNFt_lURRiJYpJmDDPjgkDVuafIeFTS4Ic\",\"dq\":\"RtzDY5wXr5TzrwWEztLCpYzfyAuF_PZj1cfs976apsM\",\"qi\":\"XA5wnwIrwe5MwXpaBijZsGhKJoypZProt47aVCtWtPE\"}"
+test:
+  config:
+    canvas:
+      live-events-subscription-service:
+        # disabled: true
+        app-host: http://live-event-service

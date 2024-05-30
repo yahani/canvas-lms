@@ -27,17 +27,17 @@ import {ApolloLink} from 'apollo-link'
 import {ApolloProvider, Query} from 'react-apollo'
 import introspectionQueryResultData from './fragmentTypes.json'
 import {withClientState} from 'apollo-link-state'
-import InstAccess from './InstAccess'
 
 import EncryptedForage from '../encrypted-forage'
 
 function createConsoleErrorReportLink() {
   return onError(({graphQLErrors, networkError}) => {
     if (graphQLErrors)
-      graphQLErrors.map(({message, locations, path}) =>
-        console.log(`[GraphQL error]: Message: ${message}, Location: ${locations}, Path: ${path}`)
+      graphQLErrors.map(
+        ({message, locations, path}) =>
+          console.log(`[GraphQL error]: Message: ${message}, Location: ${locations}, Path: ${path}`) // eslint-disable-line no-console
       )
-    if (networkError) console.log(`[Network error]: ${networkError}`)
+    if (networkError) console.log(`[Network error]: ${networkError}`) // eslint-disable-line no-console
   })
 }
 
@@ -47,8 +47,8 @@ function setHeadersLink() {
       headers: {
         'X-Requested-With': 'XMLHttpRequest',
         'GraphQL-Metrics': true,
-        'X-CSRF-Token': getCookie('_csrf_token')
-      }
+        'X-CSRF-Token': getCookie('_csrf_token'),
+      },
     })
     return forward(operation)
   })
@@ -57,23 +57,26 @@ function setHeadersLink() {
 function createHttpLink(httpLinkOptions = {}) {
   const defaultOptions = {
     uri: '/api/graphql',
-    credentials: 'same-origin'
+    credentials: 'same-origin',
   }
   const linkOpts = {
     ...defaultOptions,
-    ...httpLinkOptions
+    ...httpLinkOptions,
   }
   return new HttpLink(linkOpts)
 }
 
-function createCache() {
+export function createCache() {
   return new InMemoryCache({
     addTypename: true,
     dataIdFromObject: object => {
       let cacheKey
-
       if (object.id) {
         cacheKey = object.id
+      } else if (object._id && object.__typename === 'RubricAssessmentRating') {
+        cacheKey = object.__typename + object._id + object.rubricAssessmentId
+      } else if (object.__typename === 'RubricRating') {
+        cacheKey = object.__typename + object._id + object.rubricId
       } else if (object._id && object.__typename) {
         cacheKey = object.__typename + object._id
       } else {
@@ -84,51 +87,38 @@ function createCache() {
       // objects) may be represented by the same ID and type. Add the
       // artifactAttempt field to the cache key to assessments for different
       // attempts don't collide.
-      if (object.__typename === 'RubricAssessment' && object.artifactAttempt != null) {
+      if (
+        ['RubricAssessment', 'RubricAssessmentRating'].includes(object.__typename) &&
+        object.artifactAttempt != null
+      ) {
         cacheKey = `${cacheKey}:${object.artifactAttempt}`
       }
       return cacheKey
     },
     fragmentMatcher: new IntrospectionFragmentMatcher({
-      introspectionQueryResultData
-    })
+      introspectionQueryResultData,
+    }),
   })
 }
 
-async function createPersistentCache(passphrase = null) {
+export async function createPersistentCache(passphrase = null) {
   const cache = createCache()
   await persistCache({
     cache,
-    storage: new EncryptedForage(passphrase)
+    storage: new EncryptedForage(passphrase),
   })
   return cache
 }
 
-function createClient(opts = {}) {
+export function createClient(opts = {}) {
   const cache = opts.cache || createCache()
   const defaults = opts.defaults || {}
   const resolvers = opts.resolvers || {}
   const stateLink = withClientState({
     cache,
     resolvers,
-    defaults
+    defaults,
   })
-
-  // if this option exists, we want this client
-  // to talk through the API gateway instead of
-  // directly to canvas, so we'll need to update the http
-  // link to have both our target URL, and also
-  // an enhanced "fetch" implementation that uses
-  // InstAccess tokens
-  const gatewayUri = opts.apiGatewayUri || false
-  const defaultHttpLinkOptions = {}
-  if (gatewayUri) {
-    defaultHttpLinkOptions.uri = gatewayUri
-    const instAccess = new InstAccess()
-    defaultHttpLinkOptions.fetch = (uri, fetchOpts) => {
-      return instAccess.gatewayAuthenticatedFetch(uri, fetchOpts)
-    }
-  }
 
   // there are some cases where we need to override these options.
   //  If we're using an API gateway instead of talking to canvas directly,
@@ -138,10 +128,7 @@ function createClient(opts = {}) {
   // A design goal here is not to do anything "special", but just
   // use the options that are already built into ApolloLink:
   // https://github.com/apollographql/apollo-client/blob/main/src/link/core/ApolloLink.ts
-  const httpLinkOptions = {
-    ...defaultHttpLinkOptions,
-    ...(opts.httpLinkOptions || {})
-  }
+  const httpLinkOptions = opts.httpLinkOptions || {}
 
   const links =
     createClient.mockLink == null
@@ -149,16 +136,16 @@ function createClient(opts = {}) {
           createConsoleErrorReportLink(),
           setHeadersLink(),
           stateLink,
-          createHttpLink(httpLinkOptions)
+          createHttpLink(httpLinkOptions),
         ]
       : [createConsoleErrorReportLink(), stateLink, createClient.mockLink]
 
   const client = new ApolloClient({
     link: ApolloLink.from(links),
-    cache
+    cache,
   })
 
   return client
 }
 
-export {createClient, gql, ApolloProvider, Query, createCache, createPersistentCache}
+export {gql, ApolloProvider, Query}

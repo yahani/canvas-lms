@@ -89,7 +89,7 @@ describe "Wiki pages and Tiny WYSIWYG editor" do
       wait_for_ajax_requests
       f(".new_page").click
       wait_for_tiny(f("#wiki_page_body"))
-      f("#title").send_keys("new page")
+      wiki_page_title_input.send_keys("new page")
 
       expect_new_page_load { f("form.edit-form button.submit").click }
       new_page = @course.wiki_pages.last
@@ -108,8 +108,7 @@ describe "Wiki pages and Tiny WYSIWYG editor" do
       get "/courses/#{@course.id}/pages/test_page/edit"
       wait_for_tiny(edit_wiki_css)
 
-      click_links_toolbar_menu_button
-      click_course_links
+      click_course_links_toolbar_menuitem
 
       click_pages_accordion
       click_course_item_link(title)
@@ -129,8 +128,7 @@ describe "Wiki pages and Tiny WYSIWYG editor" do
 
       wait_for_tiny(edit_wiki_css)
 
-      click_links_toolbar_menu_button
-      click_course_links
+      click_course_links_toolbar_menuitem
 
       click_pages_accordion
       click_course_item_link(title)

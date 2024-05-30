@@ -21,10 +21,8 @@
 module IncomingMailProcessor
   class Instrumentation
     def self.process
-      unreads = []
-
-      mailbox_accounts.each do |a|
-        unreads << IncomingMailProcessor::IncomingMessageProcessor.create_mailbox(a).unprocessed_message_count
+      unreads = mailbox_accounts.map do |a|
+        IncomingMailProcessor::IncomingMessageProcessor.create_mailbox(a).unprocessed_message_count
       end
 
       report_unreads(unreads)
@@ -37,12 +35,13 @@ module IncomingMailProcessor
 
     def self.report_unreads(unreads)
       result = mailbox_accounts.map(&:escaped_address).zip(unreads).to_h
-      result.delete_if { |_k, v| v.nil? }
+      result.compact!
       result.each_pair do |identifier, count|
         name = "incoming_mail_processor.mailbox_queue_size.#{identifier}"
-        InstStatsd::Statsd.gauge(name, count,
+        InstStatsd::Statsd.gauge(name,
+                                 count,
                                  short_stat: "incoming_mail_processor.mailbox_queue_size",
-                                 tags: { identifier: identifier })
+                                 tags: { identifier: })
       end
     end
     private_class_method :report_unreads

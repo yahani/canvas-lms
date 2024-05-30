@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import DateValidator from '@canvas/datetime/DateValidator'
+import DateValidator from '@canvas/grading/DateValidator'
 import fakeENV from 'helpers/fakeENV'
 
 const DATE_IN_CLOSED_PERIOD = '2015-07-23T03:59:59Z'
@@ -38,7 +38,7 @@ function generateData(opts = {}) {
     lock_at_overridden: true,
     rowKey: '2015-09-23T03:59:59Z',
     persisted: true,
-    ...opts
+    ...opts,
   }
 }
 
@@ -51,7 +51,7 @@ function generateGradingPeriods(periodOneOpts = {}, periodTwoOpts = {}) {
     closeDate: new Date('2015-08-31T06:00:00.000Z'),
     isLast: false,
     isClosed: true,
-    ...periodOneOpts
+    ...periodOneOpts,
   }
 
   const periodTwo = {
@@ -62,7 +62,7 @@ function generateGradingPeriods(periodOneOpts = {}, periodTwoOpts = {}) {
     closeDate: new Date('2015-12-31T06:00:00.000Z'),
     isLast: true,
     isClosed: false,
-    ...periodTwoOpts
+    ...periodTwoOpts,
   }
 
   return [periodOne, periodTwo]
@@ -73,25 +73,27 @@ function createValidator({
   userIsAdmin,
   hasGradingPeriods = true,
   postToSIS = null,
-  dueDateRequiredForAccount = false
+  dueDateRequiredForAccount = false,
+  termStart,
+  termEnd,
 }) {
   ENV.DUE_DATE_REQUIRED_FOR_ACCOUNT = dueDateRequiredForAccount
 
   const params = {
     date_range: {
       start_at: {
-        date: '2015-03-02T07:00:00Z',
-        date_context: 'term'
+        date: termStart === undefined ? '2015-03-02T07:00:00Z' : termStart,
+        date_context: 'term',
       },
       end_at: {
-        date: '2016-03-31T06:00:00Z',
-        date_context: 'term'
-      }
+        date: termEnd === undefined ? '2016-03-31T06:00:00Z' : termEnd,
+        date_context: 'term',
+      },
     },
-    hasGradingPeriods: true,
+    hasGradingPeriods,
     userIsAdmin,
     gradingPeriods,
-    postToSIS
+    postToSIS,
   }
 
   return new DateValidator(params)
@@ -188,7 +190,7 @@ test('it is valid to have no due date when postToSISEnabled is false when dueDat
     userIsAdmin: false,
     hasGradingPeriods: false,
     postToSIS: false,
-    dueDateRequiredForAccount: true
+    dueDateRequiredForAccount: true,
   })
   ok(isValid(validator, data))
 })
@@ -200,7 +202,7 @@ test('it is not valid to have a missing due date when postToSISEnabled is true w
     userIsAdmin: false,
     hasGradingPeriods: false,
     postToSIS: true,
-    dueDateRequiredForAccount: true
+    dueDateRequiredForAccount: true,
   })
   notOk(isValid(validator, data))
 })
@@ -212,7 +214,7 @@ test('it is valid to have a missing due date when postToSISEnabled is true and d
     userIsAdmin: false,
     hasGradingPeriods: false,
     postToSIS: true,
-    dueDateRequiredForAccount: false
+    dueDateRequiredForAccount: false,
   })
   ok(isValid(validator, data))
 })
@@ -228,13 +230,13 @@ QUnit.module('when applied to one or more individual students', hooks => {
         hasGradingPeriods: false,
         postToSIS: true,
         userIsAdmin: false,
-        ...params
+        ...params,
       })
   })
 
   test('allows a due date before the prescribed start date', () => {
     const data = generateData({
-      due_at: '2014-01-23T03:59:59Z'
+      due_at: '2014-01-23T03:59:59Z',
     })
 
     const validator = makeIndividualValidator()
@@ -246,7 +248,7 @@ QUnit.module('when applied to one or more individual students', hooks => {
       due_at: '2014-01-23T03:59:59Z',
       student_ids: null,
       set_type: 'ADHOC',
-      set_id: null
+      set_id: null,
     })
 
     const validator = makeIndividualValidator()
@@ -255,7 +257,7 @@ QUnit.module('when applied to one or more individual students', hooks => {
 
   test('allows an unlock date before the prescribed start date', () => {
     const data = generateData({
-      unlock_at: '2014-01-23T03:59:59Z'
+      unlock_at: '2014-01-23T03:59:59Z',
     })
 
     const validator = makeIndividualValidator()
@@ -264,7 +266,7 @@ QUnit.module('when applied to one or more individual students', hooks => {
 
   test('allows a due date after the prescribed end date', () => {
     const data = generateData({
-      due_at: '2017-01-23T03:59:59Z'
+      due_at: '2017-01-23T03:59:59Z',
     })
     const validator = makeIndividualValidator()
     ok(isValid(validator, data))
@@ -272,7 +274,7 @@ QUnit.module('when applied to one or more individual students', hooks => {
 
   test('allows a lock date after the prescribed end date', () => {
     const data = generateData({
-      lock_at: '2017-01-23T03:59:59Z'
+      lock_at: '2017-01-23T03:59:59Z',
     })
     const validator = makeIndividualValidator()
     ok(isValid(validator, data))
@@ -281,7 +283,7 @@ QUnit.module('when applied to one or more individual students', hooks => {
   test('does not allow a new override with a date in a closed grading period', () => {
     const data = generateData({
       due_at: DATE_IN_CLOSED_PERIOD,
-      persisted: false
+      persisted: false,
     })
 
     const gradingPeriods = generateGradingPeriods()
@@ -301,7 +303,7 @@ QUnit.module('term dates', hooks => {
         hasGradingPeriods: false,
         postToSIS: true,
         userIsAdmin: false,
-        ...params
+        ...params,
       })
   })
 
@@ -310,7 +312,7 @@ QUnit.module('term dates', hooks => {
       unlock_at: '2015-03-03T03:59:59Z',
       due_at: '2015-03-04T03:59:59Z',
       lock_at: '2015-03-05T03:59:59Z',
-      student_ids: null
+      student_ids: null,
     })
     const validator = makeIndividualValidator()
     ok(isValid(validator, data))
@@ -319,7 +321,7 @@ QUnit.module('term dates', hooks => {
   test('disallows a due date before the prescribed start date', () => {
     const data = generateData({
       due_at: '2014-01-23T03:59:59Z',
-      student_ids: null
+      student_ids: null,
     })
 
     const validator = makeIndividualValidator()
@@ -329,7 +331,7 @@ QUnit.module('term dates', hooks => {
   test('disallows an unlock date before the prescribed start date', () => {
     const data = generateData({
       unlock_at: '2014-01-23T03:59:59Z',
-      student_ids: null
+      student_ids: null,
     })
 
     const validator = makeIndividualValidator()
@@ -339,7 +341,7 @@ QUnit.module('term dates', hooks => {
   test('disallows a due date after the prescribed end date', () => {
     const data = generateData({
       due_at: '2017-01-23T03:59:59Z',
-      student_ids: null
+      student_ids: null,
     })
     const validator = makeIndividualValidator()
     notOk(isValid(validator, data))
@@ -348,7 +350,7 @@ QUnit.module('term dates', hooks => {
   test('disallows a lock date after the prescribed end date', () => {
     const data = generateData({
       lock_at: '2017-01-23T03:59:59Z',
-      student_ids: null
+      student_ids: null,
     })
     const validator = makeIndividualValidator()
     notOk(isValid(validator, data))
@@ -366,7 +368,7 @@ QUnit.module('section dates', hooks => {
         hasGradingPeriods: false,
         postToSIS: true,
         userIsAdmin: false,
-        ...params
+        ...params,
       })
     fakeENV.setup({
       SECTION_LIST: [
@@ -374,9 +376,15 @@ QUnit.module('section dates', hooks => {
           id: 123,
           start_at: '2020-03-01T00:00:00Z',
           end_at: '2020-07-01T00:00:00Z',
-          override_course_and_term_dates: true
-        }
-      ]
+          override_course_and_term_dates: true,
+        },
+        {
+          id: 234,
+          start_at: null,
+          end_at: null,
+          override_course_and_term_dates: null,
+        },
+      ],
     })
   })
 
@@ -390,10 +398,32 @@ QUnit.module('section dates', hooks => {
       due_at: '2020-03-04T00:00:00Z',
       lock_at: '2020-03-05T00:00:00Z',
       student_ids: null,
-      course_section_id: 123
+      course_section_id: 123,
     })
     const validator = makeIndividualValidator()
     ok(isValid(validator, data))
+  })
+
+  test('allows date outside of one section range to be assigned to another, not-limited section', () => {
+    const firstSectionDueDateData = generateData({
+      unlock_at: '2020-03-03T00:00:00Z',
+      due_at: '2020-03-04T00:00:00Z',
+      lock_at: '2020-03-05T00:00:00Z',
+      student_ids: null,
+      course_section_id: 123,
+    })
+
+    const secondSectionDueDateData = generateData({
+      unlock_at: null,
+      due_at: '2020-08-01T00:00:00Z',
+      lock_at: null,
+      student_ids: null,
+      course_section_id: 234,
+    })
+
+    const validator = makeIndividualValidator({termStart: null, termEnd: null})
+    ok(isValid(validator, firstSectionDueDateData))
+    ok(isValid(validator, secondSectionDueDateData))
   })
 
   test('accepts all_dates format for section overrides', () => {
@@ -403,7 +433,7 @@ QUnit.module('section dates', hooks => {
       lock_at: '2020-03-05T00:00:00Z',
       student_ids: null,
       set_type: 'CourseSection',
-      set_id: 123
+      set_id: 123,
     })
     const validator = makeIndividualValidator()
     ok(isValid(validator, data))
@@ -415,7 +445,7 @@ QUnit.module('section dates', hooks => {
       due_at: '2020-03-04T00:00:00Z',
       lock_at: '2020-03-05T00:00:00Z',
       student_ids: null,
-      course_section_id: 456
+      course_section_id: 456,
     })
     const validator = makeIndividualValidator()
     notOk(isValid(validator, data))
@@ -425,7 +455,7 @@ QUnit.module('section dates', hooks => {
     const data = generateData({
       due_at: '2020-01-01T00:00:00Z',
       student_ids: null,
-      course_section_id: 123
+      course_section_id: 123,
     })
 
     const validator = makeIndividualValidator()
@@ -436,7 +466,7 @@ QUnit.module('section dates', hooks => {
     const data = generateData({
       unlock_at: '2020-01-01T00:00:00Z',
       student_ids: null,
-      course_section_id: 123
+      course_section_id: 123,
     })
 
     const validator = makeIndividualValidator()
@@ -447,7 +477,7 @@ QUnit.module('section dates', hooks => {
     const data = generateData({
       due_at: '2020-12-25T00:00:00Z',
       student_ids: null,
-      course_section_id: 123
+      course_section_id: 123,
     })
     const validator = makeIndividualValidator()
     notOk(isValid(validator, data))
@@ -457,7 +487,7 @@ QUnit.module('section dates', hooks => {
     const data = generateData({
       lock_at: '2020-12-25T00:00:00Z',
       student_ids: null,
-      course_section_id: 123
+      course_section_id: 123,
     })
     const validator = makeIndividualValidator()
     notOk(isValid(validator, data))

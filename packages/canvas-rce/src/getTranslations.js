@@ -29,11 +29,20 @@ export default function getTranslations(locale) {
       .then(() => {
         let p
         switch (locale) {
+          case 'ab':
+            p = import('./translations/locales/ab')
+            break
           case 'ar':
             p = import('./translations/locales/ar')
             break
           case 'ca':
             p = import('./translations/locales/ca')
+            break
+          case 'cs':
+            p = import('./translations/locales/cs')
+            break
+          case 'cs-CZ':
+            p = import('./translations/locales/cs_CZ')
             break
           case 'cy':
             p = import('./translations/locales/cy')
@@ -43,6 +52,9 @@ export default function getTranslations(locale) {
             break
           case 'da-x-k12':
             p = import('./translations/locales/da-x-k12')
+            break
+          case 'da-DK':
+            p = import('./translations/locales/da_DK')
             break
           case 'de':
             p = import('./translations/locales/de')
@@ -71,11 +83,23 @@ export default function getTranslations(locale) {
           case 'en-GB':
             p = import('./translations/locales/en_GB')
             break
+          case 'en-NZ':
+            p = import('./translations/locales/en_NZ')
+            break
+          case 'en-SE':
+            p = import('./translations/locales/en_SE')
+            break
+          case 'en-US':
+            p = import('./translations/locales/en_US')
+            break
           case 'es':
             p = import('./translations/locales/es')
             break
           case 'es-ES':
             p = import('./translations/locales/es_ES')
+            break
+          case 'es-GT':
+            p = import('./translations/locales/es_GT')
             break
           case 'fa-IR':
             p = import('./translations/locales/fa_IR')
@@ -89,6 +113,9 @@ export default function getTranslations(locale) {
           case 'fr-CA':
             p = import('./translations/locales/fr_CA')
             break
+          case 'ga':
+            p = import('./translations/locales/ga')
+            break
           case 'he':
             p = import('./translations/locales/he')
             break
@@ -98,8 +125,17 @@ export default function getTranslations(locale) {
           case 'hu':
             p = import('./translations/locales/hu')
             break
+          case 'hu-HU':
+            p = import('./translations/locales/hu_HU')
+            break
           case 'hy':
             p = import('./translations/locales/hy')
+            break
+          case 'id':
+            p = import('./translations/locales/id')
+            break
+          case 'id-ID':
+            p = import('./translations/locales/id_ID')
             break
           case 'is':
             p = import('./translations/locales/is')
@@ -113,8 +149,23 @@ export default function getTranslations(locale) {
           case 'ko':
             p = import('./translations/locales/ko')
             break
+          case 'ko-KR':
+            p = import('./translations/locales/ko_KR')
+            break
+          case 'lt':
+            p = import('./translations/locales/lt')
+            break
+          case 'lt-LT':
+            p = import('./translations/locales/lt_LT')
+            break
           case 'mi':
             p = import('./translations/locales/mi')
+            break
+          case 'mn-MN':
+            p = import('./translations/locales/mn_MN')
+            break
+          case 'ms':
+            p = import('./translations/locales/ms')
             break
           case 'nb':
             p = import('./translations/locales/nb')
@@ -124,6 +175,9 @@ export default function getTranslations(locale) {
             break
           case 'nl':
             p = import('./translations/locales/nl')
+            break
+          case 'nl-NL':
+            p = import('./translations/locales/nl_NL')
             break
           case 'nn':
             p = import('./translations/locales/nn')
@@ -136,6 +190,9 @@ export default function getTranslations(locale) {
             break
           case 'pt-BR':
             p = import('./translations/locales/pt_BR')
+            break
+          case 'ro':
+            p = import('./translations/locales/ro')
             break
           case 'ru':
             p = import('./translations/locales/ru')
@@ -152,8 +209,20 @@ export default function getTranslations(locale) {
           case 'sv-x-k12':
             p = import('./translations/locales/sv-x-k12')
             break
+          case 'sv-SE':
+            p = import('./translations/locales/sv_SE')
+            break
+          case 'tg':
+            p = import('./translations/locales/tg')
+            break
           case 'th':
             p = import('./translations/locales/th')
+            break
+          case 'th-TH':
+            p = import('./translations/locales/th_TH')
+            break
+          case 'tl-PH':
+            p = import('./translations/locales/tl_PH')
             break
           case 'tr':
             p = import('./translations/locales/tr')
@@ -163,6 +232,9 @@ export default function getTranslations(locale) {
             break
           case 'vi':
             p = import('./translations/locales/vi')
+            break
+          case 'vi-VN':
+            p = import('./translations/locales/vi_VN')
             break
           case 'zh':
             p = import('./translations/locales/zh')
@@ -175,6 +247,12 @@ export default function getTranslations(locale) {
             break
           case 'zh-HK':
             p = import('./translations/locales/zh_HK')
+            break
+          case 'zh-TW':
+            p = import('./translations/locales/zh_TW')
+            break
+          case 'zh-TW.Big5':
+            p = import('./translations/locales/zh_TW.Big5')
             break
           default:
             p = Promise.resolve(null)
@@ -190,11 +268,15 @@ export default function getTranslations(locale) {
 
 export function getLocaleList() {
   return [
+    'ab',
     'ar',
     'ca',
+    'cs',
+    'cs-CZ',
     'cy',
     'da',
     'da-x-k12',
+    'da-DK',
     'de',
     'el',
     'en',
@@ -204,40 +286,62 @@ export function getLocaleList() {
     'en-CA',
     'en-CY',
     'en-GB',
+    'en-NZ',
+    'en-SE',
+    'en-US',
     'es',
     'es-ES',
+    'es-GT',
     'fa-IR',
     'fi',
     'fr',
     'fr-CA',
+    'ga',
     'he',
     'ht',
     'hu',
+    'hu-HU',
     'hy',
+    'id',
+    'id-ID',
     'is',
     'it',
     'ja',
     'ko',
+    'ko-KR',
+    'lt',
+    'lt-LT',
     'mi',
+    'mn-MN',
+    'ms',
     'nb',
     'nb-x-k12',
     'nl',
+    'nl-NL',
     'nn',
     'pl',
     'pt',
     'pt-BR',
+    'ro',
     'ru',
     'se',
     'sl',
     'sv',
     'sv-x-k12',
+    'sv-SE',
+    'tg',
     'th',
+    'th-TH',
+    'tl-PH',
     'tr',
     'uk-UA',
     'vi',
+    'vi-VN',
     'zh',
     'zh-Hans',
     'zh-Hant',
-    'zh-HK'
+    'zh-HK',
+    'zh-TW',
+    'zh-TW.Big5',
   ]
 }

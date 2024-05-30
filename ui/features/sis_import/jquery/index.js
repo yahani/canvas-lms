@@ -18,21 +18,21 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import htmlEscape from 'html-escape'
+import htmlEscape, {raw} from '@instructure/html-escape'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/forms/jquery/jquery.instructure_forms'/* formSubmit, formErrors */
-import '@canvas/jquery/jquery.instructure_misc_plugins'/* showIf, disableIf */
+import '@canvas/jquery/jquery.instructure_forms' /* formSubmit, formErrors */
+import '@canvas/jquery/jquery.instructure_misc_plugins' /* showIf, disableIf */
 import 'jqueryui/progressbar'
 
 const I18n = useI18nScope('sis_import')
 
-$(document).ready(function(event) {
+$(document).ready(function (_event) {
   let state = 'nothing'
 
   $('#batch_mode')
-    .change(function(event) {
-      $('#batch_mode_term_id_label').showIf($(this).attr('checked'))
-      $('#batch_mode_term_id').showIf($(this).attr('checked'))
+    .change(function (__event) {
+      $('#batch_mode_term_id_label').showIf($(this).prop('checked'))
+      $('#batch_mode_term_id').showIf($(this).prop('checked'))
     })
     .change()
 
@@ -41,11 +41,11 @@ $(document).ready(function(event) {
   const $clear_sis_stickiness = $('#clear_sis_stickiness')
   const $add_sis_stickiness_container = $('#add_sis_stickiness_container')
   const $clear_sis_stickiness_container = $('#clear_sis_stickiness_container')
-  function updateSisCheckboxes(event) {
-    $add_sis_stickiness_container.showIf($override_sis_stickiness.attr('checked'))
-    $clear_sis_stickiness_container.showIf($override_sis_stickiness.attr('checked'))
-    $add_sis_stickiness.disableIf($clear_sis_stickiness.attr('checked'))
-    $clear_sis_stickiness.disableIf($add_sis_stickiness.attr('checked'))
+  function updateSisCheckboxes(__event) {
+    $add_sis_stickiness_container.showIf($override_sis_stickiness.prop('checked'))
+    $clear_sis_stickiness_container.showIf($override_sis_stickiness.prop('checked'))
+    $add_sis_stickiness.disableIf($clear_sis_stickiness.prop('checked'))
+    $clear_sis_stickiness.disableIf($add_sis_stickiness.prop('checked'))
   }
 
   $override_sis_stickiness.change(updateSisCheckboxes)
@@ -60,16 +60,16 @@ $(document).ready(function(event) {
         '<li>' +
         htmlEscape(I18n.t('headers.import_errors', 'Errors that prevent importing')) +
         '\n<ul>'
-      for (var i in batch.processing_errors) {
-        var message = batch.processing_errors[i]
+      for (const i in batch.processing_errors) {
+        const message = batch.processing_errors[i]
         output += '<li>' + htmlEscape(message[0]) + ' - ' + htmlEscape(message[1]) + '</li>'
       }
       output += '</ul>\n</li>'
     }
     if (batch.processing_warnings && batch.processing_warnings.length > 0) {
       output += '<li>' + htmlEscape(I18n.t('headers.import_warnings', 'Warnings')) + '\n<ul>'
-      for (var i in batch.processing_warnings) {
-        var message = batch.processing_warnings[i]
+      for (const i in batch.processing_warnings) {
+        const message = batch.processing_warnings[i]
         output += '<li>' + htmlEscape(message[0]) + ' - ' + htmlEscape(message[1]) + '</li>'
       }
       output += '</ul>\n</li>'
@@ -88,7 +88,7 @@ $(document).ready(function(event) {
       '<li>' +
       htmlEscape(
         I18n.t('import_counts.accounts', 'Accounts: %{account_count}', {
-          account_count: batch.data.counts.accounts
+          account_count: batch.data.counts.accounts,
         })
       ) +
       '</li>'
@@ -102,7 +102,7 @@ $(document).ready(function(event) {
       '<li>' +
       htmlEscape(
         I18n.t('import_counts.courses', 'Courses: %{course_count}', {
-          course_count: batch.data.counts.courses
+          course_count: batch.data.counts.courses,
         })
       ) +
       '</li>'
@@ -110,7 +110,7 @@ $(document).ready(function(event) {
       '<li>' +
       htmlEscape(
         I18n.t('import_counts.sections', 'Sections: %{section_count}', {
-          section_count: batch.data.counts.sections
+          section_count: batch.data.counts.sections,
         })
       ) +
       '</li>'
@@ -124,7 +124,7 @@ $(document).ready(function(event) {
       '<li>' +
       htmlEscape(
         I18n.t('import_counts.logins', 'Logins: %{login_count}', {
-          login_count: batch.data.counts.logins
+          login_count: batch.data.counts.logins,
         })
       ) +
       '</li>'
@@ -132,7 +132,7 @@ $(document).ready(function(event) {
       '<li>' +
       htmlEscape(
         I18n.t('import_counts.enrollments', 'Enrollments: %{enrollment_count}', {
-          enrollment_count: batch.data.counts.enrollments
+          enrollment_count: batch.data.counts.enrollments,
         })
       ) +
       '</li>'
@@ -140,7 +140,7 @@ $(document).ready(function(event) {
       '<li>' +
       htmlEscape(
         I18n.t('import_counts.crosslists', 'Crosslists: %{crosslist_count}', {
-          crosslist_count: batch.data.counts.xlists
+          crosslist_count: batch.data.counts.xlists,
         })
       ) +
       '</li>'
@@ -148,7 +148,7 @@ $(document).ready(function(event) {
       '<li>' +
       htmlEscape(
         I18n.t('import_counts.admins', 'Admins: %{admin_count}', {
-          admin_count: batch.data.counts.admins
+          admin_count: batch.data.counts.admins,
         })
       ) +
       '</li>'
@@ -156,7 +156,7 @@ $(document).ready(function(event) {
       '<li>' +
       htmlEscape(
         I18n.t('import_counts.group_categories', 'Group Categories: %{group_categories_count}', {
-          group_categories_count: batch.data.counts.group_categories
+          group_categories_count: batch.data.counts.group_categories,
         })
       ) +
       '</li>'
@@ -164,7 +164,7 @@ $(document).ready(function(event) {
       '<li>' +
       htmlEscape(
         I18n.t('import_counts.groups', 'Groups: %{group_count}', {
-          group_count: batch.data.counts.groups
+          group_count: batch.data.counts.groups,
         })
       ) +
       '</li>'
@@ -172,7 +172,7 @@ $(document).ready(function(event) {
       '<li>' +
       htmlEscape(
         I18n.t('import_counts.group_enrollments', 'Group Enrollments: %{group_enrollments_count}', {
-          group_enrollments_count: batch.data.counts.group_memberships
+          group_enrollments_count: batch.data.counts.group_memberships,
         })
       ) +
       '</li>'
@@ -180,7 +180,7 @@ $(document).ready(function(event) {
       '<li>' +
       htmlEscape(
         I18n.t('import_counts.user_observers', 'User Observers: %{user_observers_count}', {
-          user_observers_count: batch.data.counts.user_observers
+          user_observers_count: batch.data.counts.user_observers,
         })
       ) +
       '</li>'
@@ -188,7 +188,7 @@ $(document).ready(function(event) {
       '<li>' +
       htmlEscape(
         I18n.t('import_counts.change_sis_ids', 'Change SIS IDs: %{change_sis_ids_count}', {
-          change_sis_ids_count: batch.data.counts.change_sis_ids
+          change_sis_ids_count: batch.data.counts.change_sis_ids,
         })
       ) +
       '</li>'
@@ -205,14 +205,14 @@ $(document).ready(function(event) {
           htmlEscape(I18n.t('notices.processing_takes_awhile', 'this may take a bit...')) +
           '</div>'
       )
-      .attr('disabled', true)
+      .prop('disabled', true)
     $('.instruction').hide()
     $('.progress_bar_holder').slideDown()
     $('.copy_progress').progressbar()
     state = 'nothing'
     let fakeTickCount = 0
-    var tick = function() {
-      if (state == 'nothing') {
+    const tick = function () {
+      if (state === 'nothing') {
         fakeTickCount++
         const progress = ($('.copy_progress').progressbar('option', 'value') || 0) + 0.25
         if (fakeTickCount < 10) {
@@ -225,11 +225,11 @@ $(document).ready(function(event) {
         setTimeout(tick, 10000)
       }
     }
-    var checkup = function() {
+    const checkup = function () {
       let lastProgress = null
       let waitTime = 1500
       $.ajaxJSON(
-        location.href,
+        window.location.href,
         'GET',
         {},
         data => {
@@ -244,11 +244,11 @@ $(document).ready(function(event) {
             $('.copy_progress').progressbar('option', 'value', progress)
             $('#import_log').empty()
           }
-          if (!sis_batch || sis_batch.workflow_state == 'imported') {
+          if (!sis_batch || sis_batch.workflow_state === 'imported') {
             $('#sis_importer').hide()
             $('.copy_progress').progressbar('option', 'value', 100)
             $('.progress_message').html(
-              $.raw(
+              raw(
                 htmlEscape(
                   I18n.t(
                     'messages.import_complete_success',
@@ -257,40 +257,44 @@ $(document).ready(function(event) {
                 ) + createCountsHtml(sis_batch)
               )
             )
-          } else if (sis_batch.workflow_state == 'failed') {
+          } else if (sis_batch.workflow_state === 'failed') {
             const code = 'sis_batch_' + sis_batch.id
             $('.progress_bar_holder').hide()
             $('#sis_importer').hide()
-            var message = I18n.t(
-              'errors.import_failed_code',
-              'There was an error importing your SIS data. Please notify your system administrator and give them the following code: "%{code}"',
-              {code}
-            )
-            $('.sis_messages .sis_error_message').text(message)
-            $('.sis_messages').show()
-          } else if (sis_batch.workflow_state == 'failed_with_messages') {
-            $('.progress_bar_holder').hide()
-            $('#sis_importer').hide()
-            var message = htmlEscape(
-              I18n.t('errors.import_failed_messages', 'The import failed with these messages:')
-            )
-            message += createMessageHtml(sis_batch)
-            $('.sis_messages .sis_error_message').html($.raw(message))
-            $('.sis_messages').show()
-          } else if (sis_batch.workflow_state == 'imported_with_messages') {
-            $('.progress_bar_holder').hide()
-            $('#sis_importer').hide()
-            var message = htmlEscape(
-              I18n.t(
-                'messages.import_complete_warnings',
-                'The SIS data was imported but with these messages:'
+            {
+              const message = I18n.t(
+                'errors.import_failed_code',
+                'There was an error importing your SIS data. Please notify your system administrator and give them the following code: "%{code}"',
+                {code}
               )
-            )
-            message += createMessageHtml(sis_batch)
-            message += createCountsHtml(sis_batch)
-            $('.sis_messages')
-              .show()
-              .html($.raw(message))
+              $('.sis_messages .sis_error_message').text(message)
+            }
+            $('.sis_messages').show()
+          } else if (sis_batch.workflow_state === 'failed_with_messages') {
+            $('.progress_bar_holder').hide()
+            $('#sis_importer').hide()
+            {
+              let message = htmlEscape(
+                I18n.t('errors.import_failed_messages', 'The import failed with these messages:')
+              )
+              message += createMessageHtml(sis_batch)
+              $('.sis_messages .sis_error_message').html(raw(message))
+            }
+            $('.sis_messages').show()
+          } else if (sis_batch.workflow_state === 'imported_with_messages') {
+            $('.progress_bar_holder').hide()
+            $('#sis_importer').hide()
+            {
+              let message = htmlEscape(
+                I18n.t(
+                  'messages.import_complete_warnings',
+                  'The SIS data was imported but with these messages:'
+                )
+              )
+              message += createMessageHtml(sis_batch)
+              message += createCountsHtml(sis_batch)
+              $('.sis_messages').show().html(raw(message))
+            }
           } else {
             if (progress == lastProgress) {
               waitTime = Math.max(waitTime + 500, 30000)
@@ -327,21 +331,20 @@ $(document).ready(function(event) {
     error(data) {
       $(this)
         .find('.submit_button')
-        .attr('disabled', false)
+        .prop('disabled', false)
         .text(I18n.t('buttons.process_data', 'Process Data'))
       $(this).formErrors(data)
-    }
+    },
   })
 
   function check_if_importing() {
     state = 'checking'
-    $.ajaxJSON(location.href, 'GET', {}, data => {
+    $.ajaxJSON(window.location.href, 'GET', {}, data => {
       state = 'nothing'
       const sis_batch = data
-      const progress = 0
       if (
         sis_batch &&
-        (sis_batch.workflow_state == 'importing' || sis_batch.workflow_state == 'created')
+        (sis_batch.workflow_state === 'importing' || sis_batch.workflow_state === 'created')
       ) {
         state = 'nothing'
         startPoll()

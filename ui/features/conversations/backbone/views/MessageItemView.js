@@ -1,3 +1,5 @@
+/* eslint-disable no-alert */
+
 //
 // Copyright (C) 2013 - present Instructure, Inc.
 //
@@ -17,8 +19,8 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import _ from 'underscore'
-import tz from '@canvas/timezone'
+import {extend} from 'lodash'
+import * as tz from '@canvas/datetime'
 import {View} from '@canvas/backbone'
 import template from '../../jst/messageItem.handlebars'
 import '@canvas/avatar/jst/_avatar.handlebars'
@@ -38,7 +40,7 @@ export default class MessageItemView extends View {
       '.message-participants': '$participants',
       '.summarized-message-participants': '$summarized',
       '.full-message-participants': '$full',
-      '.message-metadata': '$metadata'
+      '.message-metadata': '$metadata',
     }
 
     this.prototype.events = {
@@ -54,14 +56,14 @@ export default class MessageItemView extends View {
       'keydown .reply-btn': 'onReply',
       'click .reply-all-btn': 'onReplyAll',
       'keydown .reply-all-btn': 'onReplyAll',
-      'focus .actions a': 'onActionFocus'
+      'focus .actions a': 'onActionFocus',
     }
 
     this.prototype.messages = {
       confirmDelete: I18n.t(
         'confirm.delete_message',
         'Are you sure you want to delete your copy of this message? This action cannot be undone.'
-      )
+      ),
     }
   }
 
@@ -76,7 +78,7 @@ export default class MessageItemView extends View {
   toJSON() {
     const json = this.model.toJSON()
     const fudged = $.fudgeDateForProfileTimezone(tz.parse(json.created_at))
-    return _.extend(json, {created_at: fudged})
+    return extend(json, {created_at: fudged})
   }
 
   // Internal: Update participant lists after render.
@@ -99,7 +101,7 @@ export default class MessageItemView extends View {
     return this.$toggle.text(
       summarized
         ? I18n.t('more_participants', '+%{total} more', {
-            total: this.model.get('hiddenParticipantCount')
+            total: this.model.get('hiddenParticipantCount'),
           })
         : I18n.t('hide', 'Hide')
     )
@@ -155,7 +157,8 @@ export default class MessageItemView extends View {
     }
     let $toFocus
     e.preventDefault()
-    if (!confirm(this.messages.confirmDelete)) {
+    //
+    if (!window.confirm(this.messages.confirmDelete)) {
       $(`.message-item-view[data-id=${this.model.id}] .al-trigger`).focus()
       return
     }

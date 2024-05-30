@@ -1,3 +1,4 @@
+// @ts-nocheck
 /*
  * Copyright (C) 2017 - present Instructure, Inc.
  *
@@ -42,7 +43,7 @@ export default class AssignmentCellEditor {
       editorOptions: this.options,
       ref: ref => {
         this.component = ref
-      }
+      },
     }
 
     const Component = props.gradeIsEditable ? AssignmentRowCell : ReadOnlyCell

@@ -16,10 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import $ from 'jquery'
-import _ from 'lodash-underscore'
-
-const extend = _.extend
+import {encodeQueryString} from '@canvas/query-string-encoding'
 
 /**
  * @class Common.Core.Environment
@@ -47,7 +44,7 @@ const Environment = {
   parseQueryString(query) {
     const items = query.replace(/^\?/, '').split('&')
 
-    return items.reduce(function(params, item) {
+    return items.reduce(function (params, item) {
       const pair = item.split('=')
       let key = decodeURIComponent(pair[0])
       const value = decodeURIComponent(pair[1])
@@ -79,12 +76,12 @@ const Environment = {
    *
    */
   updateQueryString(params) {
-    this.query = extend({}, this.query, params)
+    this.query = {...this.query, ...params}
 
     window.history.pushState(
       '',
       '',
-      [window.location.pathname, decodeURIComponent($.param(this.query))].join('?')
+      [window.location.pathname, decodeURIComponent(encodeQueryString(this.query))].join('?')
     )
   },
 
@@ -99,18 +96,18 @@ const Environment = {
   removeQueryParameters(keys) {
     const query = this.query
 
-    keys.forEach(function(key) {
+    keys.forEach(function (key) {
       delete query[key]
     })
 
     this.updateQueryString({})
-  }
+  },
 }
 
 // Extract the actual query string either from location.search if it's there,
 // or from the hash if we're using hash-based history, or from the href
 // as the last resort.
-const extractQueryString = function() {
+const extractQueryString = function () {
   if (window.location.search.length) {
     return window.location.search
   } else if (window.location.hash.length) {

@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import _ from 'underscore'
+import {cloneDeep} from 'lodash'
 import {handleActions} from 'redux-actions'
 import {actionTypes} from '../actions'
 import {defaultState} from '../store'
@@ -39,7 +39,7 @@ function transformDupeApiResult(apiResult) {
           skip: false,
           createNew: false,
           newUserInfo: undefined,
-          userList: d
+          userList: d,
         }
       }
     })
@@ -60,8 +60,8 @@ function transformMissingApiResult(apiResult) {
         createNew: false,
         newUserInfo: {
           name: d.user_name || '', // if the user entered a name as part of the email, it comes back in user_name
-          email: d.type === 'email' ? d.address : ''
-        }
+          email: d.type === 'email' ? d.address : '',
+        },
       }
     })
   }
@@ -74,13 +74,13 @@ export default handleActions(
     // no action.payload
     [actionTypes.VALIDATE_USERS_START]: (state /* action */) => {
       // reset state
-      let newstate = _.cloneDeep(state)
+      let newstate = cloneDeep(state)
       newstate = defaultState.userValidationResult
       return newstate
     },
     // action.payload: validateUsers api response
     [actionTypes.VALIDATE_USERS_SUCCESS]: (state, action) => {
-      const newstate = _.cloneDeep(state)
+      const newstate = cloneDeep(state)
       newstate.validUsers = action.payload.users
       newstate.duplicates = transformDupeApiResult(action.payload.duplicates)
       newstate.missing = transformMissingApiResult(action.payload.missing)
@@ -88,7 +88,7 @@ export default handleActions(
     },
     // action.payload: {address, user_id}
     [actionTypes.CHOOSE_DUPLICATE]: (state, action) => {
-      const newstate = _.cloneDeep(state)
+      const newstate = cloneDeep(state)
       const chosenOne = action.payload
       // mark the duplicate as selected
       const duplicateSet = newstate.duplicates[chosenOne.address]
@@ -99,7 +99,7 @@ export default handleActions(
     },
     // action.payload: address
     [actionTypes.SKIP_DUPLICATE]: (state, action) => {
-      const newstate = _.cloneDeep(state)
+      const newstate = cloneDeep(state)
       const address = action.payload
       const duplicateSet = newstate.duplicates[address]
       duplicateSet.selectedUserId = -1
@@ -109,7 +109,7 @@ export default handleActions(
     },
     // action.payload: {address, newUserInfo}
     [actionTypes.ENQUEUE_NEW_FOR_DUPLICATE]: (state, action) => {
-      const newstate = _.cloneDeep(state)
+      const newstate = cloneDeep(state)
       const address = action.payload.address
       const duplicateSet = newstate.duplicates[address]
       duplicateSet.selectedUserId = -1
@@ -120,7 +120,7 @@ export default handleActions(
     },
     // action.payload: {address, newUserInfo}
     [actionTypes.ENQUEUE_NEW_FOR_MISSING]: (state, action) => {
-      const newstate = _.cloneDeep(state)
+      const newstate = cloneDeep(state)
       const address = action.payload.address
       const newUserInfo = action.payload.newUserInfo
       const missing = newstate.missing[address]
@@ -143,7 +143,7 @@ export default handleActions(
       return !action.payload || action.payload.includes('userValidationResult')
         ? defaultState.userValidationResult
         : state
-    }
+    },
   },
   defaultState.userValidationResult
 )

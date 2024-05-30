@@ -90,6 +90,11 @@
 #           "description": "Optional: Whether or not the user is a K5 user. This field is nil if the user settings are not for the user making the request.",
 #           "example": true,
 #           "type": "boolean"
+#         },
+#         "use_classic_font_in_k5": {
+#           "description": "Optional: Whether or not the user should see the classic font on the dashboard. Only applies if k5_user is true. This field is nil if the user settings are not for the user making the request.",
+#           "example": false,
+#           "type": "boolean"
 #         }
 #       }
 #     }
@@ -255,7 +260,11 @@ class ProfileController < ApplicationController
     }
 
     js_bundle :account_notification_settings
-    render html: "", layout: true
+    respond_to do |format|
+      format.html do
+        render html: "", layout: true
+      end
+    end
   end
 
   def communication_update
@@ -345,8 +354,18 @@ class ProfileController < ApplicationController
     respond_to do |format|
       user_params = if params[:user]
                       params[:user]
-                        .permit(:name, :short_name, :sortable_name, :time_zone, :show_user_services, :gender,
-                                :avatar_image, :subscribe_to_emails, :locale, :bio, :birthdate, :pronouns)
+                        .permit(:name,
+                                :short_name,
+                                :sortable_name,
+                                :time_zone,
+                                :show_user_services,
+                                :gender,
+                                :avatar_image,
+                                :subscribe_to_emails,
+                                :locale,
+                                :bio,
+                                :birthdate,
+                                :pronouns)
                     else
                       {}
                     end
@@ -423,18 +442,18 @@ class ProfileController < ApplicationController
 
     short_name = params[:user] && params[:user][:short_name]
     @user.short_name = short_name if short_name && @user.user_can_edit_name?
-    if params[:user_profile]
+    if params[:user_profile] && @user.user_can_edit_profile?
       user_profile_params = params[:user_profile].permit(:title, :bio)
       user_profile_params.delete(:title) unless @user.user_can_edit_name?
       @profile.attributes = user_profile_params
     end
 
-    if params[:link_urls] && params[:link_titles]
+    if params[:link_urls] && params[:link_titles] && @user.user_can_edit_profile?
       @profile.links = []
       params[:link_urls].zip(params[:link_titles])
                         .reject { |url, title| url.blank? && title.blank? }
                         .each do |url, title|
-        new_link = @profile.links.build url: url, title: title
+        new_link = @profile.links.build(url:, title:)
         # since every time we update links, we delete and recreate everything,
         # deleting invalid link records will make sure the rest of the
         # valid ones still save
@@ -447,6 +466,7 @@ class ProfileController < ApplicationController
     if @user.valid? && @profile.valid?
       @user.save!
       @profile.save!
+      flash[:success] = true
 
       if params[:user_services]
         visible, invisible = params[:user_services].to_unsafe_h.partition do |_service, bool|
@@ -455,15 +475,15 @@ class ProfileController < ApplicationController
         @user.user_services.where(service: visible.map(&:first)).update_all(visible: true)
         @user.user_services.where(service: invisible.map(&:first)).update_all(visible: false)
       end
-
       respond_to do |format|
         format.html { redirect_to user_profile_path(@user) }
         format.json { render json: user_profile_json(@user.profile, @current_user, session, params[:includes]) }
       end
     else
+      flash[:success] = false
       respond_to do |format|
         format.html { redirect_to user_profile_path(@user) } # FIXME: need to go to edit path
-        format.json { render json: @profile.errors, status: :bad_request }  # NOTE: won't send back @user validation errors (i.e. short_name)
+        format.json { render json: @profile.errors, status: :bad_request } # NOTE: won't send back @user validation errors (i.e. short_name)
       end
     end
   end
@@ -485,7 +505,6 @@ class ProfileController < ApplicationController
     add_crumb(@user.short_name, profile_path)
     add_crumb(t("crumbs.observees", "Observing"))
 
-    @google_analytics_page_title = "Students Being Observed"
     join_title(t(:page_title, "Students Being Observed"), @user.name)
     js_bundle :user_observees
 
@@ -493,7 +512,7 @@ class ProfileController < ApplicationController
   end
 
   def content_shares
-    raise not_found unless @current_user.can_content_share?
+    return not_found unless @current_user.can_view_content_shares?
 
     @user ||= @current_user
     set_active_tab "content_shares"
@@ -521,11 +540,12 @@ class ProfileController < ApplicationController
 
     js_bundle :qr_mobile_login
 
+    page_has_instui_topnav
     render html: "", layout: true
   end
 end
 
 def instructure_misc_plugin_available?
-  Object.const_defined?("InstructureMiscPlugin")
+  Object.const_defined?(:InstructureMiscPlugin)
 end
 private :instructure_misc_plugin_available?

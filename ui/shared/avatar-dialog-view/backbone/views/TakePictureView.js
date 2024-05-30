@@ -17,7 +17,7 @@
 //
 
 import $ from 'jquery'
-import _ from 'underscore'
+import {once, min} from 'lodash'
 import BaseView from './AvatarUploadBaseView'
 import template from '../../jst/takePictureView.handlebars'
 import BlobFactory from '../../BlobFactory'
@@ -30,7 +30,7 @@ export default class TakePictureView extends BaseView {
 
     this.prototype.events = {
       'click .take-snapshot-btn': 'onSnapshot',
-      'click .retry-snapshot-btn': 'onRetry'
+      'click .retry-snapshot-btn': 'onRetry',
     }
 
     this.prototype.els = {
@@ -39,7 +39,7 @@ export default class TakePictureView extends BaseView {
       '.webcam-preview': '$preview',
       '.webcam-capture-wrapper': '$captureWrapper',
       '.webcam-preview-wrapper': '$previewWrapper',
-      '.webcam-preview-staging-area': '$canvas'
+      '.webcam-preview-staging-area': '$canvas',
     }
 
     this.prototype.getUserMedia = (
@@ -80,19 +80,16 @@ export default class TakePictureView extends BaseView {
     } catch (err) {
       this.$video.attr('src', window.URL.createObjectURL(this.stream))
     }
-    return this.$video.on(
-      'onloadedmetadata loadedmetadata',
-      _.once(this.onMediaMetadata).bind(this)
-    )
+    return this.$video.on('onloadedmetadata loadedmetadata', once(this.onMediaMetadata).bind(this))
   }
 
-  onMediaMetadata(e) {
+  onMediaMetadata(_e) {
     let wait
     return (wait = window.setInterval(() => {
       if (this.$video[0].videoHeight === 0) return
       window.clearInterval(wait)
 
-      const clipSize = _.min([this.$video.height(), this.$video.width()])
+      const clipSize = min([this.$video.height(), this.$video.width()])
       this.$clip.height(clipSize).width(clipSize)
 
       if (this.$video.width() > clipSize) {
@@ -135,7 +132,7 @@ export default class TakePictureView extends BaseView {
     )
     const url = canvas.toDataURL()
 
-    img.onload = e => {
+    img.onload = _e => {
       const sX = (video.clientWidth - this.$clip.width()) / 2
       const sY = (video.clientHeight - this.$clip.height()) / 2
 
@@ -172,7 +169,7 @@ export default class TakePictureView extends BaseView {
     return (img.src = url)
   }
 
-  onRetry(e) {
+  onRetry(_e) {
     return this.resetSnapshot()
   }
 

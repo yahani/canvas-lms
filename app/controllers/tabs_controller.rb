@@ -106,8 +106,12 @@ class TabsController < ApplicationController
   #       }
   #     ]
   def index
-    if authorized_action(@context, @current_user, :read)
-      render json: tabs_available_json(@context, @current_user, session)
+    GuardRail.activate(:secondary) do
+      if @context.grants_right?(@current_user, session, :read)
+        render json: tabs_available_json(@context, @current_user, session)
+      else
+        raise ActiveRecord::RecordNotFound
+      end
     end
   end
 
@@ -147,7 +151,7 @@ class TabsController < ApplicationController
       end
     end
     if [@context.class::TAB_HOME, @context.class::TAB_SETTINGS].include?(tab[:id])
-      render json: { error: t(:tab_unmanagable_error, "%{css_class} is not manageable", css_class: css_class) }, status: :bad_request
+      render json: { error: t(:tab_unmanagable_error, "%{css_class} is not manageable", css_class:) }, status: :bad_request
     elsif new_pos && (new_pos <= 1 || new_pos >= tab_config.count + 1)
       render json: { error: t(:tab_location_error, "That tab location is invalid") }, status: :bad_request
     else

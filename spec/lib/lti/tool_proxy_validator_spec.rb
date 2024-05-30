@@ -18,17 +18,14 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require_dependency "lti/tool_proxy_validator.rb"
-
 module Lti
   describe ToolProxyValidator do
-    subject(:tool_proxy_validator) { ToolProxyValidator.new(tool_proxy: tool_proxy, tool_consumer_profile: nil) }
+    subject(:tool_proxy_validator) { ToolProxyValidator.new(tool_proxy:, tool_consumer_profile: nil) }
 
     let(:tp_validator) { double("tp_validator") }
     let(:tool_proxy) do
       tp = double("tool_proxy")
-      allow(tp).to receive(:tool_profile).and_return(tool_profile)
-      allow(tp).to receive(:enabled_capabilities).and_return(enabled_capabilities)
+      allow(tp).to receive_messages(tool_profile:, enabled_capabilities:)
       tp
     end
     let(:tool_profile) do

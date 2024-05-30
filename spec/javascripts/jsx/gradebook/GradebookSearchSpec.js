@@ -18,7 +18,7 @@
 
 import {
   createGradebook,
-  setFixtureHtml
+  setFixtureHtml,
 } from 'ui/features/gradebook/react/default_gradebook/__tests__/GradebookSpecHelper'
 
 const $fixtures = document.getElementById('fixtures')
@@ -45,8 +45,8 @@ QUnit.module('Gradebook', suiteHooks => {
           id: '1303',
           name: 'Joe Dirt',
           sis_user_id: 'meteor',
-          enrollments: [{type: 'StudentEnrollment', grades: {html_url: 'http://example.url/'}}]
-        }
+          enrollments: [{type: 'StudentEnrollment', grades: {html_url: 'http://example.url/'}}],
+        },
       ]
       gradebook.courseContent.students.setStudentIds(['1303'])
       gradebook.gotChunkOfStudents(students)
@@ -78,37 +78,14 @@ QUnit.module('Gradebook', suiteHooks => {
     })
   })
 
-  QUnit.module('Gradebook#assignmentSearchMatcher', hooks => {
-    hooks.beforeEach(() => {
-      gradebook = createGradebook()
-    })
-
-    test('returns true if the search term is a substring of the assignment name (case insensitive)', () => {
-      const option = {id: '122', label: 'Science Lab II'}
-      ok(gradebook.assignmentSearchMatcher(option, 'lab'))
-    })
-
-    test('returns false if the search term is not a substring of the assignment name', () => {
-      const option = {id: '122', label: 'Science Lab II'}
-      notOk(gradebook.assignmentSearchMatcher(option, 'Lib'))
-    })
-
-    test('does not treat the search term as a regular expression', () => {
-      const option = {id: '122', label: 'Science Lab II'}
-      notOk(gradebook.assignmentSearchMatcher(option, 'Science.*II'))
-    })
-  })
-
   QUnit.module('#_updateEssentialDataLoaded()', () => {
     function createInitializedGradebook(options) {
       gradebook = createGradebook(options)
-      sinon.stub(gradebook.dataLoader, 'loadInitialData')
       sinon.stub(gradebook, 'finishRenderingUI')
 
       gradebook.setStudentIdsLoaded(true)
       gradebook.setAssignmentGroupsLoaded(true)
       gradebook.setAssignmentsLoaded()
-      gradebook.setCustomColumnsLoaded(true)
     }
 
     function waitForTick() {
@@ -132,7 +109,6 @@ QUnit.module('Gradebook', suiteHooks => {
 
     test('does not finish rendering the UI when custom columns are not loaded', async () => {
       createInitializedGradebook()
-      gradebook.setCustomColumnsLoaded(false)
       gradebook._updateEssentialDataLoaded()
       await waitForTick()
       strictEqual(gradebook.finishRenderingUI.callCount, 0)
@@ -152,11 +128,11 @@ QUnit.module('Gradebook', suiteHooks => {
           grading_period_set: {
             grading_periods: [
               {id: '1501', weight: 50},
-              {id: '1502', weight: 50}
+              {id: '1502', weight: 50},
             ],
             id: '1401',
-            weighted: true
-          }
+            weighted: true,
+          },
         })
       })
 
@@ -180,45 +156,7 @@ QUnit.module('Gradebook#renderAssignmentSearchFilter)', {
 
   teardown() {
     $fixtures.innerHTML = ''
-  }
-})
-
-test('renders Assignment Names label', function () {
-  this.gradebook.renderAssignmentSearchFilter([])
-  const assignmentSearch = document.querySelector('#gradebook-assignment-search')
-  ok(assignmentSearch.textContent.includes('Assignment Names'))
-})
-
-test('enables the input if there is at least one assignment to filter by', function () {
-  sinon.stub(this.gradebook.gridReady, 'state').returns('resolved')
-  this.gradebook.renderAssignmentSearchFilter([{id: '1', name: 'An Assignment'}])
-  const assignmentSearchInput = document.getElementById('assignments-filter')
-  notOk(assignmentSearchInput.disabled)
-})
-
-test('disables the input if the grid has not yet rendered', function () {
-  sinon.stub(this.gradebook.gridReady, 'state').returns('pending')
-  this.gradebook.renderAssignmentSearchFilter([{id: '1', name: 'An Assignment'}])
-  const assignmentSearchInput = document.getElementById('assignments-filter')
-  ok(assignmentSearchInput.disabled)
-})
-
-test('disables the input if there are no assignments to filter by', function () {
-  sinon.stub(this.gradebook.gridReady, 'state').returns('resolved')
-  this.gradebook.renderAssignmentSearchFilter([])
-  const assignmentSearchInput = document.getElementById('assignments-filter')
-  ok(assignmentSearchInput.disabled)
-})
-
-test('displays a select menu option for each assignment', function () {
-  sinon.stub(this.gradebook.gridReady, 'state').returns('resolved')
-  const assignment = {id: '1', name: 'An assignment'}
-  this.gradebook.renderAssignmentSearchFilter([assignment])
-  const assignmentSearchInput = document.getElementById('assignments-filter')
-  assignmentSearchInput.click()
-  const options = [...document.querySelectorAll('ul[role="listbox"] li span[role="option"]')]
-  ok(options.some(option => option.textContent === assignment.name))
-  assignmentSearchInput.click() // close the menu to avoid DOM test pollution
+  },
 })
 
 QUnit.module('Gradebook#rowFilter', contextHooks => {
@@ -232,7 +170,7 @@ QUnit.module('Gradebook#rowFilter', contextHooks => {
       name: 'Charlie Xi',
       short_name: 'Chuck Xi',
       sortable_name: 'Xi, Charlie',
-      sis_user_id: '123456789'
+      sis_user_id: '123456789',
     }
   })
 
@@ -241,19 +179,13 @@ QUnit.module('Gradebook#rowFilter', contextHooks => {
       gradebook = createGradebook()
     })
 
-    test('ignores the userFilterTerm', () => {
-      gradebook.userFilterTerm = 'charlie Xi'
-      gradebook.filteredStudentIds = ['2']
-      strictEqual(gradebook.rowFilter(student), false)
-    })
-
     test('returns true when filtered students include the student', () => {
-      gradebook.filteredStudentIds = ['1']
+      gradebook.searchFilteredStudentIds = ['1']
       strictEqual(gradebook.rowFilter(student), true)
     })
 
     test('returns false when filtered students do not include the student', () => {
-      gradebook.filteredStudentIds = ['2']
+      gradebook.searchFilteredStudentIds = ['2']
       strictEqual(gradebook.rowFilter(student), false)
     })
 
@@ -262,8 +194,27 @@ QUnit.module('Gradebook#rowFilter', contextHooks => {
     })
 
     test('returns true when not filtering students (originally filtered and then cleared filters)', () => {
-      gradebook.filteredStudentIds = []
+      gradebook.searchFilteredStudentIds = []
       strictEqual(gradebook.rowFilter(student), true)
+    })
+    test('row count does not match the filtered student count before determining vertical scrollbar settings for gradebook grid display', () => {
+      gradebook.courseContent.students.setStudentIds(['1101', '1102', '1103'])
+      gradebook.updateRows()
+      gradebook.searchFilteredStudentIds = ['1101', '1102']
+      gradebook.updateFilteredStudentIds()
+      gradebook.gradebookGrid.updateRowCount()
+      strictEqual(gradebook.gridData.rows.length, 3)
+      gradebook.gridData.rows.length = gradebook.filteredStudentIds.length
+      strictEqual(gradebook.gridData.rows.length, 2)
+    })
+    test('row count matches the filtered student count before determining vertical scrollbar settings for gradebook grid display', () => {
+      gradebook.courseContent.students.setStudentIds(['1101', '1102', '1103'])
+      gradebook.updateRows()
+      gradebook.searchFilteredStudentIds = ['1101', '1102']
+      gradebook.updateFilteredStudentIds()
+      gradebook.gridData.rows.length = gradebook.filteredStudentIds.length
+      gradebook.gradebookGrid.updateRowCount()
+      strictEqual(gradebook.gridData.rows.length, 2)
     })
   })
 })

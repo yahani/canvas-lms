@@ -16,9 +16,9 @@
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import Backbone from '@canvas/backbone'
-import PaginatedCollectionView from '@canvas/pagination/backbone/views/PaginatedCollectionView.coffee'
-import InputFilterView from 'backbone-input-filter-view'
-import UserView from './UserView.coffee'
+import PaginatedCollectionView from '@canvas/pagination/backbone/views/PaginatedCollectionView'
+import InputFilterView from '@canvas/backbone-input-filter-view'
+import UserView from './UserView'
 import UserDateRangeSearchFormView from './UserDateRangeSearchFormView'
 import AuthLoggingCollection from '../collections/AuthLoggingCollection'
 import AuthLoggingItemView from './AuthLoggingItemView'
@@ -39,20 +39,20 @@ export default function AuthLoggingContentPaneView(options) {
   this.searchForm = new UserDateRangeSearchFormView({
     formName: 'logging',
     inputFilterView: new InputFilterView({
-      collection: this.options.users
+      collection: this.options.users,
     }),
     usersView: new PaginatedCollectionView({
       collection: this.options.users,
       itemView: UserView,
       buffer: 1000,
-      template: usersTemplate
+      template: usersTemplate,
     }),
-    collection: this.collection
+    collection: this.collection,
   })
   this.resultsView = new PaginatedCollectionView({
     template: authLoggingResultsTemplate,
     itemView: AuthLoggingItemView,
-    collection: this.collection
+    collection: this.collection,
   })
 }
 
@@ -74,5 +74,5 @@ Object.assign(AuthLoggingContentPaneView.prototype, {
     // view try to fetch more.
     this.collection.reset()
     return this.resultsView.detachScroll()
-  }
+  },
 })

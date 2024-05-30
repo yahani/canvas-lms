@@ -20,7 +20,7 @@
 
 require_relative "../../views_helper"
 
-describe "/quizzes/quizzes/_single_answer" do
+describe "quizzes/quizzes/_single_answer" do
   it "renders" do
     course_with_student
     view_context
@@ -29,7 +29,7 @@ describe "/quizzes/quizzes/_single_answer" do
     answer.id = 5
     answer.weight = 100
     question_type = OpenObject.new
-    render partial: "quizzes/quizzes/single_answer", object: answer, locals: { question_type: question_type, user_answer: nil }
+    render partial: "quizzes/quizzes/single_answer", object: answer, locals: { question_type:, user_answer: nil }
     expect(response).not_to be_nil
   end
 end

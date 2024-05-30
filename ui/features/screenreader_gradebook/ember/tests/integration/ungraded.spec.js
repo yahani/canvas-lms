@@ -43,10 +43,13 @@ QUnit.module('include ungraded assignments setting:false', {
 
   teardown() {
     return Ember.run(App, 'destroy')
-  }
+  },
 })
 
-QUnit.skip('clicking the ungraded checkbox updates includeUngradedAssignments to true', () => runTest())
+// unskip in EVAL-2505
+QUnit.skip('clicking the ungraded checkbox updates includeUngradedAssignments to true', () =>
+  runTest()
+)
 
 QUnit.module('include ungraded assignments setting:true', {
   setup() {
@@ -55,7 +58,10 @@ QUnit.module('include ungraded assignments setting:true', {
 
   teardown() {
     return Ember.run(App, 'destroy')
-  }
+  },
 })
 
-QUnit.skip('clicking the ungraded checkbox updates includeUngradedAssignments to false', () => runTest())
+// unskip in EVAL-2505
+QUnit.skip('clicking the ungraded checkbox updates includeUngradedAssignments to false', () =>
+  runTest()
+)

@@ -16,7 +16,7 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {useCallback, useRef} from 'react'
+import {useCallback, useRef, useEffect} from 'react'
 import {isRTL} from '@canvas/i18n/rtlHelper'
 
 const useResize = ({minWidth = 100, margin = 12, smallStep = 5, largeStep = 25} = {}) => {
@@ -27,17 +27,34 @@ const useResize = ({minWidth = 100, margin = 12, smallStep = 5, largeStep = 25} 
   const setDelimiterRef = ref => (delimiterRef.current = ref)
   const setLeftColumnRef = ref => (leftColumnRef.current = ref)
   const setRightColumnRef = ref => (rightColumnRef.current = ref)
+
+  const getValues = () => {
+    const containerRect = containerRef.current.getBoundingClientRect()
+    const delimiterRect = delimiterRef.current.getBoundingClientRect()
+    const separatorPosition = Math.floor(
+      ((delimiterRect.left - containerRect.left) / containerRect.width) * 100
+    )
+    return [containerRect, delimiterRect, separatorPosition]
+  }
+
+  useEffect(() => {
+    if (containerRef.current && delimiterRef.current) {
+      delimiterRef.current.setAttribute('aria-valuenow', getValues()[2])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [containerRef.current, delimiterRef.current])
+
   const keyCodes = {
     PAGE_UP: 33,
     PAGE_DOWN: 34,
     ARROW_LEFT: 37,
-    ARROW_RIGHT: 39
+    ARROW_RIGHT: 39,
   }
   const step = {
     [keyCodes.PAGE_UP]: largeStep,
     [keyCodes.PAGE_DOWN]: -largeStep,
     [keyCodes.ARROW_RIGHT]: smallStep,
-    [keyCodes.ARROW_LEFT]: -smallStep
+    [keyCodes.ARROW_LEFT]: -smallStep,
   }
   let isHandlerDragging = false
 
@@ -89,8 +106,7 @@ const useResize = ({minWidth = 100, margin = 12, smallStep = 5, largeStep = 25} 
   const onKeyDownHandler = e => handleMove(e, true)
 
   const handleMove = (e, keyboard = false) => {
-    const containerRect = containerRef.current.getBoundingClientRect()
-    const delimiterRect = delimiterRef.current.getBoundingClientRect()
+    const [containerRect, delimiterRect, separatorPosition] = getValues()
     const maxLeftWidth = containerRect.width - minWidth - margin
     const calcLeftWidth = !keyboard
       ? e.clientX
@@ -110,6 +126,8 @@ const useResize = ({minWidth = 100, margin = 12, smallStep = 5, largeStep = 25} 
 
     rightColumnRef.current.style.width = rightColumnWidth + 'px'
     rightColumnRef.current.style.flexGrow = 0
+
+    delimiterRef.current.setAttribute('aria-valuenow', separatorPosition)
   }
 
   return {
@@ -117,7 +135,7 @@ const useResize = ({minWidth = 100, margin = 12, smallStep = 5, largeStep = 25} 
     setDelimiterRef,
     setLeftColumnRef,
     setRightColumnRef,
-    onKeyDownHandler
+    onKeyDownHandler,
   }
 }
 

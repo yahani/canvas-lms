@@ -39,6 +39,7 @@ module Api::V1::WikiPage
     hash["front_page"] = wiki_page.is_front_page?
     hash["html_url"] = polymorphic_url([wiki_page.context, wiki_page])
     hash["todo_date"] = wiki_page.todo_date
+    hash["publish_at"] = wiki_page.publish_at
 
     hash["updated_at"] = wiki_page.revised_at
     if opts[:include_assignment] && wiki_page.for_assignment?
@@ -59,8 +60,8 @@ module Api::V1::WikiPage
     hash
   end
 
-  def wiki_pages_json(wiki_pages, current_user, session, opts = {})
-    wiki_pages.map { |page| wiki_page_json(page, current_user, session, false, opts) }
+  def wiki_pages_json(wiki_pages, current_user, session, include_body = false, opts = {})
+    wiki_pages.map { |page| wiki_page_json(page, current_user, session, include_body, opts) }
   end
 
   def wiki_page_revision_json(version, _current_user, _session, include_content = true, latest_version = nil)

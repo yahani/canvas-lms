@@ -160,7 +160,7 @@ describe ContextModulesHelper do
       expect(ConditionalRelease::Service).not_to receive(:rules_for)
       module_data = process_module_data(t_module, true, @student, @session)
       item_data = module_data[:items_data][item.id]
-      expect(item_data[:mastery_paths]).to be nil
+      expect(item_data[:mastery_paths]).to be_nil
     end
 
     describe "show_cyoe_placeholder with cyoe enabled" do
@@ -171,7 +171,7 @@ describe ContextModulesHelper do
       it "sets mastery_paths for a cyoe trigger assignment module item" do
         module_data = process_module_data(t_module, true, @student, @session)
         item_data = module_data[:items_data][item.id]
-        expect(item_data[:mastery_paths][:locked]).to eq false
+        expect(item_data[:mastery_paths][:locked]).to be false
         expect(item_data[:mastery_paths][:assignment_sets]).to eq [{}, {}]
       end
 
@@ -191,13 +191,13 @@ describe ContextModulesHelper do
                                                                              ])
         module_data = process_module_data(t_module, true, @student, @session)
         item_data = module_data[:items_data][item.id]
-        expect(item_data[:show_cyoe_placeholder]).to eq true
+        expect(item_data[:show_cyoe_placeholder]).to be true
       end
 
       it "is true if no set has been selected and sets are available" do
         module_data = process_module_data(t_module, true, @student, @session)
         item_data = module_data[:items_data][item.id]
-        expect(item_data[:show_cyoe_placeholder]).to eq true
+        expect(item_data[:show_cyoe_placeholder]).to be true
       end
 
       it "is true if still processing results" do
@@ -211,7 +211,7 @@ describe ContextModulesHelper do
                                                                              ])
         module_data = process_module_data(t_module, true, @student, @session)
         item_data = module_data[:items_data][item.id]
-        expect(item_data[:show_cyoe_placeholder]).to eq false
+        expect(item_data[:show_cyoe_placeholder]).to be false
       end
 
       it "is false if no set has been selected and no sets are available" do
@@ -224,7 +224,7 @@ describe ContextModulesHelper do
                                                                              ])
         module_data = process_module_data(t_module, true, @student, @session)
         item_data = module_data[:items_data][item.id]
-        expect(item_data[:show_cyoe_placeholder]).to eq false
+        expect(item_data[:show_cyoe_placeholder]).to be false
       end
 
       it "is false if set has been selected for a cyoe trigger assignment module item" do
@@ -239,16 +239,29 @@ describe ContextModulesHelper do
 
         module_data = process_module_data(t_module, true, @student, @session)
         item_data = module_data[:items_data][item.id]
-        expect(item_data[:show_cyoe_placeholder]).to eq false
+        expect(item_data[:show_cyoe_placeholder]).to be false
       end
+    end
+
+    it "does not return items that are hide_on_modules_view? == true" do
+      course = course_factory(active_all: true)
+      test_module = course.context_modules.create! name: "test module"
+      hidden_assignment = course.assignments.create!(workflow_state: "failed_to_duplicate")
+      test_module.add_item(type: "assignment", id: hidden_assignment.id)
+
+      module_data = process_module_data(test_module, true, @student, @session)
+
+      expect(module_data[:items]).to be_empty
     end
   end
 
   describe "add_mastery_paths_to_cache_key" do
     before do
-      allow(ConditionalRelease::Service).to receive(:enabled_in_context?).and_return(true)
-      allow(ConditionalRelease::Service).to receive(:rules_for).and_return([1, 2, 3])
-      allow(ConditionalRelease::Service).to receive(:active_rules).and_return([1, 2, 3])
+      @rules = [
+        { id: 27, assignment_sets: [{ id: 45 }, { id: 36 }] },
+        { id: 28, assignment_sets: [] }
+      ]
+      allow(ConditionalRelease::Service).to receive_messages(enabled_in_context?: true, rules_for: @rules, active_rules: [1, 2, 3])
     end
 
     it "does not affect cache keys unless mastery paths enabled" do
@@ -258,22 +271,23 @@ describe ContextModulesHelper do
       expect(cache).to eq "foo"
     end
 
-    it "creates the same key for the same mastery paths rules for a student" do
-      s1 = student_in_course(course: t_course, active_all: true)
-      s2 = student_in_course(course: t_course, active_all: true)
-      cache1 = add_mastery_paths_to_cache_key("foo", t_course, s1.user)
-      cache2 = add_mastery_paths_to_cache_key("foo", t_course, s2.user)
-      expect(cache1).not_to eq "foo"
-      expect(cache1).to eq cache2
-    end
-
     it "creates different keys for different mastery paths rules for a student" do
       s1 = student_in_course(course: t_course, active_all: true)
       s2 = student_in_course(course: t_course, active_all: true)
       cache1 = add_mastery_paths_to_cache_key("foo", t_course, s1.user)
-      allow(ConditionalRelease::Service).to receive(:rules_for).and_return([3, 2, 1])
+      allow(ConditionalRelease::Service).to receive(:rules_for).and_return(@rules.reverse)
       cache2 = add_mastery_paths_to_cache_key("foo", t_course, s2.user)
       expect(cache1).not_to eq cache2
+    end
+
+    it "includes student's AssignmentSetActions in cache key" do
+      s1 = student_in_course(course: t_course, active_all: true)
+      cache1 = add_mastery_paths_to_cache_key("foo", t_course, s1.user)
+      cache2 = add_mastery_paths_to_cache_key("foo", t_course, s1.user)
+      expect(cache1).to eq cache2
+      allow_any_instance_of(CyoeHelper).to receive(:assignment_set_action_ids).and_return([11, 22])
+      cache3 = add_mastery_paths_to_cache_key("foo", t_course, s1.user)
+      expect(cache3).not_to eq cache1
     end
 
     it "creates the same key for the same mastery paths rules for a teacher" do
@@ -305,7 +319,7 @@ describe ContextModulesHelper do
       assg = ag.assignments.create! context: @course, submission_types: "online_text_entry"
       item = @mod.add_item type: "assignment", id: assg.id
 
-      expect(cyoe_able?(item)).to eq true
+      expect(cyoe_able?(item)).to be true
     end
 
     it "returns false for a ungraded assignment module item" do
@@ -313,21 +327,21 @@ describe ContextModulesHelper do
       assg = ag.assignments.create! context: @course, submission_types: "not_graded"
       item = @mod.add_item type: "assignment", id: assg.id
 
-      expect(cyoe_able?(item)).to eq false
+      expect(cyoe_able?(item)).to be false
     end
 
     it "returns true for a assignment quiz module item" do
       quiz = @course.quizzes.create! quiz_type: "assignment"
       item = @mod.add_item type: "quiz", id: quiz.id
 
-      expect(cyoe_able?(item)).to eq true
+      expect(cyoe_able?(item)).to be true
     end
 
     it "returns false for a non-assignment quiz module item" do
       quiz = @course.quizzes.create! quiz_type: "survey"
       item = @mod.add_item type: "quiz", id: quiz.id
 
-      expect(cyoe_able?(item)).to eq false
+      expect(cyoe_able?(item)).to be false
     end
 
     it "returns true for a graded discussion module item" do
@@ -336,30 +350,14 @@ describe ContextModulesHelper do
       topic = @course.discussion_topics.create! assignment: assg
       item = @mod.add_item type: "discussion_topic", id: topic.id
 
-      expect(cyoe_able?(item)).to eq true
+      expect(cyoe_able?(item)).to be true
     end
 
     it "returns false for a non-graded discussion module item" do
       topic = @course.discussion_topics.create!
       item = @mod.add_item type: "discussion_topic", id: topic.id
 
-      expect(cyoe_able?(item)).to eq false
-    end
-  end
-
-  describe "module_item_new_quizzes_build_button_enabled?" do
-    it "returns true when the feature flag is on" do
-      allow(Account.site_admin).to receive(:feature_enabled?)
-        .with(:new_quizzes_skip_to_build_module_button)
-        .and_return(true)
-      expect(module_item_new_quizzes_build_button_enabled?).to eq true
-    end
-
-    it "returns false when the feature flag is off" do
-      allow(Account.site_admin).to receive(:feature_enabled?)
-        .with(:new_quizzes_skip_to_build_module_button)
-        .and_return(false)
-      expect(module_item_new_quizzes_build_button_enabled?).to eq false
+      expect(cyoe_able?(item)).to be false
     end
   end
 end

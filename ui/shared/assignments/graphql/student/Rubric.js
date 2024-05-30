@@ -41,14 +41,30 @@ export const Rubric = {
     free_form_criterion_comments: bool,
     hide_score_total: bool,
     points_possible: number.isRequired,
-    title: string.isRequired
-  })
+    title: string.isRequired,
+  }),
+
+  mock: ({
+    _id = '1',
+    criteria = [RubricCriterion.mock()],
+    free_form_criterion_comments = false,
+    hide_score_total = false,
+    points_possible = 10,
+    title = 'Rubric Title',
+  } = {}) => ({
+    _id,
+    criteria,
+    free_form_criterion_comments,
+    hide_score_total,
+    points_possible,
+    title,
+  }),
 }
 
 export const DefaultMocks = {
   Rubric: () => ({
     _id: '1',
     criteria: [{}],
-    freeFormCriterionComments: false
-  })
+    freeFormCriterionComments: false,
+  }),
 }

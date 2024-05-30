@@ -15,7 +15,7 @@
 // You should have received a copy of the GNU Affero General Public License along
 // with this program. If not, see <http://www.gnu.org/licenses/>.
 
-import MaterializedDiscussionTopic from './Topic.coffee'
+import MaterializedDiscussionTopic from './Topic'
 
 export default class SideCommentDiscussionTopic extends MaterializedDiscussionTopic {
   // #
@@ -26,12 +26,12 @@ export default class SideCommentDiscussionTopic extends MaterializedDiscussionTo
   parse() {
     super.parse(...arguments)
 
-    for (var entry of this.data.entries) {
+    for (const entry of this.data.entries) {
       entry.replies = []
     }
 
     for (const id in this.flattened) {
-      entry = this.flattened[id]
+      const entry = this.flattened[id]
       if (entry.root_entry_id) {
         delete entry.replies
         const parent = this.flattened[entry.root_entry_id]
@@ -41,12 +41,8 @@ export default class SideCommentDiscussionTopic extends MaterializedDiscussionTo
       }
     }
 
-    for (entry of this.data.entries) {
+    for (const entry of this.data.entries) {
       entry.replies.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
-
-      if (ENV.DISCUSSION.SORT_BY_RATING) {
-        entry.replies.sort((a, b) => (a.rating_sum || 0) - (b.rating_sum || 0))
-      }
     }
 
     return this.data

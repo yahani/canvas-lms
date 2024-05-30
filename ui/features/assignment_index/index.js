@@ -17,36 +17,35 @@
  */
 
 import AssignmentGroupCollection from '@canvas/assignments/backbone/collections/AssignmentGroupCollection'
-import Course from '@canvas/courses/backbone/models/Course.coffee'
-import AssignmentGroupListView from './backbone/views/AssignmentGroupListView.coffee'
-import CreateGroupView from './backbone/views/CreateGroupView.coffee'
-import IndexView from './backbone/views/IndexView.coffee'
-import AssignmentSettingsView from './backbone/views/AssignmentSettingsView.coffee'
-import AssignmentSyncSettingsView from './backbone/views/AssignmentSyncSettingsView.coffee'
-import AssignmentGroupWeightsView from './backbone/views/AssignmentGroupWeightsView.coffee'
+import Course from '@canvas/courses/backbone/models/Course'
+import AssignmentGroupListView from './backbone/views/AssignmentGroupListView'
+import CreateGroupView from './backbone/views/CreateGroupView'
+import IndexView from './backbone/views/IndexView'
+import AssignmentSettingsView from './backbone/views/AssignmentSettingsView'
+import AssignmentSyncSettingsView from './backbone/views/AssignmentSyncSettingsView'
+import AssignmentGroupWeightsView from './backbone/views/AssignmentGroupWeightsView'
 import ToggleShowByView from './backbone/views/ToggleShowByView'
-import _ from 'underscore'
 import splitAssetString from '@canvas/util/splitAssetString'
-import {getPrefetchedXHR} from '@instructure/js-utils'
+import {getPrefetchedXHR} from '@canvas/util/xhr'
 import {monitorLtiMessages} from '@canvas/lti/jquery/messages'
 import ready from '@instructure/ready'
+import {addDeepLinkingListener} from '@canvas/deep-linking/DeepLinking'
 import {
-  addDeepLinkingListener,
-  handleDeepLinking,
-  reloadPage
-} from '@canvas/deep-linking/DeepLinking'
+  handleAssignmentIndexDeepLinking,
+  alertIfDeepLinkingCreatedModule,
+} from './helpers/deepLinkingHelper'
 
 const course = new Course({
   id: encodeURIComponent(splitAssetString(ENV.context_asset_string)[1]),
-  apply_assignment_group_weights: ENV.apply_assignment_group_weights
+  apply_assignment_group_weights: ENV.apply_assignment_group_weights,
 })
 course.url = ENV.URLS.course_url
 
-const userIsAdmin = _.includes(ENV.current_user_roles, 'admin')
+const userIsAdmin = ENV.current_user_is_admin
 
 const assignmentGroups = new AssignmentGroupCollection([], {
   course,
-  courseSubmissionsURL: ENV.URLS.course_student_submissions_url
+  courseSubmissionsURL: ENV.URLS.course_student_submissions_url,
 })
 
 const assignmentGroupsView = new AssignmentGroupListView({
@@ -54,7 +53,7 @@ const assignmentGroupsView = new AssignmentGroupListView({
   sortURL: ENV.URLS.sort_url,
   assignment_sort_base_url: ENV.URLS.assignment_sort_base_url,
   course,
-  userIsAdmin
+  userIsAdmin,
 })
 
 let assignmentSettingsView = false
@@ -67,26 +66,26 @@ if (ENV.PERMISSIONS.manage_assignments) {
     model: course,
     assignmentGroups,
     weightsView: AssignmentGroupWeightsView,
-    userIsAdmin
+    userIsAdmin,
   })
 
   assignmentSyncSettingsView = new AssignmentSyncSettingsView({
     collection: assignmentGroups,
     model: course,
-    sisName: ENV.SIS_NAME
+    sisName: ENV.SIS_NAME,
   })
 }
 if (ENV.PERMISSIONS.manage_assignments_add) {
   createGroupView = new CreateGroupView({
     assignmentGroups,
     course,
-    userIsAdmin
+    userIsAdmin,
   })
 }
 if (!ENV.PERMISSIONS.manage_assignments && !ENV.PERMISSIONS.manage_assignments_add) {
   showByView = new ToggleShowByView({
     course,
-    assignmentGroups
+    assignmentGroups,
   })
 }
 
@@ -101,13 +100,14 @@ ready(() => {
     assignmentSyncSettingsView,
     createGroupView,
     showByView,
-    collection: assignmentGroups
+    collection: assignmentGroups,
   })
 
   app.render()
 
   // kick it all off
   course.trigger('change')
+  // eslint-disable-next-line promise/catch-or-return
   getPrefetchedXHR('assignment_groups_url')
     .then(res =>
       res.json().then(data => {
@@ -135,8 +135,9 @@ ready(() => {
     })
 
   monitorLtiMessages()
+  alertIfDeepLinkingCreatedModule()
 
   if (ENV.FEATURES?.lti_multiple_assignment_deep_linking) {
-    addDeepLinkingListener(reloadPage)
+    addDeepLinkingListener(handleAssignmentIndexDeepLinking)
   }
 })

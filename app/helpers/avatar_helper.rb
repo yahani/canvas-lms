@@ -55,15 +55,19 @@ module AvatarHelper
     avatar_url, display_name = avatar_image_attrs(user_or_id)
     context_code = opts[:context_code] if opts[:context_code]
     url = nil
-    if opts.key? :url
-      url = opts[:url]
-    elsif user_or_id
-      url = if context_code
-              context_prefix(context_code) + user_path(user_or_id)
-            else
-              user_url(user_or_id)
-            end
+
+    unless opts[:skip_url]
+      if opts.key? :url
+        url = opts[:url]
+      elsif user_or_id
+        url = if context_code
+                context_prefix(context_code) + user_path(user_or_id)
+              else
+                user_url(user_or_id)
+              end
+      end
     end
+
     link_opts = {}
     link_opts[:class] = "fs-exclude avatar " + opts[:class].to_s
     link_opts[:style] = "background-image: url(#{avatar_url})"
@@ -102,7 +106,7 @@ module AvatarHelper
   def self.avatar_url_for_user(user, request, root_account: nil, use_fallback: true)
     use_fallback = false if Canvas::Plugin.value_to_boolean(request&.params&.[](:no_avatar_fallback))
     default_avatar = use_fallback ? User.avatar_fallback_url(User.default_avatar_fallback, request) : nil
-    url = if avatars_enabled_for_user?(user, root_account: root_account)
+    url = if avatars_enabled_for_user?(user, root_account:)
             user.avatar_url(nil,
                             ((root_account && root_account.settings[:avatars]) || "enabled"),
                             default_avatar,

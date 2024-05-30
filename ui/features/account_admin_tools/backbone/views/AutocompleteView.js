@@ -18,6 +18,7 @@
 import Backbone from '@canvas/backbone'
 import $ from 'jquery'
 import template from '../../jst/autocomplete.handlebars'
+import 'jqueryui/menu'
 import 'jqueryui/autocomplete'
 import _inherits from '@babel/runtime/helpers/esm/inheritsLoose'
 
@@ -41,7 +42,7 @@ Object.assign(AutocompleteView.prototype, {
 
   els: {
     '[data-name=autocomplete_search_term]': '$searchTerm',
-    '[data-name=autocomplete_search_value]': '$searchValue'
+    '[data-name=autocomplete_search_value]': '$searchValue',
   },
 
   toJSON() {
@@ -53,7 +54,7 @@ Object.assign(AutocompleteView.prototype, {
       minLength: this.options.minLength,
       select: $.proxy(this.autocompleteSelect, this),
       source: $.proxy(this.autocompleteSource, this),
-      change: $.proxy(this.autocompleteSelect, this)
+      change: $.proxy(this.autocompleteSelect, this),
     })
   },
 
@@ -83,5 +84,5 @@ Object.assign(AutocompleteView.prototype, {
     } else {
       return this.$searchValue.val(null)
     }
-  }
+  },
 })

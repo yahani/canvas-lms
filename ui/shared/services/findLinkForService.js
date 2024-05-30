@@ -18,13 +18,27 @@
 
 import {useScope as useI18nScope} from '@canvas/i18n'
 import $ from 'jquery'
-import htmlEscape from 'html-escape'
-import TextHelper from '@canvas/util/TextHelper.coffee'
+import htmlEscape from '@instructure/html-escape'
+import {truncateText} from '@canvas/util/TextHelper'
 import '@canvas/jquery/jquery.ajaxJSON'
-import '@canvas/forms/jquery/jquery.instructure_forms'
+import '@canvas/jquery/jquery.instructure_forms'
 import 'jqueryui/dialog'
+import replaceTags from '@canvas/util/replaceTags'
 
 const I18n = useI18nScope('findLinkForService')
+
+function titleize(inputString) {
+  const processedString = (inputString || '')
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/_/g, ' ')
+    .replace(/\s+/, ' ')
+    .replace(/^\s/, '')
+
+  return processedString
+    .split(/\s/)
+    .map(word => (word.charAt(0) || '').toUpperCase() + word.substring(1))
+    .join(' ')
+}
 
 export function getUserServices(service_types, success, error) {
   if (!$.isArray(service_types)) {
@@ -54,19 +68,18 @@ export function findLinkForService(service_type, callback) {
   if (!$dialog.length) {
     $dialog = $("<div id='instructure_bookmark_search'/>")
     $dialog.append(
-      `${"<form id='bookmark_search_form' style='margin-bottom: 5px;'>" +
+      `${
+        "<form id='bookmark_search_form' style='margin-bottom: 5px;'>" +
         "<img src='/images/blank.png'/>&nbsp;&nbsp;" +
-        "<input type='text' class='query' style='width: 230px;'/>" +
-        "<button class='btn search_button' type='submit'>"}${htmlEscape(
-        I18n.t('buttons.search', 'Search')
-      )}</button></form>`
+        "<button class='btn search_button' type='submit'>"
+      }${htmlEscape(I18n.t('buttons.search', 'Search'))}</button></form>`
     )
     $dialog.append("<div class='results' style='max-height: 200px; overflow: auto;'/>")
     $dialog.find('form').submit(event => {
       event.preventDefault()
       event.stopPropagation()
       const now = new Date()
-      if (service_type == 'diigo' && lastLookup && now - lastLookup < 15000) {
+      if (service_type === 'diigo' && lastLookup && now - lastLookup < 15000) {
         // let the user know we have to take things slow because of Diigo
         setTimeout(() => {
           $dialog.find('form').submit()
@@ -89,8 +102,6 @@ export function findLinkForService(service_type, callback) {
         .empty()
         .append(htmlEscape(I18n.t('status.searching', 'Searching...')))
       lastLookup = new Date()
-      const query = $dialog.find('.query').val()
-      const url = $.replaceTags($dialog.data('reference_url'), 'query', query)
       $.ajaxJSON(
         url,
         'GET',
@@ -104,8 +115,9 @@ export function findLinkForService(service_type, callback) {
           }
           for (const idx in data) {
             data[idx].short_title = data[idx].title
+            // eslint-disable-next-line eqeqeq
             if (data[idx].title == data[idx].description) {
-              data[idx].short_title = TextHelper.truncateText(data[idx].description, {max: 30})
+              data[idx].short_title = truncateText(data[idx].description, {max: 30})
             }
             $("<div class='bookmark'/>")
               .appendTo($dialog.find('.results'))
@@ -113,7 +125,7 @@ export function findLinkForService(service_type, callback) {
                 $('<a class="bookmark_link" style="font-weight: bold;"/>')
                   .attr({
                     href: data[idx].url,
-                    title: data[idx].title
+                    title: data[idx].title,
                   })
                   .text(data[idx].short_title)
               )
@@ -132,44 +144,32 @@ export function findLinkForService(service_type, callback) {
         }
       )
     })
-    $dialog.delegate('.bookmark_link', 'click', function(event) {
+    $dialog.on('click', '.bookmark_link', function (event) {
       event.preventDefault()
       const url = $(this).attr('href')
       const title = $(this).attr('title') || $(this).text()
       $dialog.dialog('close')
       callback({
         url,
-        title
+        title,
       })
     })
   }
-  $dialog
-    .find('.search_button')
-    .text(
-      service_type == 'delicious'
-        ? I18n.t('buttons.search_by_tag', 'Search by Tag')
-        : I18n.t('buttons.search', 'Search')
-    )
+  $dialog.find('.search_button').text(I18n.t('buttons.search', 'Search'))
   $dialog.find('form img').attr('src', `/images/${service_type}_small_icon.png`)
-  let url = '/search/bookmarks?q=%7B%7B+query+%7D%7D&service_type=%7B%7B+service_type+%7D%7D'
-  url = $.replaceTags(url, 'service_type', service_type)
+  let url = '/search/bookmarks?service_type=%7B%7B+service_type+%7D%7D'
+  url = replaceTags(url, 'service_type', service_type)
   $dialog.data('reference_url', url)
-  $dialog
-    .find('.results')
-    .empty()
-    .end()
-    .find('.query')
-    .val('')
+  $dialog.find('.results').empty()
   $dialog.dialog({
     title: I18n.t('titles.bookmark_search', 'Bookmark Search: %{service_name}', {
-      service_name: $.titleize(service_type)
+      service_name: titleize(service_type),
     }),
     open() {
-      $dialog
-        .find('input:visible:first')
-        .focus()
-        .select()
+      $dialog.find('input:visible:first').focus().select()
     },
-    width: 400
+    width: 400,
+    modal: true,
+    zIndex: 1000,
   })
 }

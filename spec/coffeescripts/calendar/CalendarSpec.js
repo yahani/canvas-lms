@@ -16,17 +16,17 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import Calendar from 'ui/features/calendar/jquery/index.js'
+import Calendar from 'ui/features/calendar/jquery/index'
 import CalendarEvent from '@canvas/calendar/jquery/CommonEvent/CalendarEvent'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import fcUtil from '@canvas/calendar/jquery/fcUtil.coffee'
+import fcUtil from '@canvas/calendar/jquery/fcUtil'
 import moment from 'moment'
-import tz from '@canvas/timezone'
-import tzInTest from '@canvas/timezone/specHelpers'
+import tzInTest from '@canvas/datetime/specHelpers'
 import timezone from 'timezone'
 import denver from 'timezone/America/Denver'
 import fixtures from 'helpers/fixtures'
 import $ from 'jquery'
+import 'jquery-migrate'
 import {subscribe} from 'jquery-tinypubsub'
 import fakeENV from 'helpers/fakeENV'
 
@@ -37,8 +37,8 @@ QUnit.module('Calendar', {
     tzInTest.configureAndRestoreLater({
       tz: timezone(denver, 'America/Denver'),
       tzData: {
-        'America/Denver': denver
-      }
+        'America/Denver': denver,
+      },
     })
 
     fixtures.setup()
@@ -54,14 +54,14 @@ QUnit.module('Calendar', {
     fixtures.teardown()
     $.getJSON.restore()
     fakeENV.teardown()
-  }
+  },
 })
 const makeMockDataSource = () => ({
   getAppointmentGroups: sinon.spy(),
   getEvents: sinon.spy(),
   getEventsForAppointmentGroup: sinon.spy(),
   clearCache: sinon.spy(),
-  eventWithId: sinon.spy()
+  eventWithId: sinon.spy(),
 })
 const makeMockHeader = () => ({
   setHeaderText: sinon.spy(),
@@ -74,14 +74,12 @@ const makeMockHeader = () => ({
   hidePrevNext: sinon.spy(),
   hideAgendaRecommendation: sinon.spy(),
   showAgendaRecommendation: sinon.spy(),
-  showSchedulerTitle: sinon.spy(),
-  showDoneButton: sinon.spy()
 })
 const makeCal = () =>
   new Calendar('#fixtures', [], null, makeMockDataSource(), {header: makeMockHeader()})
 
 test('creates a fullcalendar instance', () => {
-  const cal = makeCal()
+  makeCal()
   ok($('.fc')[0])
 })
 
@@ -102,7 +100,7 @@ test('return correct format for non 24 hour times', () => {
 test('collaborates with header and data source', () => {
   const mockHeader = makeMockHeader()
   const mockDataSource = makeMockDataSource()
-  const cal = new Calendar('#fixtures', [], null, mockDataSource, {header: mockHeader})
+  new Calendar('#fixtures', [], null, mockDataSource, {header: mockHeader})
   ok(mockDataSource.getEvents.called)
   ok(mockHeader.on.called)
 })
@@ -146,7 +144,7 @@ test('renders events', () => {
     contextInfo: {name: 'some calendar'},
     isCompleted() {
       return false
-    }
+    },
   }
   cal.eventRender(event, $eventDiv, 'month')
   ok($('.icon-someicon')[0])
@@ -164,18 +162,9 @@ test('isSameWeek: should behave with ambiguously timed/zoned arguments', () => {
   const datetime1 = fcUtil.wrap('2015-10-31T23:59:59-06:00')
   const datetime2 = fcUtil.wrap('2015-11-01T00:00:00-06:00')
   const datetime3 = fcUtil.wrap('2015-11-07T23:59:59-07:00')
-  const date1 = fcUtil
-    .clone(datetime1)
-    .stripTime()
-    .stripZone()
-  const date2 = fcUtil
-    .clone(datetime2)
-    .stripTime()
-    .stripZone()
-  const date3 = fcUtil
-    .clone(datetime3)
-    .stripTime()
-    .stripZone()
+  const date1 = fcUtil.clone(datetime1).stripTime().stripZone()
+  const date2 = fcUtil.clone(datetime2).stripTime().stripZone()
+  const date3 = fcUtil.clone(datetime3).stripTime().stripZone()
   ok(!Calendar.prototype.isSameWeek(date1, datetime2), 'sat-sun 1')
   ok(!Calendar.prototype.isSameWeek(datetime1, date2), 'sat-sun 2')
   ok(!Calendar.prototype.isSameWeek(date1, date2), 'sat-sun 3')
@@ -187,9 +176,9 @@ test('isSameWeek: should behave with ambiguously timed/zoned arguments', () => {
 test('gets appointment groups when show scheduler activated', () => {
   const mockHeader = makeMockHeader()
   const mockDataSource = makeMockDataSource()
-  const cal = new Calendar('#fixtures', [], null, mockDataSource, {
+  new Calendar('#fixtures', [], null, mockDataSource, {
     header: mockHeader,
-    showScheduler: true
+    showScheduler: true,
   })
   ok(mockDataSource.getAppointmentGroups.called)
   ok(mockDataSource.getEvents.called)
@@ -208,17 +197,13 @@ test('displays group name in tooltip', () => {
     child_events: [
       {
         group: {
-          name: 'Foobar'
-        }
-      }
+          name: 'Foobar',
+        },
+      },
     ],
-    appointment_group_url: '/foo/bar'
+    appointment_group_url: '/foo/bar',
   }
   const event = new CalendarEvent(data, {calendar_event_url: '/foo/bar'})
   cal.eventRender(event, $eventDiv, 'month')
-  ok(
-    $($eventDiv)
-      .attr('title')
-      .includes('Reserved By:  Foobar')
-  )
+  ok($($eventDiv).attr('title').includes('Reserved By:  Foobar'))
 })

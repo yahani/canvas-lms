@@ -16,7 +16,8 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import '@canvas/keycodes' // used by some SlickGrid editors
+import '@canvas/datetime/jquery'
+import '@canvas/jquery-keycodes' // used by some SlickGrid editors
 import slickgrid from 'slickgrid'
 import GridSupport from 'ui/features/gradebook/react/default_gradebook/GradebookGrid/GridSupport/index'
 
@@ -28,14 +29,14 @@ const keyMap = {
   LeftArrow: {which: 37},
   RightArrow: {which: 39},
   UpArrow: {which: 38},
-  DownArrow: {which: 40}
+  DownArrow: {which: 40},
 }
 
 function createColumns() {
   return [1, 2, 3, 4].map(id => ({
     id: `column${id}`,
     field: `columnData${id}`,
-    name: `Column ${id}`
+    name: `Column ${id}`,
   }))
 }
 
@@ -45,7 +46,7 @@ function createRows() {
     columnData1: `${id}1`,
     columnData2: `${id}2`,
     columnData3: `${id}3`,
-    columnData4: `${id}4`
+    columnData4: `${id}4`,
   }))
 }
 
@@ -57,11 +58,11 @@ function createGrid() {
     editorFactory: {
       getEditor() {
         return Editors.Checkbox
-      }
+      },
     },
     enableCellNavigation: true,
     enableColumnReorder: false,
-    numberOfColumnsToFreeze: 2 // for possible edge cases with multiple grid viewports
+    numberOfColumnsToFreeze: 2, // for possible edge cases with multiple grid viewports
   }
   return new Grid('#example-grid', createRows(), createColumns(), options)
 }

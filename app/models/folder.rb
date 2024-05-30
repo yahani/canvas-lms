@@ -18,11 +18,7 @@
 # with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "set"
-
 class Folder < ActiveRecord::Base
-  self.ignored_columns = %i[last_lock_at last_unlock_at]
-
   def self.name_order_by_clause(table = nil)
     col = table ? "#{table}.name" : "name"
     best_unicode_collation_key(col)
@@ -50,7 +46,6 @@ class Folder < ActiveRecord::Base
   before_create :populate_root_account_id
   before_save :infer_full_name
   after_save :update_sub_folders
-  after_destroy :clean_up_children
   after_save :touch_context
   before_save :infer_hidden_state
   validates :context_id, :context_type, presence: true
@@ -109,7 +104,7 @@ class Folder < ActiveRecord::Base
   end
 
   def restrict_submission_folder_context
-    if for_submissions? && !context.is_a?(User) && !context.is_a?(Group)
+    if for_submissions? && %w[User Group].exclude?(context_type)
       errors.add(:submission_context_code, t("submissions folders must be created in User or Group context"))
       return false
     end
@@ -123,22 +118,43 @@ class Folder < ActiveRecord::Base
   end
 
   alias_method :destroy_permanently!, :destroy
+
   def destroy
-    self.workflow_state = "deleted"
-    active_file_attachments.each(&:destroy)
-    active_sub_folders.each(&:destroy)
-    self.deleted_at = Time.now.utc
-    save
+    shard.activate do
+      loop do
+        folder_count = 1000
+        Folder.transaction do
+          associated_folders = Folder.find_by_sql(<<~SQL.squish)
+            WITH RECURSIVE associated_folders AS (
+              SELECT * FROM #{Folder.quoted_table_name} WHERE id=#{id}
+              UNION
+              SELECT folders.* FROM #{Folder.quoted_table_name} INNER JOIN associated_folders ON folders.parent_folder_id=associated_folders.id
+            )
+            SELECT id FROM associated_folders WHERE associated_folders.workflow_state <> 'deleted' ORDER BY id LIMIT 1000 FOR UPDATE
+          SQL
+          Attachment.batch_destroy(Attachment.active.where(folder_id: associated_folders).order(:id))
+          delete_time = Time.now.utc
+          Folder.where(id: associated_folders).update_all(workflow_state: "deleted", deleted_at: delete_time, updated_at: delete_time)
+          folder_count = associated_folders.length
+        end
+        break if folder_count < 1000
+      end
+      touch_context
+    end
+    reload
   end
 
   scope :active, -> { where("folders.workflow_state<>'deleted'") }
   scope :not_hidden, -> { where("folders.workflow_state<>'hidden'") }
   scope :not_locked, lambda {
-                       where("(folders.locked IS NULL OR folders.locked=?) AND ((folders.lock_at IS NULL) OR
-    (folders.lock_at>? OR (folders.unlock_at IS NOT NULL AND folders.unlock_at<?)))", false, Time.now.utc, Time.now.utc)
-                     }
+    where("(folders.locked IS NULL OR folders.locked=?) AND ((folders.lock_at IS NULL) OR
+    (folders.lock_at>? OR (folders.unlock_at IS NOT NULL AND folders.unlock_at<?)))",
+          false,
+          Time.now.utc,
+          Time.now.utc)
+  }
   scope :by_position, -> { ordered }
-  scope :by_name, -> { order(name_order_by_clause("folders")) }
+  scope :by_name, -> { order(name_order_by_clause("folders"), :id) }
 
   def display_name
     name
@@ -159,6 +175,7 @@ class Folder < ActiveRecord::Base
   def infer_hidden_state
     self.workflow_state ||= parent_folder.workflow_state if parent_folder && !deleted?
   end
+
   protected :infer_hidden_state
 
   def infer_full_name
@@ -176,6 +193,7 @@ class Folder < ActiveRecord::Base
     end
     @folder_id = id
   end
+
   protected :infer_full_name
 
   def prevent_duplicate_name
@@ -204,6 +222,7 @@ class Folder < ActiveRecord::Base
     usable_iterator ||= existing_folders.size + 1
     self.name = "#{name} #{usable_iterator}"
   end
+
   protected :prevent_duplicate_name
 
   def update_sub_folders
@@ -214,10 +233,6 @@ class Folder < ActiveRecord::Base
       f.full_name = f.full_name(true)
       f.save
     end
-  end
-
-  def clean_up_children
-    Attachment.where(folder_id: @folder_id).each(&:destroy)
   end
 
   def subcontent(opts = {})
@@ -244,7 +259,7 @@ class Folder < ActiveRecord::Base
   end
 
   def hidden=(val)
-    self.workflow_state = (val == true || val == "1" || val == "true" ? "hidden" : "visible")
+    self.workflow_state = ((val == true || val == "1" || val == "true") ? "hidden" : "visible")
   end
 
   def just_hide
@@ -280,9 +295,9 @@ class Folder < ActiveRecord::Base
     dup ||= Folder.new
     dup = existing if existing && options[:overwrite]
     attributes.except("id", "full_name", "parent_folder_id").each do |key, val|
-      dup.send("#{key}=", val)
+      dup.send(:"#{key}=", val)
     end
-    if unique_type && context.folders.active.where(unique_type: unique_type).exists?
+    if unique_type && context.folders.active.where(unique_type:).exists?
       dup.unique_type = nil # we'll just copy the folder as a normal one and leave the existing unique_type'd one alone
     end
     dup.context = context
@@ -331,8 +346,8 @@ class Folder < ActiveRecord::Base
 
     context.shard.activate do
       Folder.unique_constraint_retry do
-        root_folder = context.folders.active.where(parent_folder_id: nil, name: name).first
-        root_folder ||= GuardRail.activate(:primary) { context.folders.create!(name: name, full_name: name, workflow_state: "visible") }
+        root_folder = context.folders.active.where(parent_folder_id: nil, name:).first
+        root_folder ||= GuardRail.activate(:primary) { context.folders.create!(name:, full_name: name, workflow_state: "visible") }
         root_folders = [root_folder]
       end
     end
@@ -344,8 +359,8 @@ class Folder < ActiveRecord::Base
     folder = nil
     context.shard.activate do
       Folder.unique_constraint_retry do
-        folder = context.folders.active.where(unique_type: unique_type).take
-        folder ||= context.folders.create!(unique_type: unique_type,
+        folder = context.folders.active.where(unique_type:).take
+        folder ||= context.folders.create!(unique_type:,
                                            name: default_name_proc.call,
                                            parent_folder_id: Folder.root_folders(context).first,
                                            workflow_state: "hidden")
@@ -376,7 +391,7 @@ class Folder < ActiveRecord::Base
 
   # if a block is given, it'll be called with each new folder created by this
   # method before the folder is saved
-  def self.assert_path(path, context)
+  def self.assert_path(path, context, conditions: {})
     @@path_lookups ||= {}
     key = [context.global_asset_string, path].join("//")
     return @@path_lookups[key] if @@path_lookups[key]
@@ -389,7 +404,7 @@ class Folder < ActiveRecord::Base
     end
     folders.each do |name|
       sub_folder = @@path_lookups[[context.global_asset_string, current_folder.full_name + "/" + name].join("//")]
-      sub_folder ||= current_folder.sub_folders.active.where(name: name).first_or_initialize
+      sub_folder ||= current_folder.sub_folders.active.where({ name: }.merge(conditions)).first_or_initialize
       current_folder = sub_folder
       if current_folder.new_record?
         current_folder.context = context
@@ -460,15 +475,14 @@ class Folder < ActiveRecord::Base
   end
 
   def self.resolve_path(context, path, include_hidden_and_locked = true)
-    path_components =
-      case path
-      when Array
-        path
-      when String
-        path.split("/")
-      else
-        []
-      end
+    path_components = case path
+                      when Array
+                        path
+                      when String
+                        path.split("/")
+                      else
+                        []
+                      end
 
     Folder.root_folders(context).each do |root_folder|
       folders = root_folder.get_folders_by_component(path_components, include_hidden_and_locked)
@@ -497,23 +511,24 @@ class Folder < ActiveRecord::Base
   def currently_locked
     locked || (lock_at && Time.zone.now > lock_at) || (unlock_at && Time.zone.now < unlock_at) || self.workflow_state == "hidden"
   end
+
   alias_method :currently_locked?, :currently_locked
 
   set_policy do
-    given { |user, session| visible? && context.grants_right?(user, session, :read) }
+    given { |user, session| visible? && context.grants_right?(user, session, :read_files) }
     can :read
 
     given { |user, session| context.grants_right?(user, session, :read_as_admin) }
     can :read_as_admin, :read_contents, :read_contents_for_export
 
     given do |user, session|
-      visible? && !locked? && context.grants_right?(user, session, :read) &&
+      visible? && !locked? && context.grants_right?(user, session, :read_files) &&
         !(context.is_a?(Course) && context.tab_hidden?(Course::TAB_FILES))
     end
-    can :read_contents, :read_contents_for_export
+    can :read_contents
 
     given do |user, session|
-      !locked? && context.grants_right?(user, session, :read)
+      !locked? && context.grants_right?(user, session, :read_files)
     end
     can :read_contents_for_export
 
@@ -552,7 +567,7 @@ class Folder < ActiveRecord::Base
   end
 
   def self.from_context_or_id(context, id)
-    root_folders(context).first || where(id: id).first || (raise ActiveRecord::RecordNotFound)
+    root_folders(context).first || where(id:).first || (raise ActiveRecord::RecordNotFound)
   end
 
   def self.find_visible_folders(visible_ids, folder_tree, dir_contents)
@@ -583,5 +598,14 @@ class Folder < ActiveRecord::Base
 
   def next_lock_change
     [lock_at, unlock_at].compact.select { |t| t > Time.zone.now }.min
+  end
+
+  def restore
+    return unless self.workflow_state == "deleted"
+
+    self.workflow_state = "visible"
+    if save
+      parent_folder&.restore
+    end
   end
 end

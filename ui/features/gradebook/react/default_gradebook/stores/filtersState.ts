@@ -16,158 +16,289 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import {SetState, GetState} from 'zustand'
+import type {SetState, GetState} from 'zustand'
 import uuid from 'uuid'
 import doFetchApi from '@canvas/do-fetch-api-effect'
 import {useScope as useI18nScope} from '@canvas/i18n'
-import type {FilterCondition, Filter} from '../gradebook.d'
-import {compareFilterByDate, deserializeFilter, doFilterConditionsMatch} from '../Gradebook.utils'
+import type {
+  Filter,
+  FilterPreset,
+  GradebookFilterApiResponse,
+  PartialFilterPreset,
+  SubmissionFilterValue,
+} from '../gradebook.d'
+import {
+  compareFilterSetByUpdatedDate,
+  deserializeFilter,
+  doFiltersMatch,
+  getCustomStatusIdStrings,
+  isFilterNotEmpty,
+} from '../Gradebook.utils'
 import GradebookApi from '../apis/GradebookApi'
 import type {GradebookStore} from './index'
+import type {GradeStatus} from '@canvas/grading/accountGradingStatus'
 
 const I18n = useI18nScope('gradebook')
 
 export type FiltersState = {
-  appliedFilterConditions: FilterCondition[]
-  filters: Filter[]
-  stagedFilterConditions: FilterCondition[]
+  appliedFilters: Filter[]
+  filterPresets: FilterPreset[]
+  stagedFilterPresetName: string
+  stagedFilters: Filter[]
   isFiltersLoading: boolean
 
-  applyConditions: (conditions: FilterCondition[]) => Promise<void>
-  initializeStagedFilter: (InitialColumnFilterSettings, InitialRowFilterSettings) => void
+  addFilters: (filters: Filter[]) => void
+  applyFilters: (filters: Filter[]) => void
+  toggleFilter: (filter: Filter) => void
+  toggleFilterMultiSelect: (filter: Filter) => void
+  initializeAppliedFilters: (
+    initialRowFilterSettings: InitialRowFilterSettings,
+    initialColumnFilterSettings: InitialColumnFilterSettings,
+    customGradeStatuses: GradeStatus[],
+    multiselectGradebookFiltersEnabled: boolean
+  ) => void
+  initializeStagedFilters: () => void
   fetchFilters: () => Promise<void>
-  saveStagedFilter: (name: string) => Promise<void>
-  updateStagedFilter: (filter: FilterCondition[]) => void
-  deleteStagedFilter: () => void
-  updateFilter: (filter: Filter) => Promise<void>
-  deleteFilter: (filter: Filter) => Promise<any>
+  saveStagedFilter: (filterPreset: PartialFilterPreset) => Promise<boolean>
+  updateFilterPreset: (filterPreset: FilterPreset) => Promise<boolean>
+  deleteFilterPreset: (filterPreset: FilterPreset) => Promise<void>
+  validateFilterPreset: (
+    name: string,
+    filters: Filter[],
+    otherFilterPresets: FilterPreset[]
+  ) => boolean
 }
 
 export type InitialColumnFilterSettings = {
   assignment_group_id: null | string
+  assignment_group_ids?: string[]
   context_module_id: null | string
+  context_module_ids?: string[]
   grading_period_id: null | string
-  submissions: null | 'has-submissions' | 'has-ungraded-submissions'
+  submissions: null | SubmissionFilterValue
+  submission_filters?: SubmissionFilterValue[]
   start_date: null | string
   end_date: null | string
 }
 
 export type InitialRowFilterSettings = {
   section_id: null | string
+  section_ids?: string[]
   student_group_id: null | string
+  student_group_ids?: null | string[]
 }
 
 export default (set: SetState<GradebookStore>, get: GetState<GradebookStore>): FiltersState => ({
-  appliedFilterConditions: [],
+  appliedFilters: [],
 
-  filters: [],
+  filterPresets: [],
 
-  stagedFilterConditions: [],
+  stagedFilterPresetName: '',
+
+  stagedFilters: [],
 
   isFiltersLoading: false,
 
-  applyConditions: async (appliedFilterConditions: FilterCondition[]) => {
-    set({appliedFilterConditions})
+  applyFilters: (appliedFilters: Filter[]) => {
+    set({appliedFilters})
   },
 
-  initializeStagedFilter: (
+  addFilters: (filters: Filter[]) => {
+    const types = filters.map(c => c.type)
+    const newFilters = [...get().appliedFilters.filter(c => !types.includes(c.type))].concat(
+      filters
+    )
+    get().applyFilters(newFilters)
+  },
+
+  toggleFilter: (filter: Filter) => {
+    const existingFilter = get().appliedFilters.find(
+      f => f.type === filter.type && f.value === filter.value
+    )
+    set({
+      appliedFilters: [...get().appliedFilters.filter(f => f.type !== filter.type)].concat(
+        existingFilter ? [] : [filter]
+      ),
+    })
+  },
+
+  toggleFilterMultiSelect: (filter: Filter) => {
+    const existingFilter = get().appliedFilters.find(
+      f => f.type === filter.type && f.value === filter.value
+    )
+
+    let appliedFilters = [...get().appliedFilters]
+
+    const excludedMultiselectFilters = ['grading-period']
+    appliedFilters = excludedMultiselectFilters.includes(filter.type ?? '')
+      ? appliedFilters.filter(f => f.type !== filter.type)
+      : appliedFilters.filter(f => !(f.type === filter.type && f.value === filter.value))
+
+    set({
+      appliedFilters: appliedFilters.concat(existingFilter ? [] : [filter]),
+    })
+  },
+
+  initializeAppliedFilters: (
     initialRowFilterSettings: InitialRowFilterSettings,
-    initialColumnFilterSettings: InitialColumnFilterSettings
+    initialColumnFilterSettings: InitialColumnFilterSettings,
+    customStatuses: GradeStatus[],
+    multiselectGradebookFiltersEnabled: boolean
   ) => {
-    const conditions: FilterCondition[] = []
+    const appliedFilters: Filter[] = []
 
-    if (typeof initialRowFilterSettings.section_id === 'string') {
-      conditions.push({
-        id: uuid.v4(),
-        value: initialRowFilterSettings.section_id,
-        type: 'section',
-        created_at: new Date().toISOString()
+    if (multiselectGradebookFiltersEnabled) {
+      initialColumnFilterSettings.context_module_ids?.forEach(value => {
+        appliedFilters.push({
+          id: uuid.v4(),
+          value,
+          type: 'module',
+          created_at: new Date().toISOString(),
+        })
       })
+      initialColumnFilterSettings.assignment_group_ids?.forEach(value => {
+        appliedFilters.push({
+          id: uuid.v4(),
+          value,
+          type: 'assignment-group',
+          created_at: new Date().toISOString(),
+        })
+      })
+      initialColumnFilterSettings.submission_filters?.forEach(value => {
+        appliedFilters.push({
+          id: uuid.v4(),
+          value,
+          type: 'submissions',
+          created_at: new Date().toISOString(),
+        })
+      })
+      initialRowFilterSettings.section_ids?.forEach(value => {
+        appliedFilters.push({
+          id: uuid.v4(),
+          value,
+          type: 'section',
+          created_at: new Date().toISOString(),
+        })
+      })
+      initialRowFilterSettings.student_group_ids?.forEach(value => {
+        appliedFilters.push({
+          id: uuid.v4(),
+          value,
+          type: 'student-group',
+          created_at: new Date().toISOString(),
+        })
+      })
+      // NOTE: all "saved" filters will be wiped out when multi select
+      // filters are enabled, could look into preserving this when
+      // the feature gets turned on if it is an issue
+    } else {
+      if (typeof initialRowFilterSettings.section_id === 'string') {
+        appliedFilters.push({
+          id: uuid.v4(),
+          value: initialRowFilterSettings.section_id,
+          type: 'section',
+          created_at: new Date().toISOString(),
+        })
+      }
+      if (typeof initialRowFilterSettings.student_group_id === 'string') {
+        appliedFilters.push({
+          id: uuid.v4(),
+          value: initialRowFilterSettings.student_group_id,
+          type: 'student-group',
+          created_at: new Date().toISOString(),
+        })
+      }
+
+      if (
+        typeof initialColumnFilterSettings.assignment_group_id === 'string' &&
+        initialColumnFilterSettings.assignment_group_id !== '0'
+      ) {
+        appliedFilters.push({
+          id: uuid.v4(),
+          value: initialColumnFilterSettings.assignment_group_id,
+          type: 'assignment-group',
+          created_at: new Date().toISOString(),
+        })
+      }
+      const customStatusIds = getCustomStatusIdStrings(customStatuses)
+      if (
+        [
+          'has-ungraded-submissions',
+          'has-submissions',
+          'has-no-submissions',
+          'has-unposted-grades',
+          'late',
+          'missing',
+          'resubmitted',
+          'dropped',
+          'excused',
+          'extended',
+          ...customStatusIds,
+        ].includes(initialColumnFilterSettings.submissions || '')
+      ) {
+        appliedFilters.push({
+          id: uuid.v4(),
+          value: initialColumnFilterSettings.submissions || undefined,
+          type: 'submissions',
+          created_at: new Date().toISOString(),
+        })
+      }
+
+      if (
+        typeof initialColumnFilterSettings.context_module_id === 'string' &&
+        initialColumnFilterSettings.context_module_id !== '0'
+      ) {
+        appliedFilters.push({
+          id: uuid.v4(),
+          value: initialColumnFilterSettings.context_module_id,
+          type: 'module',
+          created_at: new Date().toISOString(),
+        })
+      }
+
+      if (
+        initialColumnFilterSettings.start_date &&
+        initialColumnFilterSettings.start_date !== '0'
+      ) {
+        appliedFilters.push({
+          id: uuid.v4(),
+          value: initialColumnFilterSettings.start_date,
+          type: 'start-date',
+          created_at: new Date().toISOString(),
+        })
+      }
+
+      if (initialColumnFilterSettings.end_date && initialColumnFilterSettings.end_date !== '0') {
+        appliedFilters.push({
+          id: uuid.v4(),
+          value: initialColumnFilterSettings.end_date,
+          type: 'end-date',
+          created_at: new Date().toISOString(),
+        })
+      }
+
+      if (typeof initialColumnFilterSettings.grading_period_id === 'string') {
+        appliedFilters.push({
+          id: uuid.v4(),
+          value: initialColumnFilterSettings.grading_period_id,
+          type: 'grading-period',
+          created_at: new Date().toISOString(),
+        })
+      }
     }
 
-    if (typeof initialRowFilterSettings.student_group_id === 'string') {
-      conditions.push({
-        id: uuid.v4(),
-        value: initialRowFilterSettings.student_group_id,
-        type: 'student-group',
-        created_at: new Date().toISOString()
-      })
-    }
+    set({appliedFilters})
+  },
 
-    if (
-      typeof initialColumnFilterSettings.assignment_group_id === 'string' &&
-      initialColumnFilterSettings.assignment_group_id !== '0'
-    ) {
-      conditions.push({
-        id: uuid.v4(),
-        value: initialColumnFilterSettings.assignment_group_id,
-        type: 'assignment-group',
-        created_at: new Date().toISOString()
-      })
-    }
+  initializeStagedFilters: () => {
+    const appliedFilters = get().appliedFilters
 
-    if (
-      ['has-ungraded-submissions', 'has-submissions'].includes(
-        initialColumnFilterSettings.submissions || ''
-      )
-    ) {
-      conditions.push({
-        id: uuid.v4(),
-        value: initialColumnFilterSettings.submissions || undefined,
-        type: 'submissions',
-        created_at: new Date().toISOString()
-      })
-    }
-
-    if (
-      typeof initialColumnFilterSettings.context_module_id === 'string' &&
-      initialColumnFilterSettings.context_module_id !== '0'
-    ) {
-      conditions.push({
-        id: uuid.v4(),
-        value: initialColumnFilterSettings.context_module_id,
-        type: 'module',
-        created_at: new Date().toISOString()
-      })
-    }
-
-    if (initialColumnFilterSettings.start_date && initialColumnFilterSettings.start_date !== '0') {
-      conditions.push({
-        id: uuid.v4(),
-        value: initialColumnFilterSettings.start_date,
-        type: 'start-date',
-        created_at: new Date().toISOString()
-      })
-    }
-
-    if (initialColumnFilterSettings.end_date && initialColumnFilterSettings.end_date !== '0') {
-      conditions.push({
-        id: uuid.v4(),
-        value: initialColumnFilterSettings.end_date,
-        type: 'end-date',
-        created_at: new Date().toISOString()
-      })
-    }
-
-    if (
-      typeof initialColumnFilterSettings.grading_period_id === 'string' &&
-      initialColumnFilterSettings.grading_period_id !== '0'
-    ) {
-      conditions.push({
-        id: uuid.v4(),
-        value: initialColumnFilterSettings.grading_period_id,
-        type: 'grading-period',
-        created_at: new Date().toISOString()
-      })
-    }
-
-    const savedFilterAlreadyMatches = get().filters.some(filter =>
-      doFilterConditionsMatch(filter.conditions, conditions)
+    const savedFiltersAlreadyMatch = get().filterPresets.some(filterPreset =>
+      doFiltersMatch(filterPreset.filters, appliedFilters)
     )
 
     set({
-      appliedFilterConditions: conditions,
-      stagedFilterConditions: !savedFilterAlreadyMatches ? conditions : []
+      stagedFilters: savedFiltersAlreadyMatch ? [] : appliedFilters,
     })
   },
 
@@ -175,173 +306,212 @@ export default (set: SetState<GradebookStore>, get: GetState<GradebookStore>): F
     set({isFiltersLoading: true})
     const path = `/api/v1/courses/${get().courseId}/gradebook_filters`
     return doFetchApi({path})
-      .then(response => {
+      .then((response: {json: GradebookFilterApiResponse[]}) => {
         set({
-          filters: response.json.map(deserializeFilter),
-          isFiltersLoading: false
+          filterPresets: response.json.map(deserializeFilter).sort(compareFilterSetByUpdatedDate),
+          isFiltersLoading: false,
         })
+        get().initializeStagedFilters()
       })
       .catch(() => {
         set({
-          filters: [],
+          filterPresets: [],
           isFiltersLoading: false,
           flashMessages: get().flashMessages.concat([
             {
-              key: 'filters-loading-error',
+              key: `filter-presets-loading-error-${Date.now()}`,
               message: I18n.t('There was an error fetching gradebook filters.'),
-              variant: 'error'
-            }
-          ])
+              variant: 'error',
+            },
+          ]),
         })
       })
   },
 
-  deleteStagedFilter: () => {
-    const appliedFilterConditions = get().appliedFilterConditions
-    const isFilterApplied = doFilterConditionsMatch(
-      get().stagedFilterConditions,
-      appliedFilterConditions
-    )
-    set({
-      stagedFilterConditions: [],
-      appliedFilterConditions: isFilterApplied ? [] : appliedFilterConditions
-    })
+  validateFilterPreset: (
+    name: string,
+    filters: Filter[],
+    otherFilterPresets: FilterPreset[]
+  ): boolean => {
+    const filtersNotEmpty = filters.filter(isFilterNotEmpty)
+
+    if (!filtersNotEmpty.length) {
+      set({
+        flashMessages: get().flashMessages.concat([
+          {
+            key: `filter-presets-create-error-no-filters-${Date.now()}`,
+            message: I18n.t('Please select at least one filter.'),
+            variant: 'error',
+          },
+        ]),
+      })
+      return false
+    }
+
+    // check for duplicate filter preset name
+    if (otherFilterPresets.some(fp => fp.name === name)) {
+      set({
+        flashMessages: get().flashMessages.concat([
+          {
+            key: `filter-presets-create-error-duplicate-name-${Date.now()}`,
+            message: I18n.t('A filter with that name already exists.'),
+            variant: 'error',
+          },
+        ]),
+      })
+      return false
+    }
+
+    // check for duplicate filter preset using doFiltersMatch
+    if (otherFilterPresets.some(fp => doFiltersMatch(fp.filters, filtersNotEmpty))) {
+      set({
+        flashMessages: get().flashMessages.concat([
+          {
+            key: `filter-presets-create-error-duplicate-filters-${Date.now()}`,
+            message: I18n.t('A filter preset with those conditions already exists.'),
+            variant: 'error',
+          },
+        ]),
+      })
+      return false
+    }
+
+    return true
   },
 
-  updateStagedFilter: (newStagedFilterConditions: FilterCondition[]) => {
-    const appliedFilterConditions = get().appliedFilterConditions
-    const stagedFilterConditions = get().stagedFilterConditions
-    const isFilterApplied = doFilterConditionsMatch(stagedFilterConditions, appliedFilterConditions)
+  saveStagedFilter: async (filterPreset: PartialFilterPreset) => {
+    const filters = filterPreset.filters.filter(isFilterNotEmpty)
 
-    set({
-      stagedFilterConditions: newStagedFilterConditions,
-      appliedFilterConditions: isFilterApplied
-        ? newStagedFilterConditions
-        : get().appliedFilterConditions
-    })
-  },
+    if (!get().validateFilterPreset(filterPreset.name, filters, get().filterPresets)) {
+      return false
+    }
 
-  saveStagedFilter: async (name: string) => {
-    const stagedFilterConditions = get().stagedFilterConditions
-    if (!stagedFilterConditions.length) return
-    const originalFilters = get().filters
-    const stagedFilter = {
-      id: uuid.v4(),
-      name,
-      conditions: stagedFilterConditions,
-      created_at: new Date().toISOString()
+    const originalFilters = get().filterPresets
+    const stagedFilter: FilterPreset = {
+      id: uuid.v4() as string,
+      name: filterPreset.name,
+      filters,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     }
 
     // optimistic update
     set({
-      filters: get().filters.concat([stagedFilter]).sort(compareFilterByDate),
-      stagedFilterConditions: []
+      filterPresets: get().filterPresets.concat([stagedFilter]).sort(compareFilterSetByUpdatedDate),
+      stagedFilterPresetName: '',
+      stagedFilters: [],
     })
 
-    return GradebookApi.createGradebookFilter(get().courseId, stagedFilter)
-      .then(response => {
+    return GradebookApi.createGradebookFilterPreset(get().courseId, stagedFilter)
+      .then((response: {json: GradebookFilterApiResponse}) => {
         const newFilter = deserializeFilter(response.json)
         set({
-          stagedFilterConditions: [],
-          filters: originalFilters.concat([newFilter]).sort(compareFilterByDate)
+          filterPresets: originalFilters.concat([newFilter]).sort(compareFilterSetByUpdatedDate),
         })
+        return true
       })
       .catch(() => {
         set({
-          stagedFilterConditions,
+          stagedFilterPresetName: filterPreset.name,
+          stagedFilters: filterPreset.filters,
           flashMessages: get().flashMessages.concat([
             {
-              key: `filters-create-error-${Date.now()}`,
+              key: `filter-presets-create-error-${Date.now()}`,
               message: I18n.t('There was an error creating a new filter.'),
-              variant: 'error'
-            }
-          ])
+              variant: 'error',
+            },
+          ]),
         })
+        return false
       })
   },
 
-  updateFilter: async (filter: Filter) => {
-    const originalFilter = get().filters.find(f => f.id === filter.id)
-    const otherFilters = get().filters.filter(f => f.id !== filter.id)
-    const appliedFilterConditions = get().appliedFilterConditions
+  updateFilterPreset: async (filterPreset: FilterPreset) => {
+    const otherFilterPresets = get().filterPresets.filter(f => f.id !== filterPreset.id)
 
-    const isFilterApplied = doFilterConditionsMatch(
-      originalFilter?.conditions || [],
-      appliedFilterConditions
-    )
+    if (!get().validateFilterPreset(filterPreset.name, filterPreset.filters, otherFilterPresets)) {
+      return false
+    }
+
+    const originalFilterPreset = get().filterPresets.find(f => f.id === filterPreset.id)
+    const appliedFilters = get().appliedFilters
+
+    const isFilterApplied = doFiltersMatch(originalFilterPreset?.filters || [], appliedFilters)
 
     // optimistic update
     set({
-      filters: otherFilters.concat([filter]).sort(compareFilterByDate),
-      appliedFilterConditions: isFilterApplied ? filter.conditions : appliedFilterConditions
+      filterPresets: otherFilterPresets.concat([filterPreset]).sort(compareFilterSetByUpdatedDate),
+      appliedFilters: isFilterApplied ? filterPreset.filters : appliedFilters,
     })
 
     try {
-      const response = await GradebookApi.updateGradebookFilter(get().courseId, filter)
+      const response = await GradebookApi.updateGradebookFilterPreset(get().courseId, filterPreset)
       const updatedFilter = deserializeFilter(response.json)
       set({
-        filters: get()
-          .filters.filter(f => f.id !== filter.id)
+        filterPresets: get()
+          .filterPresets.filter(f => f.id !== filterPreset.id)
           .concat([updatedFilter])
-          .sort(compareFilterByDate),
-        appliedFilterConditions: isFilterApplied
-          ? updatedFilter.conditions
-          : appliedFilterConditions
+          .sort(compareFilterSetByUpdatedDate),
+        appliedFilters: isFilterApplied ? updatedFilter.filters : appliedFilters,
       })
+      return true
     } catch (err) {
       // rewind
-      if (originalFilter) {
+      if (originalFilterPreset) {
         set({
-          filters: get()
-            .filters.filter(f => f.id !== filter.id)
-            .concat([originalFilter])
-            .sort(compareFilterByDate),
-          appliedFilterConditions
+          filterPresets: get()
+            .filterPresets.filter(f => f.id !== filterPreset.id)
+            .concat([originalFilterPreset])
+            .sort(compareFilterSetByUpdatedDate),
+          appliedFilters,
         })
       }
 
       set({
         flashMessages: get().flashMessages.concat([
           {
-            key: `filters-create-error-${Date.now()}`,
+            key: `filter-presets-create-error-${Date.now()}`,
             message: I18n.t('There was an error updating a filter.'),
-            variant: 'error'
-          }
-        ])
+            variant: 'error',
+          },
+        ]),
       })
+
+      return false
     }
   },
 
-  deleteFilter: (filter: Filter) => {
-    const appliedFilterConditions = get().appliedFilterConditions
-    const isFilterApplied = doFilterConditionsMatch(
-      filter.conditions,
-      get().appliedFilterConditions
-    )
+  deleteFilterPreset: (filterPreset: FilterPreset) => {
+    const appliedFilters = get().appliedFilters
+    const isFilterApplied = doFiltersMatch(filterPreset.filters, get().appliedFilters)
 
     // Optimistic update
     set({
-      filters: get().filters.filter(f => f.id !== filter.id),
-      appliedFilterConditions: isFilterApplied ? [] : appliedFilterConditions
+      filterPresets: get().filterPresets.filter(f => f.id !== filterPreset.id),
+      appliedFilters: isFilterApplied ? [] : appliedFilters,
     })
 
-    return GradebookApi.deleteGradebookFilter(get().courseId, filter.id).catch(() => {
+    return GradebookApi.deleteGradebookFilterPreset(get().courseId, filterPreset.id).catch(() => {
       // rewind
-      const isAbsent = get().filters.some(f => f.id === filter.id)
+      const isAbsent = get().filterPresets.some(f => f.id === filterPreset.id)
       if (!isAbsent) {
-        set({filters: get().filters.concat([filter]).sort(compareFilterByDate)})
+        set({
+          filterPresets: get()
+            .filterPresets.concat([filterPreset])
+            .sort(compareFilterSetByUpdatedDate),
+        })
       }
 
       set({
         flashMessages: get().flashMessages.concat([
           {
-            key: `filters-delete-error-${filter.id}-${Date.now()}`,
-            message: I18n.t('There was an error deleting "%{name}".', {name: filter.name}),
-            variant: 'error'
-          }
+            key: `filter-presets-delete-error-${filterPreset.id}-${Date.now()}`,
+            message: I18n.t('There was an error deleting "%{name}".', {name: filterPreset.name}),
+            variant: 'error',
+          },
         ]),
-        appliedFilterConditions
+        appliedFilters,
       })
     })
-  }
+  },
 })

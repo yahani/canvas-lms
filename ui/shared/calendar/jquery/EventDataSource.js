@@ -17,15 +17,17 @@
  */
 
 import $ from 'jquery'
-import _ from 'lodash'
-import fcUtil from './fcUtil.coffee'
+import {reject, maxBy, isEmpty, partition, minBy} from 'lodash'
+import fcUtil from './fcUtil'
 import commonEventFactory from './CommonEvent/index'
 import '@canvas/jquery/jquery.ajaxJSON'
 import 'jquery-tinypubsub'
+import moment from 'moment'
 
 export default class EventDataSource {
   constructor(contexts) {
     this.eventSaved = this.eventSaved.bind(this)
+    this.eventsSavedFromSeries = this.eventsSavedFromSeries.bind(this)
     this.eventDeleted = this.eventDeleted.bind(this)
     this.eventWithId = this.eventWithId.bind(this)
     this.clearCache = this.clearCache.bind(this)
@@ -74,10 +76,17 @@ export default class EventDataSource {
     // all.) This might end up being confusing.
     $.subscribe('CommonEvent/eventDeleted', this.eventDeleted)
     $.subscribe('CommonEvent/eventSaved', this.eventSaved)
+    $.subscribe('CommonEvent/eventsSavedFromSeries', this.eventsSavedFromSeries)
   }
 
   eventSaved(event) {
     return this.addEventToCache(event)
+  }
+
+  eventsSavedFromSeries(events) {
+    events.seriesEvents.forEach(event => {
+      this.addEventToCache(event)
+    })
   }
 
   eventDeleted(event) {
@@ -101,21 +110,39 @@ export default class EventDataSource {
       contexts: {},
       appointmentGroups: {},
       participants: {},
-      fetchedAppointmentGroups: null
+      fetchedAppointmentGroups: null,
     }
+    this.resetContexts()
+  }
+
+  // clear the calendar event cache w/o clearing appointment group data
+  resetContexts() {
+    this.cache.contexts = {}
     this.contexts.forEach(contextInfo => {
       this.cache.contexts[contextInfo.asset_string] = {
         events: {},
         fetchedRanges: [],
-        fetchedUndated: false
+        fetchedUndated: false,
       }
     })
+  }
+
+  syncNewContexts(additionalContexts) {
+    if (additionalContexts?.length > 0) {
+      additionalContexts.forEach(additionalContext => {
+        const context = this.contexts.find(c => c.asset_string === additionalContext.asset_string)
+        if (!context) {
+          this.contexts.push(additionalContext)
+        }
+      })
+      this.clearCache()
+    }
   }
 
   removeCachedReservation(event) {
     const cached_ag = this.cache.appointmentGroups[event.appointment_group_id]
     if (cached_ag) {
-      cached_ag.reserved_times = _.reject(
+      cached_ag.reserved_times = reject(
         cached_ag.reserved_times,
         reservation => reservation.id === event.id
       )
@@ -158,7 +185,7 @@ export default class EventDataSource {
 
   addEventToCache(event) {
     if (event.old_context_code) {
-      delete this.cache.contexts[event.old_context_code].events[event.id]
+      delete this.cache.contexts[event.old_context_code]?.events[event.id]
       delete event.old_context_code
     }
     // Split by comma, for the odd case where #contextCode() returns a comma seprated list
@@ -182,18 +209,24 @@ export default class EventDataSource {
   }
 
   eventInRange(event, start, end) {
-    let ref
+    // Want dated, have dated. but when comparing to the range, remember
+    // that we made start/end be unwrapped values (down in getEvents), so
+    // unwrap event.originalStart/originalEndDate too before comparing.
     if (!event.originalStart && !start) {
       // want undated, have undated, include it
       return true
     } else if (!event.originalStart || !start) {
       // want undated, have dated (or vice versa), skip it
       return false
+    } else if (event.originalStart && event.originalEndDate) {
+      // Returns true if the event date range contains dates between start date and end date.
+      return (
+        start <= fcUtil.unwrap(event.originalEndDate) && fcUtil.unwrap(event.originalStart) <= end
+      )
     } else {
-      // want dated, have dated. but when comparing to the range, remember
-      // that we made start/end be unwrapped values (down in getEvents), so
-      // unwrap event.originalStart too before comparing
-      return start <= (ref = fcUtil.unwrap(event.originalStart)) && ref < end
+      // Assignments, Planner Items or Planner notes don't have an end date
+      const originalStart = fcUtil.unwrap(event.originalStart)
+      return start <= originalStart && originalStart < end
     }
   }
 
@@ -245,7 +278,7 @@ export default class EventDataSource {
       return
     }
     this.cache.fetchedAppointmentGroups = {
-      manageable: fetchManageable
+      manageable: fetchManageable,
     }
     this.cache.appointmentGroups = {}
     const dataCB = (data, url, params) => {
@@ -269,9 +302,9 @@ export default class EventDataSource {
       [
         '/api/v1/appointment_groups',
         {
-          include: ['reserved_times', 'participant_count']
-        }
-      ]
+          include: ['reserved_times', 'participant_count'],
+        },
+      ],
     ]
     if (fetchManageable) {
       fetchJobs.push([
@@ -279,12 +312,12 @@ export default class EventDataSource {
         {
           scope: 'manageable',
           include: ['reserved_times', 'participant_count'],
-          include_past_appointments: true
-        }
+          include_past_appointments: true,
+        },
       ])
     }
     return this.startFetch(fetchJobs, dataCB, doneCB, {
-      inFlightCheckKey: 'appointmentGroups'
+      inFlightCheckKey: 'appointmentGroups',
     })
   }
 
@@ -336,7 +369,7 @@ export default class EventDataSource {
       }
     }
     const params = {
-      include: ['reserved_times', 'participant_count', 'appointments', 'child_events']
+      include: ['reserved_times', 'participant_count', 'appointments', 'child_events'],
     }
     return this.startFetch([[group.url, params]], dataCB, () =>
       cb(this.cache.appointmentGroups[group.id].appointmentEvents)
@@ -358,8 +391,8 @@ export default class EventDataSource {
     if (start) start = fcUtil.unwrap(start)
     if (end) end = fcUtil.unwrap(end)
 
-    const paramsForDatedEvents = (start, end, contexts) => {
-      const [startDay, endDay] = this.requiredDateRangeForContexts(start, end, contexts)
+    const paramsForDatedEvents = (startDate, endDate, contextList) => {
+      const [startDay, endDay] = this.requiredDateRangeForContexts(startDate, endDate, contextList)
       if (startDay >= endDay) {
         return null
       }
@@ -367,18 +400,18 @@ export default class EventDataSource {
         // we treat end as an exclusive upper bound. the API treats it as
         // inclusive, so we may get back some events we didn't intend. but
         // addEventToCache handles the duplicate fine, so it's ok
-        context_codes: contexts,
+        context_codes: contextList,
         start_date: startDay.toISOString(),
-        end_date: endDay.toISOString()
+        end_date: endDay.toISOString(),
       }
     }
-    const paramsForUndatedEvents = contexts => {
-      if (!this.needUndatedEventsForContexts(contexts)) {
+    const paramsForUndatedEvents = contextList => {
+      if (!this.needUndatedEventsForContexts(contextList)) {
         return null
       }
       return {
-        context_codes: contexts,
-        undated: '1'
+        context_codes: contextList,
+        undated: '1',
       }
     }
     const params = start
@@ -397,7 +430,7 @@ export default class EventDataSource {
       params.per_page = options.per_page
     }
     const requestResults = {}
-    const dataCB = (data, url, params) => {
+    const dataCB = (data, url, parameters) => {
       let key
       if (!data) return
 
@@ -411,15 +444,21 @@ export default class EventDataSource {
         data = this.fillOutPlannerNotes(data, url)
         key = 'type_planner_note'
       } else {
-        key = `type_${params.type}`
+        key = `type_${parameters.type}`
       }
       const requestResult = requestResults[key] || {
-        events: []
+        events: [],
       }
       requestResult.next = data.next
       data.forEach(e => {
         const event = commonEventFactory(e, this.contexts)
         if (event && event.object.workflow_state !== 'deleted') {
+          if (event.blackout_date && event.end && event.start !== event.end) {
+            // We need to add a day to the end of multiple day events on the calendar because fullcalendar
+            // treats event end dates as exclusive while Canvas blackout date calculations treat them as
+            // inclusive.
+            event.end = moment(event.end.toISOString()).add(1, 'days')
+          }
           newEvents.push(event)
           requestResult.events.push(event)
         }
@@ -455,19 +494,19 @@ export default class EventDataSource {
           }
         })
 
-        if (!_.isEmpty(dates)) {
-          upperBounds.push(_.max(dates))
+        if (!isEmpty(dates)) {
+          upperBounds.push(maxBy(dates))
         }
       }
-      if (!_.isEmpty(upperBounds)) {
-        nextPageDate = fcUtil.clone(_.min(upperBounds))
+      if (!isEmpty(upperBounds)) {
+        nextPageDate = fcUtil.clone(minBy(upperBounds))
         end = fcUtil.unwrap(nextPageDate)
       }
       contexts.forEach(context => {
         let contextInfo = this.cache.contexts[context]
         if (!contextInfo) {
           contextInfo = this.cache.contexts[context] = {
-            fetchedRanges: []
+            fetchedRanges: [],
           }
         }
         if (contextInfo) {
@@ -498,7 +537,7 @@ export default class EventDataSource {
     if (ENV.STUDENT_PLANNER_ENABLED) {
       eventDataSources.push(['/api/v1/planner_notes', params])
     }
-    const [admin_contexts, student_contexts] = _.partition(
+    const [admin_contexts, student_contexts] = partition(
       params.context_codes,
       cc => ENV.CALENDAR?.MANAGE_CONTEXTS?.indexOf(cc) >= 0
     )
@@ -510,7 +549,7 @@ export default class EventDataSource {
       const pparams = {
         filter: 'all_ungraded_todo_items',
         ...params,
-        context_codes: admin_contexts
+        context_codes: admin_contexts,
       }
       eventDataSources.push(['/api/v1/planner/items', pparams])
     }
@@ -535,11 +574,20 @@ export default class EventDataSource {
     if (ag_ids.length > 0) {
       p.appointment_group_ids = ag_ids.join(',')
     }
-    p.include = ['web_conference']
+    p.include = ['web_conference', 'series_head', 'series_natural_language']
     return p
   }
 
   assignmentParams(params) {
+    // We only want to see assignments from courses that do not use Course Pacing, unless the
+    // user is a student in the course. In that case, they should see their assignments on the calendar
+    if (ENV.CALENDAR?.CONTEXTS) {
+      params.context_codes = ENV.CALENDAR.CONTEXTS.filter(
+        context =>
+          params.context_codes.includes(context.asset_string) &&
+          (!context.course_pacing_enabled || context.user_is_student)
+      ).map(context => context.asset_string)
+    }
     return {type: 'assignment', ...params}
   }
 
@@ -555,9 +603,9 @@ export default class EventDataSource {
       return
     }
     this.cache.participants[key] = []
-    const dataCB = (data, url, params) => {
+    const dataCB = data => {
       if (data) {
-        return this.cache.participants[key].push.apply(this.cache.participants[key], data)
+        return this.cache.participants[key].push(...data)
       }
     }
     const doneCB = () => cb(this.cache.participants[key])
@@ -567,9 +615,9 @@ export default class EventDataSource {
         [
           `/api/v1/appointment_groups/${appointmentGroup.id}/${type}`,
           {
-            registration_status: registrationStatus
-          }
-        ]
+            registration_status: registrationStatus,
+          },
+        ],
       ],
       dataCB,
       doneCB
@@ -599,11 +647,11 @@ export default class EventDataSource {
     for (let i = 0, len = urlAndParamsArray.length; i < len; i++) {
       const urlAndParams = urlAndParamsArray[i]
       results.push(
-        (urlAndParams =>
+        (urlAndParameters =>
           this.fetchNextBatch(
-            urlAndParams[0],
-            urlAndParams[1],
-            (data, isDone) => wrapperCB(data, isDone, urlAndParams[0], urlAndParams[1]),
+            urlAndParameters[0],
+            urlAndParameters[1],
+            (data, isDone) => wrapperCB(data, isDone, urlAndParameters[0], urlAndParameters[1]),
             options
           ))(urlAndParams)
       )
@@ -615,7 +663,7 @@ export default class EventDataSource {
   // header, will fetch that link too (with the same params). At the end of every
   // request it will call cb(data, isDone). isDone will be true on the last request.
   fetchNextBatch(url, params, cb, options = {}) {
-    const parseLinkHeader = function(header) {
+    const parseLinkHeader = function (header) {
       if (!header) {
         // TODO: Write a real Link header parser. This will only work with what we output,
         // and might be fragile.
@@ -639,9 +687,9 @@ export default class EventDataSource {
     return $.ajaxJSON(url, 'GET', params, (data, xhr) => {
       $.publish('EventDataSource/ajaxEnded')
       const linkHeader =
-        typeof xhr.getResponseHeader === 'function' ? xhr.getResponseHeader('Link') : void 0
+        typeof xhr.getResponseHeader === 'function' ? xhr.getResponseHeader('Link') : undefined
       const rels = parseLinkHeader(linkHeader)
-      data.next = rels != null ? rels.next : void 0
+      data.next = rels != null ? rels.next : undefined
       if (rels && rels.next && !options.singlePage) {
         cb(data, false)
         this.fetchNextBatch(rels.next, {}, cb)
@@ -653,7 +701,7 @@ export default class EventDataSource {
 
   // Planner notes are getting pulled from the planner_notes api
   // Add some necessary fields so they can be processed just like a calendar event
-  fillOutPlannerNotes(notes, url) {
+  fillOutPlannerNotes(notes) {
     notes.forEach(note => {
       note.type = 'planner_note'
       note.context_code = note.course_id ? `course_${note.course_id}` : `user_${note.user_id}`

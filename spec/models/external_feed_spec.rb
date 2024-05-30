@@ -26,7 +26,7 @@ describe ExternalFeed do
     rss = RSS::Parser.parse rss_example
     res = @feed.add_rss_entries(rss)
     expect(res).not_to be_nil
-    expect(res.length).to eql(4)
+    expect(res.length).to be(4)
     expect(res.all?(&:valid?)).to be_truthy
     expect(res[0].title).to eql("Star City")
     expect(res[1].title).to eql("Space Exploration")
@@ -109,22 +109,22 @@ describe ExternalFeed do
     rss = RSS::Parser.parse rss_example
     res = @feed.add_rss_entries(rss)
     expect(res).not_to be_nil
-    expect(res.length).to eql(4)
-    expect(@course.announcements.count).to eql(4)
+    expect(res.length).to be(4)
+    expect(@course.announcements.count).to be(4)
     expect(res.map(&:asset) - @course.announcements).to be_empty
 
     # don't create duplicates
     @feed.add_rss_entries(rss)
-    expect(@course.announcements.count).to eql(4)
+    expect(@course.announcements.count).to be(4)
   end
 
   it "adds atom entries" do
     @feed = external_feed_model
-    require "atom"
-    atom = Atom::Feed.load_feed atom_example
+    require "feedjira"
+    atom = Feedjira.parse atom_example
     res = @feed.add_atom_entries(atom)
     expect(res).not_to be_nil
-    expect(res.length).to eql(1)
+    expect(res.length).to be(1)
     expect(res[0].valid?).to be_truthy
     expect(res[0].title).to eql("Atom-Powered Robots Run Amok")
   end
@@ -132,13 +132,13 @@ describe ExternalFeed do
   it "adds atom entries as course announcements" do
     @course = course_model
     @feed = external_feed_model(context: @course)
-    require "atom"
-    atom = Atom::Feed.load_feed atom_example
+    require "feedjira"
+    atom = Feedjira.parse atom_example
     res = @feed.add_atom_entries(atom)
     expect(res).not_to be_nil
-    expect(res.length).to eql(1)
+    expect(res.length).to be(1)
     expect(res[0].title).to eql("Atom-Powered Robots Run Amok")
-    expect(@course.announcements.count).to eql(1)
+    expect(@course.announcements.count).to be(1)
     expect(res[0].asset).to eql(@course.announcements.first)
   end
 

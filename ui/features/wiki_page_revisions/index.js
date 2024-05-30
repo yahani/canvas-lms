@@ -18,7 +18,7 @@
 
 import $ from 'jquery'
 import ready from '@instructure/ready'
-import WikiPage from '@canvas/wiki/backbone/models/WikiPage.coffee'
+import WikiPage from '@canvas/wiki/backbone/models/WikiPage'
 import WikiPageRevisionsCollection from './backbone/collections/WikiPageRevisionsCollection'
 import WikiPageContentView from './backbone/views/WikiPageContentView'
 import WikiPageRevisionsView from './backbone/views/WikiPageRevisionsView'
@@ -27,14 +27,14 @@ $('body').addClass('show revisions')
 
 const wikiPage = new WikiPage(ENV.WIKI_PAGE, {
   revision: ENV.WIKI_PAGE_REVISION,
-  contextAssetString: ENV.context_asset_string
+  contextAssetString: ENV.context_asset_string,
 })
 const revisions = new WikiPageRevisionsCollection([], {parentModel: wikiPage})
 
 ready(() => {
   const revisionsView = new WikiPageRevisionsView({
     collection: revisions,
-    pages_path: ENV.WIKI_PAGES_PATH
+    pages_path: ENV.WIKI_PAGES_PATH,
   })
 
   const contentView = new WikiPageContentView()

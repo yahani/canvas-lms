@@ -18,7 +18,7 @@
 
 import {
   createGradebook,
-  setFixtureHtml
+  setFixtureHtml,
 } from 'ui/features/gradebook/react/default_gradebook/__tests__/GradebookSpecHelper'
 
 QUnit.module('Gradebook > Students', suiteHooks => {
@@ -207,9 +207,9 @@ QUnit.module('Gradebook > Students', suiteHooks => {
             {
               enrollment_state: 'active',
               grades: {html_url: 'http://canvas/courses/1201/users/1101'},
-              type: 'StudentEnrollment'
-            }
-          ]
+              type: 'StudentEnrollment',
+            },
+          ],
         },
 
         {
@@ -219,9 +219,9 @@ QUnit.module('Gradebook > Students', suiteHooks => {
             {
               enrollment_state: 'active',
               grades: {html_url: 'http://canvas/courses/1201/users/1102'},
-              type: 'StudentEnrollment'
-            }
-          ]
+              type: 'StudentEnrollment',
+            },
+          ],
         },
 
         {
@@ -231,10 +231,10 @@ QUnit.module('Gradebook > Students', suiteHooks => {
             {
               enrollment_state: 'active',
               grades: {html_url: 'http://canvas/courses/1201/users/1199'},
-              type: 'StudentViewEnrollment'
-            }
-          ]
-        }
+              type: 'StudentViewEnrollment',
+            },
+          ],
+        },
       ]
 
       gradebook.courseContent.students.setStudentIds(['1101', '1102', '1199'])
@@ -295,7 +295,7 @@ QUnit.module('Gradebook > Students', suiteHooks => {
       enrollments.push({
         enrollment_state: 'completed',
         grades: {html_url: 'http://example.url/'},
-        type: 'StudentEnrollment'
+        type: 'StudentEnrollment',
       })
       gradebook.gotChunkOfStudents(studentData)
       strictEqual(getStudent('1101').isConcluded, true)
@@ -305,7 +305,7 @@ QUnit.module('Gradebook > Students', suiteHooks => {
       studentData[0].enrollments.push({
         enrollment_state: 'completed',
         grades: {html_url: 'http://example.url/'},
-        type: 'StudentEnrollment'
+        type: 'StudentEnrollment',
       })
       gradebook.gotChunkOfStudents(studentData)
       strictEqual(getStudent('1101').isConcluded, false)
@@ -317,7 +317,7 @@ QUnit.module('Gradebook > Students', suiteHooks => {
       enrollments.push({
         enrollment_state: 'inactive',
         grades: {html_url: 'http://example.url/'},
-        type: 'StudentEnrollment'
+        type: 'StudentEnrollment',
       })
       gradebook.gotChunkOfStudents(studentData)
       strictEqual(getStudent('1101').isInactive, true)
@@ -327,7 +327,7 @@ QUnit.module('Gradebook > Students', suiteHooks => {
       studentData[0].enrollments.push({
         enrollment_state: 'inactive',
         grades: {html_url: 'http://example.url/'},
-        type: 'StudentEnrollment'
+        type: 'StudentEnrollment',
       })
       gradebook.gotChunkOfStudents(studentData)
       strictEqual(getStudent('1101').isInactive, false)
@@ -340,22 +340,11 @@ QUnit.module('Gradebook > Students', suiteHooks => {
       })
     })
 
-    test('builds rows when filtering with search', () => {
-      gradebook.filteredStudentIds = [1101]
+    test('builds rows', () => {
+      gradebook.searchFilteredStudentIds = [1101]
       sinon.spy(gradebook, 'buildRows')
       gradebook.gotChunkOfStudents(studentData)
       strictEqual(gradebook.buildRows.callCount, 1)
-    })
-
-    test('does not build rows when not filtering with search', () => {
-      sinon.spy(gradebook, 'buildRows')
-      gradebook.gotChunkOfStudents(studentData)
-      strictEqual(gradebook.buildRows.callCount, 0)
-    })
-
-    test('renders the grid when not filtering with search', () => {
-      gradebook.gotChunkOfStudents(studentData)
-      strictEqual(gradebook.gradebookGrid.render.callCount, 1)
     })
   })
 
@@ -390,13 +379,13 @@ QUnit.module('Gradebook > Students', suiteHooks => {
         {
           enrollments: [{type: 'StudentEnrollment', grades: {html_url: 'http://example.url/'}}],
           id: '1101',
-          name: 'Adam Jones'
-        }
+          name: 'Adam Jones',
+        },
       ]
       gradebook.gotChunkOfStudents(studentData)
 
       gradebook.setAssignmentGroups({
-        2201: {group_weight: 100}
+        2201: {group_weight: 100},
       })
 
       gradebook.setAssignments({
@@ -404,15 +393,15 @@ QUnit.module('Gradebook > Students', suiteHooks => {
           assignment_group_id: '2201',
           id: '2301',
           name: 'Math Assignment',
-          published: true
+          published: true,
         },
 
         2302: {
           assignment_group_id: '2201',
           id: '2302',
           name: 'English Assignment',
-          published: false
-        }
+          published: false,
+        },
       })
 
       submissionData = [
@@ -425,7 +414,7 @@ QUnit.module('Gradebook > Students', suiteHooks => {
               id: '2501',
               score: 10,
               user_id: '1101',
-              workflow_state: 'graded'
+              workflow_state: 'graded',
             },
 
             {
@@ -435,12 +424,12 @@ QUnit.module('Gradebook > Students', suiteHooks => {
               id: '2502',
               score: 9,
               user_id: '1101',
-              workflow_state: 'graded'
-            }
+              workflow_state: 'graded',
+            },
           ],
 
-          user_id: '1101'
-        }
+          user_id: '1101',
+        },
       ]
     })
 

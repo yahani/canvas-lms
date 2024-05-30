@@ -27,22 +27,22 @@ export default {
       type: 'GOT_USERS',
       payload: {
         users,
-        xhr
-      }
+        xhr,
+      },
     }
   },
 
   gotUserUpdate(user) {
     return {
       type: 'GOT_USER_UPDATE',
-      payload: user
+      payload: user,
     }
   },
 
   updateSearchFilter(filter) {
     return {
       type: 'UPDATE_SEARCH_FILTER',
-      payload: filter
+      payload: filter,
     }
   },
 
@@ -51,15 +51,15 @@ export default {
       type: 'SEARCH_TERM_TOO_SHORT',
       errors: {
         termTooShort: I18n.t('Search term must be at least %{num} characters', {
-          num: minSearchLength
-        })
-      }
+          num: minSearchLength,
+        }),
+      },
     }
   },
 
   loadingUsers() {
     return {
-      type: 'LOADING_USERS'
+      type: 'LOADING_USERS',
     }
   },
 
@@ -69,16 +69,15 @@ export default {
 
       if (
         !searchFilter ||
-        searchFilter.search_term.length >= minSearchLength ||
+        searchFilter.search_term.trim().length >= minSearchLength ||
         searchFilter.search_term === ''
       ) {
+        const successHandler = (response, xhr) => dispatch(this.gotUserList(response, xhr))
         dispatch(this.loadingUsers())
-        store.load(searchFilter).then((response, _, xhr) => {
-          dispatch(this.gotUserList(response, xhr))
-        })
+        store.load(searchFilter, successHandler)
       } else {
         dispatch(this.displaySearchTermTooShortError(minSearchLength))
       }
     }
-  }
+  },
 }

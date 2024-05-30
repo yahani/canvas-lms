@@ -34,21 +34,20 @@ describe "native canvas conditional release" do
 
   before do
     course_with_teacher_logged_in
-    @course.conditional_release = true
-    @course.save!
   end
 
   context "Pages as part of Mastery Paths" do
     it "shows Allow in Mastery Paths for a Page when feature enabled" do
       get "/courses/#{@course.id}/pages/new/edit"
-      expect(ConditionalReleaseObjects.conditional_content_exists?).to eq(true)
+      expect(ConditionalReleaseObjects.conditional_content_exists?).to be(true)
     end
 
     it "does not show Allow in Mastery Paths when feature disabled" do
-      @course.conditional_release = false
-      @course.save!
+      account = Account.default
+      account.settings[:conditional_release] = { value: false }
+      account.save!
       get "/courses/#{@course.id}/pages/new/edit"
-      expect(ConditionalReleaseObjects.conditional_content_exists?).to eq(false)
+      expect(ConditionalReleaseObjects.conditional_content_exists?).to be(false)
     end
 
     it "is not included in the assignments page" do
@@ -74,7 +73,7 @@ describe "native canvas conditional release" do
       expect(ConditionalReleaseObjects.quiz_conditional_release_link.text).to eq("Mastery Paths")
 
       ConditionalReleaseObjects.quiz_conditional_release_link.click
-      expect(ConditionalReleaseObjects.cr_editor_exists?).to eq(true)
+      expect(ConditionalReleaseObjects.cr_editor_exists?).to be(true)
     end
 
     it "disables Mastery Paths tab in quizzes for quiz types other than graded" do
@@ -90,7 +89,7 @@ describe "native canvas conditional release" do
         @quiz.quiz_type = type
         @quiz.save!
         get "/courses/#{@course.id}/quizzes/#{@quiz.id}/edit"
-        expect(ConditionalReleaseObjects.disabled_cr_editor_exists?).to eq(true)
+        expect(ConditionalReleaseObjects.disabled_cr_editor_exists?).to be(true)
       end
     end
   end
@@ -104,7 +103,7 @@ describe "native canvas conditional release" do
       expect(ConditionalReleaseObjects.conditional_release_link.text).to eq("Mastery Paths")
 
       ConditionalReleaseObjects.conditional_release_link.click
-      expect(ConditionalReleaseObjects.conditional_release_editor_exists?).to eq(true)
+      expect(ConditionalReleaseObjects.conditional_release_editor_exists?).to be(true)
     end
   end
 
@@ -116,7 +115,7 @@ describe "native canvas conditional release" do
       expect(ConditionalReleaseObjects.conditional_release_link.text).to eq("Mastery Paths")
 
       ConditionalReleaseObjects.conditional_release_link.click
-      expect(ConditionalReleaseObjects.conditional_release_editor_exists?).to eq(true)
+      expect(ConditionalReleaseObjects.conditional_release_editor_exists?).to be(true)
     end
 
     it "is able to see default conditional release editor" do
@@ -139,7 +138,7 @@ describe "native canvas conditional release" do
       expect(ConditionalReleaseObjects.division_cutoff2.attribute("value")).to eq("47 pts")
     end
 
-    it "is able to add an assignment to a range", ignore_js_errors: true do
+    it "is able to add an assignment to a range", :ignore_js_errors do
       main_assignment = assignment_model(course: @course, points_possible: 100)
       assignment_for_mp = assignment_model(course: @course, points_possible: 10, title: "Assignment for MP")
       get "/courses/#{@course.id}/assignments/#{main_assignment.id}/edit"
@@ -148,10 +147,10 @@ describe "native canvas conditional release" do
       ConditionalReleaseObjects.mp_assignment_checkbox(assignment_for_mp.title).click
       ConditionalReleaseObjects.add_items_button.click
 
-      expect(ConditionalReleaseObjects.assignment_card_exists?(assignment_for_mp.title)).to eq(true)
+      expect(ConditionalReleaseObjects.assignment_card_exists?(assignment_for_mp.title)).to be(true)
     end
 
-    it "is able to toggle and/or between two assignments", ignore_js_errors: true do
+    it "is able to toggle and/or between two assignments", :ignore_js_errors do
       main_assignment = assignment_model(course: @course, points_possible: 100)
       assignment1_for_mp = assignment_model(course: @course, points_possible: 10, title: "Assignment 1 for MP")
       assignment2_for_mp = assignment_model(course: @course, points_possible: 10, title: "Assignment 2 for MP")
@@ -164,16 +163,16 @@ describe "native canvas conditional release" do
         ConditionalReleaseObjects.add_items_button.click
       end
 
-      expect(ConditionalReleaseObjects.and_toggle_button_exists?).to eq(true)
+      expect(ConditionalReleaseObjects.and_toggle_button_exists?).to be(true)
 
       ConditionalReleaseObjects.and_toggle_button.click
-      expect(ConditionalReleaseObjects.or_toggle_button_exists?).to eq(true)
+      expect(ConditionalReleaseObjects.or_toggle_button_exists?).to be(true)
 
       ConditionalReleaseObjects.or_toggle_button.click
-      expect(ConditionalReleaseObjects.and_toggle_button_exists?).to eq(true)
+      expect(ConditionalReleaseObjects.and_toggle_button_exists?).to be(true)
     end
 
-    it "is able to move assignment to next row", ignore_js_errors: true do
+    it "is able to move assignment to next row", :ignore_js_errors do
       main_assignment = assignment_model(course: @course, points_possible: 100)
       assignment_for_mp = assignment_model(course: @course, points_possible: 10, title: "Assignment for MP")
       get "/courses/#{@course.id}/assignments/#{main_assignment.id}/edit"
@@ -194,10 +193,10 @@ describe "native canvas conditional release" do
       ConditionalReleaseObjects.conditional_release_link.click
 
       ConditionalReleaseObjects.replace_mastery_path_scores(ConditionalReleaseObjects.division_cutoff1, "70", "")
-      expect(ConditionalReleaseObjects.must_not_be_empty_exists?).to eq(true)
+      expect(ConditionalReleaseObjects.must_not_be_empty_exists?).to be(true)
 
       ConditionalReleaseObjects.replace_mastery_path_scores(ConditionalReleaseObjects.division_cutoff1, "", "35")
-      expect(ConditionalReleaseObjects.these_scores_are_out_of_order_exists?).to eq(true)
+      expect(ConditionalReleaseObjects.these_scores_are_out_of_order_exists?).to be(true)
     end
 
     it "does not show error setting middle range to 0" do
@@ -207,10 +206,10 @@ describe "native canvas conditional release" do
       replace_content(ConditionalReleaseObjects.division_cutoff1, "2")
       replace_content(ConditionalReleaseObjects.division_cutoff2, "0")
 
-      expect(ConditionalReleaseObjects.must_not_be_empty_exists?).to eq(false)
-      expect(ConditionalReleaseObjects.these_scores_are_out_of_order_exists?).to eq(false)
-      expect(ConditionalReleaseObjects.must_be_a_number_exists?).to eq(false)
-      expect(ConditionalReleaseObjects.number_is_too_small_exists?).to eq(false)
+      expect(ConditionalReleaseObjects.must_not_be_empty_exists?).to be(false)
+      expect(ConditionalReleaseObjects.these_scores_are_out_of_order_exists?).to be(false)
+      expect(ConditionalReleaseObjects.must_be_a_number_exists?).to be(false)
+      expect(ConditionalReleaseObjects.number_is_too_small_exists?).to be(false)
     end
   end
 
@@ -218,21 +217,21 @@ describe "native canvas conditional release" do
     before do
       @trigger_assmt = @course.assignments.create!(points_possible: 10, submission_types: "online_text_entry")
       ranges = [
-        FactoryBot.create(
+        create(
           :scoring_range_with_assignments,
           assignment_set_count: 1,
           assignment_count: 1,
           lower_bound: 0.7,
           upper_bound: 1.0
         ),
-        FactoryBot.create(
+        create(
           :scoring_range_with_assignments,
           assignment_set_count: 1,
           assignment_count: 2,
           lower_bound: 0.4,
           upper_bound: 0.7
         ),
-        FactoryBot.create(
+        create(
           :scoring_range_with_assignments,
           assignment_set_count: 2,
           assignment_count: 2,
@@ -246,7 +245,7 @@ describe "native canvas conditional release" do
     it "shows Mastery Path Breakdown for an Assignment" do
       get "/courses/#{@course.id}/assignments/#{@trigger_assmt.id}"
 
-      expect(ConditionalReleaseObjects.breakdown_graph_exists?).to eq(true)
+      expect(ConditionalReleaseObjects.breakdown_graph_exists?).to be(true)
     end
 
     it "shows Mastery Path Breakdown for a Discussion" do
@@ -254,7 +253,7 @@ describe "native canvas conditional release" do
       graded_discussion.save!
       get "/courses/#{@course.id}/discussion_topics/#{graded_discussion.id}"
 
-      expect(ConditionalReleaseObjects.breakdown_graph_exists?).to eq(true)
+      expect(ConditionalReleaseObjects.breakdown_graph_exists?).to be(true)
     end
   end
 end

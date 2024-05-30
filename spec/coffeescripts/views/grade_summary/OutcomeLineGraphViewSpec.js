@@ -16,11 +16,13 @@
  * with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
+import $ from 'jquery'
+import 'jquery-migrate'
 import {isUndefined} from 'lodash'
-import Outcome from '@canvas/grade-summary/backbone/models/Outcome.coffee'
-import OutcomeResultCollection from 'ui/features/grade_summary/backbone/collections/OutcomeResultCollection.coffee'
-import OutcomeLineGraphView from 'ui/features/grade_summary/backbone/views/OutcomeLineGraphView.coffee'
-import tz from '@canvas/timezone'
+import Outcome from '@canvas/grade-summary/backbone/models/Outcome'
+import OutcomeResultCollection from 'ui/features/grade_summary/backbone/collections/OutcomeResultCollection'
+import OutcomeLineGraphView from 'ui/features/grade_summary/backbone/views/OutcomeLineGraphView'
+import * as tz from '@canvas/datetime'
 import fakeENV from 'helpers/fakeENV'
 
 QUnit.module('OutcomeLineGraphViewSpec', {
@@ -34,17 +36,17 @@ QUnit.module('OutcomeLineGraphViewSpec', {
       outcome_results: [
         {
           submitted_or_assessed_at: tz.parse('2015-04-24T19:27:54Z'),
-          links: {alignment: 'alignment_1'}
-        }
+          links: {alignment: 'alignment_1'},
+        },
       ],
       linked: {
         alignments: [
           {
             id: 'alignment_1',
-            name: 'Alignment Name'
-          }
-        ]
-      }
+            name: 'Alignment Name',
+          },
+        ],
+      },
     }
     this.outcomeLineGraphView = new OutcomeLineGraphView({
       el: $('<div class="line-graph"></div>')[0],
@@ -52,29 +54,37 @@ QUnit.module('OutcomeLineGraphViewSpec', {
         id: 2,
         friendly_name: 'Friendly Outcome Name',
         mastery_points: 3,
-        points_possible: 5
-      })
+        points_possible: 5,
+      }),
     })
   },
   teardown() {
     fakeENV.teardown()
     return this.server.restore()
-  }
+  },
 })
 
-test('#initialize', function() {
+test('#initialize', function () {
   ok(
     this.outcomeLineGraphView.collection instanceof OutcomeResultCollection,
     'should have an OutcomeResultCollection'
   )
-  ok(!this.outcomeLineGraphView.deferred.isResolved(), 'should have unresolved promise')
+  notStrictEqual(
+    this.outcomeLineGraphView.deferred.state(),
+    'resolved',
+    'should have unresolved promise'
+  )
   this.outcomeLineGraphView.collection.trigger('fetched:last')
-  ok(this.outcomeLineGraphView.deferred.isResolved(), 'should resolve promise on fetched:last')
+  strictEqual(
+    this.outcomeLineGraphView.deferred.state(),
+    'resolved',
+    'should resolve promise on fetched:last'
+  )
 })
 
-test('render', function() {
+test('render', function () {
   const renderSpy = sandbox.spy(this.outcomeLineGraphView, 'render')
-  ok(!this.outcomeLineGraphView.deferred.isResolved(), 'precondition')
+  notStrictEqual(this.outcomeLineGraphView.deferred.state(), 'resolved', 'precondition')
   ok(this.outcomeLineGraphView.render())
   ok(isUndefined(this.outcomeLineGraphView.svg), 'should not render svg if promise is unresolved')
   this.outcomeLineGraphView.collection.trigger('fetched:last')

@@ -233,14 +233,15 @@ Returns an empty string otherwise.
  All Others: "c0ddd6c90cbe1ef0f32fbce5c3bf654204be186c"
 ```
 ## com.instructure.User.sectionNames
-Returns an array of the section names that the user is enrolled in, if the
-context of the tool launch is within a course.
+Returns an array of the section names in a JSON-escaped format that the user is enrolled in, if the
+context of the tool launch is within a course. The names are sorted by the course_section_id, so that
+they are useful in conjunction with the Canvas.course.sectionIds substitution.
 
 **Availability**: *when launched from a course*  
 **Launch Parameter**: *com_instructure_user_section_names*  
 
 ```
-[ "Section 1", "Section 5", "TA Section"]
+[\"Section 1, M-T\", \"Section 2, W-Th\", \"TA Section\"]
 ```
 ## com.instructure.RCS.app_host
 Returns the host of the rich content service for the current region.
@@ -250,6 +251,16 @@ Returns the host of the rich content service for the current region.
 
 ```
 "rich-content-iad.inscloudgate.net"
+```
+## com.instructure.User.student_view
+Returns true if the user is launching from student view.
+
+**Availability**: *when launched by a logged in user*  
+**Launch Parameter**: *com_instructure_user_student_view*  
+
+```
+"true"
+"false"
 ```
 ## com.instructure.Observee.sisIds
 returns all observee ids linked to this observer as an String separated by `,`.
@@ -377,8 +388,26 @@ an opaque identifier that uniquely identifies the context of the tool launch.
 ```
 "cdca1fe2c392a208bd8a657f8865ddb9ca359534"
 ```
-## Context.sourcedId
-The sourced Id of the context.
+## com.instructure.Context.globalId
+The Canvas global identifier for the launch context.
+
+**Availability**: *always*  
+
+
+```
+10000000000070
+```
+## com.instructure.Context.uuid
+The Canvas UUID for the launch context.
+
+**Availability**: *always*  
+
+
+```
+4TVeERS266frWLG5RVK0L8BbSC831mUZHaYpK4KP
+```
+## Context.sourcedId [duplicates Person.sourcedId]
+If the context is a Course, returns sourced Id of the context.
 
 **Availability**: *always*  
 
@@ -692,6 +721,15 @@ returns the current course's term start date.
 ```
 2018-01-12 00:00:00 -0700
 ```
+## Canvas.term.endAt
+returns the current course's term end date.
+
+**Availability**: **  
+
+
+```
+2018-01-12 00:00:00 -0700
+```
 ## Canvas.term.name
 returns the current course's term name.
 
@@ -700,6 +738,15 @@ returns the current course's term name.
 
 ```
 "W1 2017"
+```
+## Canvas.term.id
+returns the current course's term numerical id.
+
+**Availability**: **  
+**Launch Parameter**: *canvas_term_id*  
+
+```
+123
 ```
 ## CourseSection.sourcedId
 returns the current course sis source id
@@ -729,6 +776,30 @@ enabled.
 
 ```
 true
+```
+## com.instructure.Assignment.restrict_quantitative_data
+returns true if the assignment restricts quantitative data.
+Assignment types: points, percentage, gpa_scale are all considered quantitative.
+
+**Availability**: *when launched as an assignment*  
+**Launch Parameter**: *com_instructure_assignment_restrict_quantitative_data*  
+
+```
+true
+```
+## com.instructure.Course.gradingScheme
+returns the grading scheme data for the course
+it is an array of objects of grade levels.
+
+**Availability**: *when launched in a course*  
+**Launch Parameter**: *com_instructure_course_grading_scheme*  
+
+```
+[
+  {name: "A", value: 94.0},
+  {name: "A-", value: 90.0},
+  {name: "B+", value: 87.0},
+]
 ```
 ## com.Instructure.membership.roles
 returns the current course membership roles
@@ -994,6 +1065,24 @@ Returns true for root account admins and false for all other roles.
 ```
 true
 ```
+## Canvas.user.adminableAccounts
+Returns a string with a comma-separated list of the (local) account IDs
+that a user has admin rights in, which fall under the root account that
+the tool was launched under. This list includes the IDs of
+all subaccounts of these accounts (and their subaccounts, etc.), since
+the admin privileges carry from an account to all its subaccounts.
+
+Will show a limit of 40000 characters. If the account IDs list is too big
+to fit into 40000 characters, 'truncated' will show at the end of the
+list.
+
+**Availability**: *when launched by a logged in user*  
+
+
+```
+123,456,798
+123,456,789,1234,truncated
+```
 ## User.username [duplicates Canvas.user.loginId]
 Username/Login ID for the primary pseudonym for the user for the account.
 This may not be the pseudonym the user is actually logged in with.
@@ -1067,15 +1156,20 @@ It may not hold all the sis info needed in other launch substitutions.
 420000000000042
 ```
 ## Canvas.masqueradingUser.userId
-Returns the 40 character opaque user_id for masquerading user.
-This is the pseudonym the user is actually logged in as.
-It may not hold all the sis info needed in other launch substitutions.
+Returns the opaque user_id for the masquerading user. This is the
+pseudonym the user is actually logged in as. It may not hold all the sis
+info needed in other launch substitutions.
+
+For LTI 1.3 tools, the opaque user IDs are UUIDv4 values (also used in
+the "sub" claim in LTI 1.3 launches), while for other LTI versions, the
+user ID will be the user's 40 character opaque LTI id.
 
 **Availability**: *when the user is being masqueraded*  
 
 
 ```
-"da12345678cb37ba1e522fc7c5ef086b7704eff9"
+ LTI 1.3: "8b9f8327-aa32-fa90-9ea2-2fa8ef79e0f9",
+ All Others: "da12345678cb37ba1e522fc7c5ef086b7704eff9"
 ```
 ## Canvas.xapi.url
 Returns the xapi url for the user.
@@ -1247,10 +1341,35 @@ Only available when launched as an assignment with a `lock_at` set.
 2018-02-20:00:00Z
 ```
 ## Canvas.assignment.dueAt.iso8601
-Returns the `due_at` date of the assignment that was launched.
-Only available when launched as an assignment with a `due_at` set.
+Returns the `due_at` date of the assignment that was launched. Only
+available when launched as an assignment with a `due_at` set. If the tool
+is launched as a student, this will be the date that assignment is due
+for that student (or unexpanded -- "$Canvas.assignment.dueAt.iso8601" --
+if there is no due date for the student). If the tool is launched as an
+instructor and there are multiple possible due dates (i.e., there are
+multiple sections and at least one has a due date override), this will be
+the LATEST effective due date of any section or student (or unexpanded if
+there is at least one section or student with no effective due date).
 
-**Availability**: *always*
+**Availability**: *always*  
+
+
+```
+2018-02-19:00:00Z
+```
+## Canvas.assignment.earliestEnrollmentDueAt.iso8601
+Returns the `due_at` date of the assignment that was launched.
+If the tool is launched as a student, this will be the date that
+assignment is due for that student (or an empty string if there is no due
+date for the student). If the tool is launched as an instructor and different
+students are assigned multiple due dates (i.e., there are students in sections
+with overrides / different effective due dates), this will be the
+EARLIEST due date of any enrollment (or an empty string if there are no
+enrollments with due dates). Note than like allDueAts, but unlike the dueAt
+expansion, there must be at least one enrollment in a section for its due
+date to be considered.
+
+**Availability**: *when launched as an assignment*  
 
 
 ```
@@ -1259,13 +1378,16 @@ Only available when launched as an assignment with a `due_at` set.
 ## Canvas.assignment.allDueAts.iso8601
 In Canvas, users, sections and groups can have distinct due dates for the same assignment.
 This returns all possible `due_at` dates of the assignment that was launched.
+If the assignment is assigned to anyone without a due date, an empty string
+will be present in the list (hence the ",," in the example)
 
-If one due date is not set, an empty string is provided in the list.
+Only available when launched as an assignment.
 
-**Availability**: *when launched as an assignment*
+**Availability**: *when launched as an assignment*  
+
 
 ```
-2018-02-19:00:00Z,,2018-02-19:00:00Z
+2018-02-19:00:00Z,,2018-02-20:00:00Z
 ```
 ## Canvas.assignment.published
 Returns true if the assignment that was launched is published.
@@ -1462,6 +1584,17 @@ in Canvas-side GET request that triggers the LTI launch.
 ```
 page
 ```
+## com.instructure.Course.canvas_resource_id
+Returns the target resource id for the current page, forwarded from the request. Only functional when
+`com_instructure_course_canvas_resource_type` is included as a query param. Currently, this is not
+supported generally, and is only implemented for specific use cases.
+
+**Availability**: *always*  
+
+
+```
+123123
+```
 ## com.instructure.Course.allow_canvas_resource_selection
 Returns whether a content can be imported into a specific group on the page, forwarded from the request.
 True for Modules page and Assignment Groups page. False for other content index pages.
@@ -1489,3 +1622,10 @@ in Canvas-side GET request that triggers the LTI launch.
 ```
 [{"id":"3","name":"First Module"},{"id":"5","name":"Second Module"}]
 ```
+## com.instructure.Account.usage_metrics_enabled
+
+
+**Availability**: *always*  
+
+
+

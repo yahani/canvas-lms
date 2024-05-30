@@ -71,8 +71,14 @@ describe DiscussionTopicsApiController do
       Setting.set("user_default_quota", -1)
       expect(@student.attachments.count).to eq 0
 
-      post "add_entry", params: { topic_id: @topic.id, course_id: @course.id, user_id: @user.id, message: "message",
-                                  read_state: "read", attachment: default_uploaded_data }, format: "json"
+      post "add_entry",
+           params: { topic_id: @topic.id,
+                     course_id: @course.id,
+                     user_id: @user.id,
+                     message: "message",
+                     read_state: "read",
+                     attachment: default_uploaded_data },
+           format: "json"
 
       expect(response).to be_successful
       expect(@student.attachments.count).to eq 1
@@ -83,27 +89,83 @@ describe DiscussionTopicsApiController do
     it "fails if attachment a file over student quota (not course)" do
       Setting.set("user_default_quota", -1)
 
-      post "add_entry", params: { topic_id: @topic.id, course_id: @course.id, user_id: @user.id, message: "message",
-                                  read_state: "read", attachment: default_uploaded_data }, format: "json"
+      post "add_entry",
+           params: { topic_id: @topic.id,
+                     course_id: @course.id,
+                     user_id: @user.id,
+                     message: "message",
+                     read_state: "read",
+                     attachment: default_uploaded_data },
+           format: "json"
 
       expect(response).to_not be_successful
       expect(response.body).to include("User storage quota exceeded")
     end
 
     it "succeeds otherwise" do
-      post "add_entry", params: { topic_id: @topic.id, course_id: @course.id, user_id: @user.id, message: "message",
-                                  read_state: "read", attachment: default_uploaded_data }, format: "json"
+      post "add_entry",
+           params: { topic_id: @topic.id,
+                     course_id: @course.id,
+                     user_id: @user.id,
+                     message: "message",
+                     read_state: "read",
+                     attachment: default_uploaded_data },
+           format: "json"
 
       expect(response).to be_successful
     end
 
     it "uses instfs to store attachment if instfs is enabled" do
-      allow(InstFS).to receive(:enabled?).and_return(true)
       uuid = "1234-abcd"
-      allow(InstFS).to receive(:direct_upload).and_return(uuid)
-      post "add_entry", params: { topic_id: @topic.id, course_id: @course.id, user_id: @user.id, message: "message",
-                                  read_state: "read", attachment: default_uploaded_data }, format: "json"
+      allow(InstFS).to receive_messages(enabled?: true, direct_upload: uuid)
+      post "add_entry",
+           params: { topic_id: @topic.id,
+                     course_id: @course.id,
+                     user_id: @user.id,
+                     message: "message",
+                     read_state: "read",
+                     attachment: default_uploaded_data },
+           format: "json"
       expect(@student.attachments.first.instfs_uuid).to eq(uuid)
+    end
+  end
+
+  context "cross-sharding" do
+    specs_require_sharding
+
+    before do
+      course_with_student active_all: true
+      allow(controller).to receive_messages(form_authenticity_token: "abc", form_authenticity_param: "abc")
+      @topic = @course.discussion_topics.create!(title: "student topic", message: "Hello", user: @student)
+      @entry = @topic.discussion_entries.create!(message: "first message", user: @student)
+      @entry2 = @topic.discussion_entries.create!(message: "second message", user: @student)
+      @reply = @entry.discussion_subentries.create!(discussion_topic: @topic, message: "reply to first message", user: @student)
+    end
+
+    it "returns the entries across shards" do
+      user_session(@student)
+      @shard1.activate do
+        post "entries", params: { topic_id: @topic.id, course_id: @course.id, user_id: @student.id }, format: "json"
+        expect(response.parsed_body.count).to eq(2)
+      end
+
+      @shard2.activate do
+        post "entries", params: { topic_id: @topic.id, course_id: @course.id, user_id: @student.id }, format: "json"
+        expect(response.parsed_body.count).to eq(2)
+      end
+    end
+
+    it "returns the entry replies across shards" do
+      user_session(@student)
+      @shard1.activate do
+        post "replies", params: { topic_id: @topic.id, course_id: @course.id, user_id: @student.id, entry_id: @entry.id }, format: "json"
+        expect(response.parsed_body.count).to eq(1)
+      end
+
+      @shard2.activate do
+        post "replies", params: { topic_id: @topic.id, course_id: @course.id, user_id: @student.id, entry_id: @entry.id }, format: "json"
+        expect(response.parsed_body.count).to eq(1)
+      end
     end
   end
 end

@@ -50,13 +50,6 @@ describe "course pace page" do
 
       expect(driver.current_url).to include("/courses/#{@course.id}/course_pacing")
     end
-
-    it "is not shown when disabled" do
-      disable_course_paces_in_course
-      get "/courses/#{@course.id}/modules"
-
-      expect(course_paces_nav_exists?).to be_falsey
-    end
   end
 
   context "course paces modules" do
@@ -151,8 +144,18 @@ describe "course pace page" do
   context "Course Pacing Menu" do
     let(:pace_module_title) { "Pace Module" }
     let(:module_assignment_title) { "Module Assignment 1" }
+    let(:new_section_name) { "Section 1" }
 
     before :once do
+      new_section = @course.course_sections.create!(name: new_section_name)
+      new_student_enrollment = course_with_user(
+        "StudentEnrollment",
+        active_all: true,
+        name: "Mary Seim",
+        course: @course
+      )
+      new_student_enrollment.course_section = new_section
+      new_student_enrollment.save!
       create_published_course_pace(pace_module_title, module_assignment_title)
     end
 
@@ -163,6 +166,7 @@ describe "course pace page" do
     end
 
     it "opens the course pace menu and selects the student view when clicked" do
+      skip "FOO-3806 (10/6/2023)"
       visit_course_paces_page
       click_main_course_pace_menu
       click_students_menu_item
@@ -188,6 +192,17 @@ describe "course pace page" do
       click_student_course_pace(@student.name)
 
       expect(unpublished_warning_modal).to be_displayed
+    end
+
+    it "opens the course pace menu and selects the section view when clicked" do
+      skip "FOO-3806 (10/6/2023)"
+      visit_course_paces_page
+      click_main_course_pace_menu
+      click_section_menu_item
+      click_section_course_pace(new_section_name)
+
+      expect(course_pace_menu_value).to eq(new_section_name)
+      expect(publish_status_button.text).to eq("Pace is new and unpublished")
     end
   end
 

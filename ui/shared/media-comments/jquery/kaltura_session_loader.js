@@ -42,12 +42,17 @@ export default class KalturaSessionLoader {
       entryUrl: this.kalturaUrl('/index.php/partnerservices2/addEntry'),
       uiconfUrl: this.kalturaUrl('/index.php/partnerservices2/getuiconf'),
       entryDefaults: {
-        partnerData: $.mediaComment.partnerData()
-      }
+        partnerData: $.mediaComment.partnerData(),
+      },
     }
   }
 
   kalturaUrl(endPoint) {
-    return `${location.protocol}//${INST.kalturaSettings.domain}${endPoint}`
+    return `${this.kalturaProtocol()}//${INST.kalturaSettings.domain}${endPoint}`
+  }
+
+  kalturaProtocol() {
+    const settingsProtocol = INST?.kalturaSettings?.protocol
+    return settingsProtocol ? settingsProtocol + ':' : window.location.protocol
   }
 }
